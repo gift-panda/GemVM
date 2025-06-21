@@ -286,7 +286,7 @@ static void call(bool canAssign) {
 
 static void number(bool canAssign) {
     double value = strtod(parser.previous.start, NULL);
-  emitConstant(NUMBER_VAL(value));
+    emitConstant(NUMBER_VAL(value));
 }
 
 static void string(bool canAssign) {
@@ -460,11 +460,40 @@ static void super_(bool canAssign) {
     }
 }
 
+static void index_(bool canAssign) {
+    expression(); // parse the index
+    consume(TOKEN_RIGHT_BRACKET, "Expect ']' after index.");
+
+    if (canAssign && match(TOKEN_EQUAL)) {
+        expression(); // parse value
+        emitByte(OP_SET_INDEX);
+    } else {
+        emitByte(OP_GET_INDEX);
+    }
+}
+
+static void list(bool canAssign) {
+    int elementCount = 0;
+
+    if (!check(TOKEN_RIGHT_BRACKET)) {
+        do {
+            expression();
+            elementCount++;
+        } while (match(TOKEN_COMMA));
+    }
+
+    consume(TOKEN_RIGHT_BRACKET, "Expect ']' after list elements.");
+    emitBytes(OP_LIST, elementCount); // Custom OP_LIST instruction
+}
+
+
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN]    = {grouping, call,   PREC_CALL},
     [TOKEN_RIGHT_PAREN]   = {NULL,     NULL,   PREC_NONE},
-    [TOKEN_LEFT_BRACE]    = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_LEFT_BRACE]    = {NULL,     NULL,   PREC_CALL},
     [TOKEN_RIGHT_BRACE]   = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_RIGHT_BRACKET] = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_LEFT_BRACKET]  = {list,     index_, PREC_CALL},
     [TOKEN_COMMA]         = {NULL,     NULL,   PREC_NONE},
     [TOKEN_DOT]           = {NULL,     dot,    PREC_CALL},
     [TOKEN_MINUS]         = {unary,    binary, PREC_TERM},

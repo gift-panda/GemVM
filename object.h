@@ -29,6 +29,9 @@
 #define IS_BOUND_METHOD(value) isObjType(value, OBJ_BOUND_METHOD)
 #define AS_BOUND_METHOD(value) ((ObjBoundMethod*)AS_OBJ(value))
 
+#define IS_LIST(value)         isObjType(value, OBJ_LIST)
+#define AS_LIST(value)         ((ObjList*)AS_OBJ(value))
+
 
 typedef enum {
     OBJ_STRING,
@@ -39,6 +42,7 @@ typedef enum {
     OBJ_CLASS,
     OBJ_INSTANCE,
     OBJ_BOUND_METHOD,
+    OBJ_LIST,
 } ObjType;
 
 struct Obj {
@@ -67,6 +71,8 @@ struct ObjString {
     int length;
     char* chars;
     uint32_t hash;
+
+    Table methods;
 };
 
 typedef struct ObjUpvalue {
@@ -101,6 +107,12 @@ typedef struct {
     ObjClosure* method;
 } ObjBoundMethod;
 
+typedef struct {
+    Obj obj;
+    ValueArray elements;
+} ObjList;
+
+
 ObjBoundMethod* newBoundMethod(Value receiver, ObjClosure* method);
 ObjClass* newClass(ObjString* name);
 ObjClosure* newClosure(ObjFunction* function);
@@ -110,6 +122,7 @@ ObjNative* newNative(NativeFn function);
 ObjString* takeString(char* chars, int length);
 ObjString* copyString(const char* chars, int length);
 ObjUpvalue* newUpvalue(Value* slot);
+ObjList* newList();
 void printObject(Value value);
 
 static inline bool isObjType(Value value, ObjType type) {

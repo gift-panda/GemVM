@@ -156,7 +156,23 @@ int disassembleInstruction(Chunk* chunk, int offset) {
         case OP_GET_SUPER:
             return constantInstruction("OP_GET_SUPER", chunk, offset);
         case OP_SUPER_INVOKE:
-            return invokeInstruction("OP_SUPER_INVOKE", chunk, offset)
+            return invokeInstruction("OP_SUPER_INVOKE", chunk, offset);
+        case OP_LIST: {
+            uint8_t constant = chunk->code[offset + 1];
+            printf("%-16s %4d '", "OP_LIST", constant);
+            printValue(chunk->constants.values[constant]);
+            printf("'\n");
+            return offset + 2;
+        }
+
+        case OP_GET_INDEX:
+            printf("%-16s\n", "OP_GET_INDEX");
+            return offset + 1;
+
+        case OP_SET_INDEX:
+            printf("%-16s\n", "OP_SET_INDEX");
+            return offset + 1;
+
         default:
             printf("Unknown opcode %d\n", instruction);
             return offset + 1;

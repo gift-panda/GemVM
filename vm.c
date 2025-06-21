@@ -14,12 +14,31 @@
 
 
 VM vm;
+static void runtimeError(const char* format, ...);
 
 static Value clockNative(int argCount, Value* args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
 
+static Value stringLengthNative(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError("string.length() takes no arguments.");
+        return NIL_VAL;
+    }
 
+    if (!IS_STRING(args[-1])) {
+        runtimeError("string.length() must be called on a string.");
+        return NIL_VAL;
+    }
+
+    ObjString* string = AS_STRING(args[-1]);
+    return NUMBER_VAL(string->length);
+}
+
+void defineStringMethods() {
+    ObjNative* lengthFn = newNative(stringLengthNative);
+    tableSet(&vm.stringClassMethods, copyString("length", 6), OBJ_VAL(lengthFn));
+}
 
 static void resetStack() {
     vm.stackTop = vm.stack;
@@ -69,6 +88,7 @@ void initVM() {
     vm.objects = NULL;
     initTable(&vm.strings);
     initTable(&vm.globals);
+    initTable(&vm.stringClassMethods);
 
     vm.grayCount = 0;
     vm.grayCapacity = 0;
@@ -86,6 +106,7 @@ void initVM() {
     vm.initString = copyString("init", 4);
 
     defineNative("clock", clockNative);
+    defineStringMethods();
 }
 
 void freeVM() {
@@ -125,6 +146,15 @@ static bool call(ObjClosure* closure, int argCount) {
     frame->closure = closure;
     frame->ip = closure->function->chunk.code;
     frame->slots = vm.stackTop - argCount - 1;
+    return true;
+}
+
+void printStack();
+
+static bool callBoundedNative(Value callee, int argCount) {
+    NativeFn native = AS_NATIVE(callee);
+    Value result = native(argCount, vm.stackTop - argCount);
+    push(result);
     return true;
 }
 
@@ -248,8 +278,33 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name,
     return call(AS_CLOSURE(method), argCount);
 }
 
+void printStack() {
+    printf("          ");
+    for (Value* slot = vm.stack; slot < vm.stackTop; slot++) {
+        printf("[ ");
+        printValue(*slot);
+        printf(" ]");
+    }
+    printf("\n");
+}
+
+
 static bool invoke(ObjString* name, int argCount) {
     Value receiver = peek(argCount);
+
+    if (IS_STRING(receiver)) {
+        Value value;
+        if (tableGet(&vm.stringClassMethods, name, &value)) {
+            bool res = callBoundedNative(value, argCount);
+            Value result = pop();
+            pop();
+            push(result);
+            return res;
+        }
+        runtimeError("Undefined method '%s' on string.", name);
+        return false;
+    }
+
 
     if (!IS_INSTANCE(receiver)) {
         runtimeError("Only instances have methods.");
@@ -579,6 +634,73 @@ static InterpretResult run() {
                     return INTERPRET_RUNTIME_ERROR;
                 }
                 frame = &vm.frames[vm.frameCount - 1];
+                break;
+            }
+            case OP_GET_INDEX: {
+                Value index = pop();
+                Value list = pop();
+
+                if (!IS_LIST(list)) {
+                    runtimeError("Can only index into lists.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                if (!IS_NUMBER(index)) {
+                    runtimeError("List index must be a number.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                ObjList* objList = AS_LIST(list);
+                int i = (int)AS_NUMBER(index);
+
+                if (i < 0 || i >= objList->elements.count) {
+                    runtimeError("List index out of bounds.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                push(objList->elements.values[i]);
+                break;
+            }
+
+            case OP_SET_INDEX: {
+                Value value = pop();
+                Value index = pop();
+                Value list = pop();
+
+                if (!IS_LIST(list)) {
+                    runtimeError("Can only index into lists.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                if (!IS_NUMBER(index)) {
+                    runtimeError("List index must be a number.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                ObjList* objList = AS_LIST(list);
+                int i = (int)AS_NUMBER(index);
+
+                if (i < 0 || i >= objList->elements.count) {
+                    runtimeError("List index out of bounds.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                objList->elements.values[i] = value;
+                push(value);
+                break;
+            }
+            case OP_LIST: {
+                int count = READ_BYTE();
+                ObjList* list = newList();
+                push(OBJ_VAL(list));
+
+                for (int i = count; i >= 1; i--) {
+                    writeValueArray(&list->elements, peek(i));
+                }
+                Value listValue = pop();
+                for (int i = 0; i < count; i++) pop();
+
+                push(listValue);
                 break;
             }
         }

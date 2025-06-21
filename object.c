@@ -73,6 +73,9 @@ static ObjString* allocateString(char* chars, int length, uint32_t hash) {
     tableSet(&vm.strings, string, NIL_VAL);
     pop();
 
+    initTable(&string->methods);
+    tableAddAll(&vm.stringClassMethods, &string->methods);
+
     return string;
 }
 
@@ -84,6 +87,13 @@ ObjFunction* newFunction() {
     function->upvalueCount = 0;
     return function;
 }
+
+ObjList* newList() {
+    ObjList* list = ALLOCATE_OBJ(ObjList, OBJ_LIST);
+    initValueArray(&list->elements);
+    return list;
+}
+
 
 ObjInstance* newInstance(ObjClass* klass) {
     ObjInstance* instance = ALLOCATE_OBJ(ObjInstance, OBJ_INSTANCE);
@@ -188,5 +198,16 @@ void printObject(Value value) {
         case OBJ_BOUND_METHOD:
             printFunction(AS_BOUND_METHOD(value)->method->function);
             break;
+        case OBJ_LIST: {
+            //printf("list");
+            ObjList* list = AS_LIST(value);
+            printf("[");
+            for (int i = 0; i < list->elements.count; i++) {
+                printValue(list->elements.values[i]);
+                if (i != list->elements.count - 1) printf(", ");
+            }
+            printf("]");
+            break;
+        }
     }
 }

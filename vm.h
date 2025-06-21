@@ -36,6 +36,7 @@ typedef struct {
     size_t maxRAM;
 
     ObjString* initString;
+    Table stringClassMethods;
 } VM;
 
 typedef enum {
