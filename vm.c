@@ -151,6 +151,26 @@ static bool call(ObjClosure* closure, int argCount) {
 
 void printStack();
 
+void printDispatcher(ObjMultiDispatch* dispatcher) {
+    printf("Dispatcher at %p\n", (void*)dispatcher);
+    printf("Closures by arity:\n");
+
+    for (int i = 0; i < dispatcher->arityMap.capacity; i++) {
+        Entry* entry = &dispatcher->arityMap.entries[i];
+        if (entry->key == NULL) continue;
+
+        printf("  Arity %s -> ", entry->key->chars);
+        if (IS_OBJ(entry->value) && AS_OBJ(entry->value)->type == OBJ_CLOSURE) {
+            ObjClosure* closure = (ObjClosure*)AS_OBJ(entry->value);
+            printf("<closure at %p>\n", (void*)closure);
+        } else {
+            printf("not a closure!\n");
+        }
+        fflush(stdout);
+    }
+}
+
+
 static bool callBoundedNative(Value callee, int argCount) {
     NativeFn native = AS_NATIVE(callee);
     Value result = native(argCount, vm.stackTop - argCount);
@@ -187,6 +207,24 @@ static bool callValue(Value callee, int argCount) {
                 ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
                 vm.stackTop[-argCount - 1] = bound->receiver;
                 return call(bound->method, argCount);
+            }
+            case OBJ_MULTI_DISPATCH:{
+                ObjMultiDispatch* md = AS_MULTI_DISPATCH(callee);
+
+                char arityStr[4]; // enough for "65535\0"
+                int length = snprintf(arityStr, sizeof(arityStr), "%d", argCount);
+                //free(arityStr);
+
+                // Intern or allocate the ObjString*
+                ObjString* key = copyString(arityStr, length);
+                bool got = tableGet(&md->arityMap, key, &callee);
+
+                if (!got) {
+                    runtimeError("No method for arity %d.", AS_NUMBER(peek(0)));
+                    return false;
+                }
+
+                return callValue(callee, argCount);
             }
             default:
                 break; // Non-callable object type.
@@ -320,6 +358,39 @@ static bool invoke(ObjString* name, int argCount) {
     }
 
     return invokeFromClass(instance->klass, name, argCount);
+}
+
+static int resolveMultiDispatch(Value* result, ObjString* name) {
+    CallFrame* frame = &vm.frames[vm.frameCount - 1];
+
+    // Search locals from top of current frame down
+    for (Value* slot = vm.stackTop - 1; slot >= frame->slots; slot--) {
+        if (IS_OBJ(*slot) && IS_MULTI_DISPATCH(*slot)) {
+            ObjMultiDispatch* md = AS_MULTI_DISPATCH(*slot);
+
+            if (md->name == name) {
+                *result = *slot;
+                return 2;
+            }
+        }
+    }
+
+    // Then try global table
+    return tableGet(&vm.globals, name, result);
+}
+
+void multiDispatchAdd(ObjMultiDispatch* dispatch, ObjClosure* closure) {
+    int arity = closure->function->arity;
+
+    // Convert arity int to string
+    char arityStr[4]; // enough for "65535\0"
+    int length = snprintf(arityStr, sizeof(arityStr), "%d", arity);
+    //free(arityStr);
+    // Intern or allocate the ObjString*
+    ObjString* key = copyString(arityStr, length);
+
+    // Insert into arityMap
+    tableSet(&dispatch->arityMap, key, OBJ_VAL(closure));
 }
 
 static InterpretResult run() {
@@ -518,6 +589,7 @@ static InterpretResult run() {
             }
             case OP_CALL: {
                 int argCount = READ_BYTE();
+
                 if (!callValue(peek(argCount), argCount)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
@@ -703,8 +775,36 @@ static InterpretResult run() {
                 push(listValue);
                 break;
             }
-        }
+            case OP_DISPATCH: {
+                Value closureVal = peek(0);
+                if (!IS_CLOSURE(closureVal)) {
+                    runtimeError("Expected closure on top of stack for dispatch.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
 
+                ObjClosure* closure = AS_CLOSURE(closureVal);
+                ObjString* name = closure->function->name;
+
+                Value dispatchVal;
+                int scope = resolveMultiDispatch(&dispatchVal, name);
+                if (scope) {
+                    // Reuse existing MultiDispatch
+                    ObjMultiDispatch* dispatch = AS_MULTI_DISPATCH(dispatchVal);
+                    multiDispatchAdd(dispatch, closure);
+                    pop(); // remove closure
+                    //if (scope == 1)
+                        push(OBJ_VAL(dispatch)); // push dispatch instead
+                } else {
+                        // Create new one
+                    ObjMultiDispatch* dispatch = newMultiDispatch(name);
+                    multiDispatchAdd(dispatch, closure);
+                    pop(); // remove closure
+                    push(OBJ_VAL(dispatch)); // push new dispatch
+                }
+
+                break;
+            }
+        }
     }
 
 #undef READ_CONSTANT

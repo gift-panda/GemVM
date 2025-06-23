@@ -1,1 +1,10 @@
-print "hello".length();
+fun fib(n) {
+  if (n < 2) return n;
+  return fib(n - 1) + fib(n - 2);
+}
+
+var start = clock();
+print fib(40);
+var end = clock();
+
+print "Time: " + (end - start);

@@ -88,6 +88,14 @@ ObjFunction* newFunction() {
     return function;
 }
 
+ObjMultiDispatch* newMultiDispatch(ObjString* name) {
+    ObjMultiDispatch* method = ALLOCATE_OBJ(ObjMultiDispatch, OBJ_MULTI_DISPATCH);
+    method->name = name;
+    initTable(&method->arityMap);
+    return method;
+}
+
+
 ObjList* newList() {
     ObjList* list = ALLOCATE_OBJ(ObjList, OBJ_LIST);
     initValueArray(&list->elements);
@@ -209,5 +217,10 @@ void printObject(Value value) {
             printf("]");
             break;
         }
+            case OBJ_MULTI_DISPATCH: {
+            //printf("list");
+            ObjMultiDispatch* method = AS_MULTI_DISPATCH(value);
+            printf("<dispatcher %s>", method->name->chars);
+            }
     }
 }

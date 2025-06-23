@@ -164,15 +164,14 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             printf("'\n");
             return offset + 2;
         }
-
         case OP_GET_INDEX:
             printf("%-16s\n", "OP_GET_INDEX");
             return offset + 1;
-
         case OP_SET_INDEX:
             printf("%-16s\n", "OP_SET_INDEX");
             return offset + 1;
-
+        case OP_DISPATCH:
+            return simpleInstruction("OP_DISPATCH", offset);
         default:
             printf("Unknown opcode %d\n", instruction);
             return offset + 1;

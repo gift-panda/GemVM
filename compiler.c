@@ -10,6 +10,7 @@
 #endif
 
 #include <string.h>
+#include <math.h>
 
 #include "memory.h"
 #include "scanner.h"
@@ -592,7 +593,7 @@ static void addLocal(Token name) {
 static void declareVariable() {
     if (current->scopeDepth == 0) return;
 
-    Token* name = &parser.previous;
+    Token* name = &parser.previous;/*
 
     for (int i = current->localCount - 1; i >= 0; i--) {
         Local* local = &current->locals[i];
@@ -604,7 +605,7 @@ static void declareVariable() {
             error("Already a variable with this name in this scope.");
         }
     }
-
+*/
     addLocal(*name);
 }
 
@@ -669,8 +670,12 @@ static void block() {
 static void function(FunctionType type) {
     Compiler compiler;
     initCompiler(&compiler, type);
-    beginScope();
 
+    compiler.function->name =
+      copyString(parser.previous.start,
+                 parser.previous.length);
+
+    beginScope();
     consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.");
 
     if (!check(TOKEN_RIGHT_PAREN)) {
@@ -684,17 +689,25 @@ static void function(FunctionType type) {
         } while (match(TOKEN_COMMA));
     }
 
+
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
     consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");
     block();
 
     ObjFunction* function = endCompiler();
-    emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+    int closureConstant = makeConstant(OBJ_VAL(function));
+
+    // Emit OP_CLOSURE (pushes the closure on stack)
+    emitBytes(OP_CLOSURE, closureConstant);
 
     for (int i = 0; i < function->upvalueCount; i++) {
         emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
         emitByte(compiler.upvalues[i].index);
     }
+
+    // Now emit OP_DISPATCH to wrap the closure in a dispatcher
+    //emitByte(OP_DISPATCH);
+
 }
 
 static void method() {
@@ -767,7 +780,7 @@ static void funDeclaration() {
     uint8_t global = parseVariable("Expect function name.");
     markInitialized();
     function(TYPE_FUNCTION);
-    defineVariable(global);
+    defineVariable(global); // ✅ DON'T remove this
 }
 
 static void varDeclaration() {

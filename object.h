@@ -32,7 +32,6 @@
 #define IS_LIST(value)         isObjType(value, OBJ_LIST)
 #define AS_LIST(value)         ((ObjList*)AS_OBJ(value))
 
-
 typedef enum {
     OBJ_STRING,
     OBJ_FUNCTION,
@@ -43,6 +42,7 @@ typedef enum {
     OBJ_INSTANCE,
     OBJ_BOUND_METHOD,
     OBJ_LIST,
+    OBJ_MULTI_DISPATCH,
 } ObjType;
 
 struct Obj {
@@ -58,6 +58,16 @@ typedef struct {
     Chunk chunk;
     ObjString* name;
 } ObjFunction;
+
+typedef struct {
+    Obj obj;
+    ObjString* name;
+    Table arityMap; // key: arity as Value, value: ObjClosure*
+} ObjMultiDispatch;
+
+#define IS_MULTI_DISPATCH(value) isObjType(value, OBJ_MULTI_DISPATCH)
+#define AS_MULTI_DISPATCH(value) ((ObjMultiDispatch*)AS_OBJ(value))
+
 
 typedef Value (*NativeFn)(int argCount, Value* args);
 
@@ -123,6 +133,7 @@ ObjString* takeString(char* chars, int length);
 ObjString* copyString(const char* chars, int length);
 ObjUpvalue* newUpvalue(Value* slot);
 ObjList* newList();
+ObjMultiDispatch* newMultiDispatch(ObjString*);
 void printObject(Value value);
 
 static inline bool isObjType(Value value, ObjType type) {
