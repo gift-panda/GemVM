@@ -107,8 +107,9 @@ typedef struct {
 
 typedef struct {
     Obj obj;
+    ObjString* name;
     Value receiver;
-    ObjClosure* method;
+    ObjClosure* method[10];
 } ObjBoundMethod;
 
 typedef struct {
@@ -123,7 +124,7 @@ typedef struct {
 } ObjMultiDispatch;
 
 
-ObjBoundMethod* newBoundMethod(Value receiver, ObjClosure* method);
+ObjBoundMethod* newBoundMethod(Value receiver, ObjString*);
 ObjClass* newClass(ObjString* name);
 ObjClosure* newClosure(ObjFunction* function);
 ObjFunction* newFunction();

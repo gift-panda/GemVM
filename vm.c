@@ -45,35 +45,52 @@ static void resetStack() {
     vm.frameCount = 0;
     vm.openUpvalues = NULL;
 }
+void buffered_stderr(const char* msg) {
+    fflush(stdout);
+    usleep(1000);
+    fprintf(stderr, "%s", msg);  // error message (will flush immediately if unbuffered)
+    fflush(stderr);              // always flush to be safe
+
+}
 
 static void runtimeError(const char* format, ...) {
+    char linebuf[256];
+
+    // Format the main error message
+    char msgbuf[1024];
     va_list args;
     va_start(args, format);
-    vfprintf(stderr, format, args);
+    vsnprintf(msgbuf, sizeof(msgbuf), format, args);
     va_end(args);
-    fputs("\n", stderr);
+
+    buffered_stderr(msgbuf);
+    buffered_stderr("\n");
 
     CallFrame* frame = &vm.frames[vm.frameCount - 1];
     ObjFunction* function = frame->closure->function;
     size_t instruction = frame->ip - function->chunk.code - 1;
     int line = function->chunk.lines[instruction];
-    fprintf(stderr, "[line %d] in script\n", line);
 
     for (int i = vm.frameCount - 1; i >= 0; i--) {
         CallFrame* frame = &vm.frames[i];
         ObjFunction* function = frame->closure->function;
         size_t instruction = frame->ip - function->chunk.code - 1;
-        fprintf(stderr, "[line %d] in ",
-                function->chunk.lines[instruction]);
+        int line = function->chunk.lines[instruction];
+
+        snprintf(linebuf, sizeof(linebuf), "[line %d] in ", line);
+        buffered_stderr(linebuf);
+
         if (function->name == NULL) {
-            fprintf(stderr, "script\n");
+            buffered_stderr("script\n");
         } else {
-            fprintf(stderr, "%s()\n", function->name->chars);
+            buffered_stderr(function->name->chars);
+            buffered_stderr("()\n");
         }
     }
 
     resetStack();
 }
+
 
 static void defineNative(const char* name, NativeFn function) {
     push(OBJ_VAL(copyString(name, (int)strlen(name))));
@@ -172,6 +189,21 @@ static bool callBoundedNative(Value callee, int argCount) {
     return true;
 }
 
+
+void printTable(Table* table) {
+    printf("Table at %p:\n", (void*)table);
+    for (int i = 0; i < table->capacity; i++) {
+        Entry* entry = &table->entries[i];
+        if (entry->key == NULL) continue;
+
+        printf("  [%d] ", i);
+        printf("%s → ", entry->key->chars);
+        printValue(entry->value);
+        printf("\n");
+    }
+}
+
+
 static bool callValue(Value callee, int argCount) {
     if (IS_OBJ(callee)) {
         switch (OBJ_TYPE(callee)) {
@@ -189,7 +221,7 @@ static bool callValue(Value callee, int argCount) {
                 vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
                 Value initializer;
                 if (tableGet(&klass->methods, vm.initString, &initializer)) {
-                    return call(AS_CLOSURE(initializer), argCount);
+                    return call(AS_BOUND_METHOD(initializer)->method[argCount], argCount);
                 } else if (argCount != 0) {
                     runtimeError("Expected 0 arguments but got %d.",
                                  argCount);
@@ -200,7 +232,7 @@ static bool callValue(Value callee, int argCount) {
             case OBJ_BOUND_METHOD: {
                 ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
                 vm.stackTop[-argCount - 1] = bound->receiver;
-                return call(bound->method, argCount);
+                return call(bound->method[argCount], argCount);
             }
             case OBJ_MULTI_DISPATCH:{
                 ObjMultiDispatch* md = AS_MULTI_DISPATCH(callee);
@@ -272,10 +304,30 @@ static void concatenate() {
     push(OBJ_VAL(result));
 }
 
+void multiDispatchAdd(ObjMultiDispatch* dispatch, ObjClosure* closure) {
+    int arity = closure->function->arity;
+    dispatch->closures[arity] = closure;
+}
+
+void multiBoundAdd(ObjBoundMethod* dispatch, ObjClosure* closure) {
+    int arity = closure->function->arity;
+    dispatch->method[arity] = closure;
+}
+
 static void defineMethod(ObjString* name) {
     Value method = peek(0);
     ObjClass* klass = AS_CLASS(peek(1));
-    tableSet(&klass->methods, name, method);
+
+    Value dispatcher;
+    if (tableGet(&klass->methods, name, &dispatcher)) {
+        ObjBoundMethod* md = AS_BOUND_METHOD(dispatcher);
+        multiBoundAdd(md, AS_CLOSURE(method));
+    }
+    else {
+        ObjBoundMethod* md = newBoundMethod(dispatcher, AS_CLOSURE(method)->function->name);
+        multiBoundAdd(md, AS_CLOSURE(method));
+        tableSet(&klass->methods, name, OBJ_VAL(md));
+    }
     pop();
 }
 
@@ -286,10 +338,12 @@ static bool bindMethod(ObjClass* klass, ObjString* name) {
         return false;
     }
 
-    ObjBoundMethod* bound = newBoundMethod(peek(0),
-                                           AS_CLOSURE(method));
+    ObjBoundMethod* bound = AS_BOUND_METHOD(method);
+    bound->receiver = peek(0);
+
     pop();
     push(OBJ_VAL(bound));
+
     return true;
 }
 
@@ -300,15 +354,20 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name,
         runtimeError("Undefined property '%s'.", name->chars);
         return false;
     }
-    return call(AS_CLOSURE(method), argCount);
+    AS_BOUND_METHOD(method)->receiver = peek(argCount);
+    bool yes = callValue(OBJ_VAL(AS_BOUND_METHOD(method)), argCount);
+    return yes;
 }
 
 void printStack() {
     printf("          ");
+    printf("Stack at %p\n", (void*)vm.stack);
+    fflush(stdout);
     for (Value* slot = vm.stack; slot < vm.stackTop; slot++) {
         printf("[ ");
         printValue(*slot);
         printf(" ]");
+        fflush(stdout);
     }
     printf("\n");
 }
@@ -364,11 +423,6 @@ static int resolveMultiDispatch(Value* result, ObjString* name) {
 
     // Then try global table
     return tableGet(&vm.globals, name, result);
-}
-
-void multiDispatchAdd(ObjMultiDispatch* dispatch, ObjClosure* closure) {
-    int arity = closure->function->arity;
-    dispatch->closures[arity] = closure;
 }
 
 static InterpretResult run() {
@@ -651,19 +705,36 @@ static InterpretResult run() {
                 if (!invoke(method, argCount)) {
                     return INTERPRET_RUNTIME_ERROR;
                 }
+                //pop();
                 frame = &vm.frames[vm.frameCount - 1];
                 break;
             }
             case OP_INHERIT: {
-                Value superclass = peek(1);
-                if (!IS_CLASS(superclass)) {
+                if (!IS_CLASS(peek(1))) {
                     runtimeError("Superclass must be a class.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
+                ObjClass* superclass = AS_CLASS(peek(1));
                 ObjClass* subclass = AS_CLASS(peek(0));
-                tableAddAll(&AS_CLASS(superclass)->methods,
-                            &subclass->methods);
+                //tableAddAll(&AS_CLASS(superclass)->methods,
+                //            &subclass->methods);
+
+                for (int i = 0; i < superclass->methods.capacity; i++) {
+                    Entry* entry = &superclass->methods.entries[i];
+                    if (entry == NULL) continue;
+                    if (entry->key == NULL) continue;
+
+                    Value temp = OBJ_VAL(subclass);
+                    ObjBoundMethod* md = newBoundMethod(temp, entry->key);
+
+                    for (int j = 0; j < 10; j++) {
+                        md->method[j] = AS_BOUND_METHOD(entry->value)->method[j];
+                    }
+
+                    tableSet(&subclass->methods, entry->key, OBJ_VAL(md));
+                }
+
                 pop(); // Subclass.
                 break;
             }

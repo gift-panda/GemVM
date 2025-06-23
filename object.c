@@ -33,12 +33,14 @@ static Obj* allocateObject(size_t size, ObjType type) {
     return object;
 }
 
-ObjBoundMethod* newBoundMethod(Value receiver,
-                               ObjClosure* method) {
+ObjBoundMethod* newBoundMethod(Value receiver, ObjString* name) {
     ObjBoundMethod* bound = ALLOCATE_OBJ(ObjBoundMethod,
                                          OBJ_BOUND_METHOD);
     bound->receiver = receiver;
-    bound->method = method;
+    for (int i = 0; i < 10; i++) {
+        bound->method[i] = NULL;
+    }
+    bound->name = name;
     return bound;
 }
 
@@ -206,7 +208,9 @@ void printObject(Value value) {
                    AS_INSTANCE(value)->klass->name->chars);
             break;
         case OBJ_BOUND_METHOD:
-            printFunction(AS_BOUND_METHOD(value)->method->function);
+            printf("<md ");
+            printObject(OBJ_VAL(AS_BOUND_METHOD(value)->name));
+            printf(">");
             break;
         case OBJ_LIST: {
             //printf("list");
@@ -219,10 +223,12 @@ void printObject(Value value) {
             printf("]");
             break;
         }
-            case OBJ_MULTI_DISPATCH: {
+        case OBJ_MULTI_DISPATCH: {
             //printf("list");
             ObjMultiDispatch* method = AS_MULTI_DISPATCH(value);
-            printf("<dispatcher %s>", method->name->chars);
-            }
+            printf("<fn %s>", method->name->chars);
+            break;
+        }
     }
+    fflush(stdout);
 }

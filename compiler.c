@@ -704,9 +704,6 @@ static void function(FunctionType type) {
         emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
         emitByte(compiler.upvalues[i].index);
     }
-
-    emitByte(OP_DISPATCH);
-
 }
 
 static void method() {
@@ -779,6 +776,7 @@ static void funDeclaration() {
     uint8_t global = parseVariable("Expect function name.");
     markInitialized();
     function(TYPE_FUNCTION);
+    emitByte(OP_DISPATCH);
     defineVariable(global); // ✅ DON'T remove this
 }
 

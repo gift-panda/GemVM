@@ -1,10 +1,15 @@
-fun fib(n) {
-  if (n < 2) return n;
-  return fib(n - 1) + fib(n - 2);
+class A {
+  call() { print "A"; }
 }
 
-var start = clock();
-print fib(40);
-var end = clock();
+class B < A {
+  call() { print "B"; }
+}
 
-print "Time: " + (end - start);
+class C < B {
+  call() { print "C"; }
+}
+
+C().call(); // expect: C
+
+print "";

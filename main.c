@@ -59,6 +59,8 @@ static void runFile(const char* path) {
 
 int main(int argc, const char* argv[]) {
     initVM();
+    setvbuf(stdout, NULL, _IOLBF, 0);  // line-buffered stdout
+    setvbuf(stderr, NULL, _IONBF, 0);  // unbuffered stderr
 
     if (argc == 1) {
         repl();

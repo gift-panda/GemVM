@@ -118,9 +118,26 @@ static void blackenObject(Obj* object) {
             break;
         }
         case OBJ_BOUND_METHOD: {
-            ObjBoundMethod* bound = (ObjBoundMethod*)object;
-            markValue(bound->receiver);
-            markObject((Obj*)bound->method);
+            ObjBoundMethod* method = (ObjBoundMethod*)object;
+            markObject((Obj*)method->name);
+            for (int i = 0; i < 10; i++) {
+                if (method->method[i] != NULL)
+                    markObject((Obj*)method->method[i]);
+            }
+            break;
+        }
+        case OBJ_LIST: {
+            ObjList* list = (ObjList*)object;
+            markArray(&list->elements);
+            break;
+        }
+        case OBJ_MULTI_DISPATCH: {
+            ObjMultiDispatch* method = (ObjMultiDispatch*)object;
+            markObject((Obj*)method->name);
+            for (int i = 0; i < 10; i++) {
+                if (method->closures[i] != NULL)
+                    markObject((Obj*)method->closures[i]);
+            }
             break;
         }
     }
@@ -174,6 +191,16 @@ static void freeObject(Obj* object) {
         case OBJ_BOUND_METHOD:
             FREE(ObjBoundMethod, object);
             break;
+        case OBJ_LIST: {
+            ObjList* list = (ObjList*)object;
+            freeValueArray(&list->elements);
+            FREE(ObjList, object);
+            break;
+        }
+        case OBJ_MULTI_DISPATCH: {
+            FREE(ObjMultiDispatch, object);
+            break;
+        }
     }
 }
 
