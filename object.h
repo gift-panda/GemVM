@@ -59,12 +59,6 @@ typedef struct {
     ObjString* name;
 } ObjFunction;
 
-typedef struct {
-    Obj obj;
-    ObjString* name;
-    Table arityMap; // key: arity as Value, value: ObjClosure*
-} ObjMultiDispatch;
-
 #define IS_MULTI_DISPATCH(value) isObjType(value, OBJ_MULTI_DISPATCH)
 #define AS_MULTI_DISPATCH(value) ((ObjMultiDispatch*)AS_OBJ(value))
 
@@ -121,6 +115,12 @@ typedef struct {
     Obj obj;
     ValueArray elements;
 } ObjList;
+
+typedef struct {
+    Obj obj;
+    ObjString* name;
+    ObjClosure* closures[10]; // Indexed by arity
+} ObjMultiDispatch;
 
 
 ObjBoundMethod* newBoundMethod(Value receiver, ObjClosure* method);

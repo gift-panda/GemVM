@@ -89,10 +89,12 @@ ObjFunction* newFunction() {
 }
 
 ObjMultiDispatch* newMultiDispatch(ObjString* name) {
-    ObjMultiDispatch* method = ALLOCATE_OBJ(ObjMultiDispatch, OBJ_MULTI_DISPATCH);
-    method->name = name;
-    initTable(&method->arityMap);
-    return method;
+    ObjMultiDispatch* dispatch = ALLOCATE_OBJ(ObjMultiDispatch, OBJ_MULTI_DISPATCH);
+    dispatch->name = name;
+    for (int i = 0; i < 10; i++) {
+        dispatch->closures[i] = NULL;
+    }
+    return dispatch;
 }
 
 

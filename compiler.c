@@ -705,8 +705,7 @@ static void function(FunctionType type) {
         emitByte(compiler.upvalues[i].index);
     }
 
-    // Now emit OP_DISPATCH to wrap the closure in a dispatcher
-    //emitByte(OP_DISPATCH);
+    emitByte(OP_DISPATCH);
 
 }
 

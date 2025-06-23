@@ -155,19 +155,13 @@ void printDispatcher(ObjMultiDispatch* dispatcher) {
     printf("Dispatcher at %p\n", (void*)dispatcher);
     printf("Closures by arity:\n");
 
-    for (int i = 0; i < dispatcher->arityMap.capacity; i++) {
-        Entry* entry = &dispatcher->arityMap.entries[i];
-        if (entry->key == NULL) continue;
+    for (int i = 0; i < 10; i++) {
+        ObjClosure* closure = dispatcher->closures[i];
+        if (closure == NULL) continue;
 
-        printf("  Arity %s -> ", entry->key->chars);
-        if (IS_OBJ(entry->value) && AS_OBJ(entry->value)->type == OBJ_CLOSURE) {
-            ObjClosure* closure = (ObjClosure*)AS_OBJ(entry->value);
-            printf("<closure at %p>\n", (void*)closure);
-        } else {
-            printf("not a closure!\n");
-        }
-        fflush(stdout);
+        printf("  Arity %d -> <closure at %p>\n", i, (void*)closure);
     }
+    fflush(stdout);
 }
 
 
@@ -211,20 +205,13 @@ static bool callValue(Value callee, int argCount) {
             case OBJ_MULTI_DISPATCH:{
                 ObjMultiDispatch* md = AS_MULTI_DISPATCH(callee);
 
-                char arityStr[4]; // enough for "65535\0"
-                int length = snprintf(arityStr, sizeof(arityStr), "%d", argCount);
-                //free(arityStr);
-
-                // Intern or allocate the ObjString*
-                ObjString* key = copyString(arityStr, length);
-                bool got = tableGet(&md->arityMap, key, &callee);
-
-                if (!got) {
-                    runtimeError("No method for arity %d.", AS_NUMBER(peek(0)));
+                ObjClosure* closure = md->closures[argCount];
+                if (closure == NULL) {
+                    runtimeError("No method for arity %d.", argCount);
                     return false;
                 }
 
-                return callValue(callee, argCount);
+                return call(closure, argCount);
             }
             default:
                 break; // Non-callable object type.
@@ -381,16 +368,7 @@ static int resolveMultiDispatch(Value* result, ObjString* name) {
 
 void multiDispatchAdd(ObjMultiDispatch* dispatch, ObjClosure* closure) {
     int arity = closure->function->arity;
-
-    // Convert arity int to string
-    char arityStr[4]; // enough for "65535\0"
-    int length = snprintf(arityStr, sizeof(arityStr), "%d", arity);
-    //free(arityStr);
-    // Intern or allocate the ObjString*
-    ObjString* key = copyString(arityStr, length);
-
-    // Insert into arityMap
-    tableSet(&dispatch->arityMap, key, OBJ_VAL(closure));
+    dispatch->closures[arity] = closure;
 }
 
 static InterpretResult run() {
