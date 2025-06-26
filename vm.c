@@ -14,7 +14,9 @@
 
 
 VM vm;
-static void runtimeError(const char* format, ...);
+static CallFrame* runtimeError(const char* format, ...);
+void printStack();
+
 
 static Value clockNative(int argCount, Value* args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
@@ -53,42 +55,71 @@ void buffered_stderr(const char* msg) {
 
 }
 
-static void runtimeError(const char* format, ...) {
-    char linebuf[256];
-
-    // Format the main error message
+CallFrame* runtimeError(const char* format, ...) {
     char msgbuf[1024];
+    char linebuf[256];
+    size_t offset = 0;
+
+    // Step 1: Format the error message
     va_list args;
     va_start(args, format);
-    vsnprintf(msgbuf, sizeof(msgbuf), format, args);
+    offset += vsnprintf(msgbuf + offset, sizeof(msgbuf) - offset, format, args);
     va_end(args);
 
-    buffered_stderr(msgbuf);
-    buffered_stderr("\n");
+    offset += snprintf(msgbuf + offset, sizeof(msgbuf) - offset, "\n");
 
-    CallFrame* frame = &vm.frames[vm.frameCount - 1];
-    ObjFunction* function = frame->closure->function;
-    size_t instruction = frame->ip - function->chunk.code - 1;
-    int line = function->chunk.lines[instruction];
-
+    // Step 2: Add stack trace to msgbuf
     for (int i = vm.frameCount - 1; i >= 0; i--) {
         CallFrame* frame = &vm.frames[i];
         ObjFunction* function = frame->closure->function;
         size_t instruction = frame->ip - function->chunk.code - 1;
         int line = function->chunk.lines[instruction];
 
-        snprintf(linebuf, sizeof(linebuf), "[line %d] in ", line);
-        buffered_stderr(linebuf);
+        int len = snprintf(linebuf, sizeof(linebuf), "[line %d] in ", line);
+        if (offset + len < sizeof(msgbuf)) {
+            memcpy(msgbuf + offset, linebuf, len);
+            offset += len;
+        }
 
         if (function->name == NULL) {
-            buffered_stderr("script\n");
+            len = snprintf(linebuf, sizeof(linebuf), "script\n");
         } else {
-            buffered_stderr(function->name->chars);
-            buffered_stderr("()\n");
+            len = snprintf(linebuf, sizeof(linebuf), "%s()\n", function->name->chars);
+        }
+
+        if (offset + len < sizeof(msgbuf)) {
+            memcpy(msgbuf + offset, linebuf, len);
+            offset += len;
         }
     }
 
-    resetStack();
+    // Step 3: Create ObjString and ObjError
+    ObjString* errorMessage = copyString(msgbuf, offset);
+    ObjError* error = newError(errorMessage);
+
+    //printStack();
+    // Step 4: Unwind call stack looking for try block
+    while (vm.frameCount > 0) {
+        CallFrame* frame = &vm.frames[vm.frameCount - 1];
+
+        if (frame->hasTry != -1) {
+            vm.stackTop = ++frame->saveStack;
+            frame->ip = frame->saveIP + frame->hasTry - 1;
+            push(OBJ_VAL(error));
+
+            return frame;                      // Resume execution in catch block
+        }
+
+        // No try block — pop frame and clean stack
+        vm.frameCount--;
+        vm.stackTop = frame->slots;
+    }
+
+    //if (offset >= sizeof(msgbuf)) offset = sizeof(msgbuf) - 1;
+    //msgbuf[offset] = '\0';
+
+    fwrite(msgbuf, 1, offset, stderr);
+    exit(1);
 }
 
 
@@ -163,10 +194,10 @@ static bool call(ObjClosure* closure, int argCount) {
     frame->closure = closure;
     frame->ip = closure->function->chunk.code;
     frame->slots = vm.stackTop - argCount - 1;
+    frame->hasTry = -1;
+
     return true;
 }
-
-void printStack();
 
 void printDispatcher(ObjMultiDispatch* dispatcher) {
     printf("Dispatcher at %p\n", (void*)dispatcher);
@@ -429,6 +460,7 @@ static InterpretResult run() {
     register CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
     #define READ_BYTE() (*frame->ip++)
+       // if(frame->hasTry != -1) frame->hasTry--;
 
     #define READ_SHORT() \
     (frame->ip += 2, \
@@ -438,14 +470,18 @@ static InterpretResult run() {
         (frame->closure->function->chunk.constants.values[READ_BYTE()])
     #define BINARY_OP(valueType, op) \
     do { \
+        bool fl = false; \
         if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
-            runtimeError("Operands must be numbers."); \
-            return INTERPRET_RUNTIME_ERROR; \
+            frame = runtimeError("Operands must be numbers."); \
+            fl = true; \
+            break; \
         } \
         double b = AS_NUMBER(pop()); \
         double a = AS_NUMBER(pop()); \
         push(valueType(a op b)); \
-    } while (false)
+        if (fl) break;\
+    } while (false)\
+
     #define READ_STRING() AS_STRING(READ_CONSTANT())
 
         for (;;) {
@@ -483,8 +519,8 @@ static InterpretResult run() {
             }
             case OP_NEGATE:
                 if (!IS_NUMBER(peek(0))) {
-                    runtimeError("Operand must be a number.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("Operand must be a number.");
+                    break;
                 }
                 push(NUMBER_VAL(-AS_NUMBER(pop())));
                 break;
@@ -541,9 +577,9 @@ static InterpretResult run() {
                     push(OBJ_VAL(result));
                 }
                 else {
-                    runtimeError(
+                    frame = runtimeError(
                         "Operands must be two numbers or two strings.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    break;
                 }
                 break;
             }            case OP_SUBTRACT: BINARY_OP(NUMBER_VAL, -); break;
@@ -579,8 +615,9 @@ static InterpretResult run() {
                 ObjString* name = READ_STRING();
                 Value value;
                 if (!tableGet(&vm.globals, name, &value)) {
-                    runtimeError("Undefined variable '%s'.", name->chars);
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("Undefined variable '%s'.", name->chars);
+                    fflush(stdout);
+                    break;
                 }
                 push(value);
                 break;
@@ -589,8 +626,8 @@ static InterpretResult run() {
                 ObjString* name = READ_STRING();
                 if (tableSet(&vm.globals, name, peek(0))) {
                     tableDelete(&vm.globals, name);
-                    runtimeError("Undefined variable '%s'.", name->chars);
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("Undefined variable '%s'.", name->chars);
+                    break;
                 }
                 break;
             }
@@ -623,7 +660,7 @@ static InterpretResult run() {
                 int argCount = READ_BYTE();
 
                 if (!callValue(peek(argCount), argCount)) {
-                    return INTERPRET_RUNTIME_ERROR;
+                    break;
                 }
                 frame = &vm.frames[vm.frameCount - 1];
                 break;
@@ -664,8 +701,8 @@ static InterpretResult run() {
                 break;
             case OP_GET_PROPERTY: {
                 if (!IS_INSTANCE(peek(0))) {
-                    runtimeError("Only instances have properties.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("Only instances have properties.");
+                    break;
                 }
 
                 ObjInstance* instance = AS_INSTANCE(peek(0));
@@ -679,14 +716,14 @@ static InterpretResult run() {
                 }
 
                 if (!bindMethod(instance->klass, name)) {
-                    return INTERPRET_RUNTIME_ERROR;
+                    break;
                 }
                 break;
             }
             case OP_SET_PROPERTY: {
                 if (!IS_INSTANCE(peek(1))) {
-                    runtimeError("Only instances have fields.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("Only instances have fields.");
+                    break;
                 }
 
                 ObjInstance* instance = AS_INSTANCE(peek(1));
@@ -703,7 +740,7 @@ static InterpretResult run() {
                 ObjString* method = READ_STRING();
                 int argCount = READ_BYTE();
                 if (!invoke(method, argCount)) {
-                    return INTERPRET_RUNTIME_ERROR;
+                    break;
                 }
                 //pop();
                 frame = &vm.frames[vm.frameCount - 1];
@@ -711,8 +748,8 @@ static InterpretResult run() {
             }
             case OP_INHERIT: {
                 if (!IS_CLASS(peek(1))) {
-                    runtimeError("Superclass must be a class.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("Superclass must be a class.");
+                    break;
                 }
 
                 ObjClass* superclass = AS_CLASS(peek(1));
@@ -743,7 +780,7 @@ static InterpretResult run() {
                 ObjClass* superclass = AS_CLASS(pop());
 
                 if (!bindMethod(superclass, name)) {
-                    return INTERPRET_RUNTIME_ERROR;
+                    break;
                 }
                 break;
             }
@@ -752,7 +789,7 @@ static InterpretResult run() {
                 int argCount = READ_BYTE();
                 ObjClass* superclass = AS_CLASS(pop());
                 if (!invokeFromClass(superclass, method, argCount)) {
-                    return INTERPRET_RUNTIME_ERROR;
+                    break;
                 }
                 frame = &vm.frames[vm.frameCount - 1];
                 break;
@@ -762,21 +799,21 @@ static InterpretResult run() {
                 Value list = pop();
 
                 if (!IS_LIST(list)) {
-                    runtimeError("Can only index into lists.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("Can only index into lists.");
+                    break;
                 }
 
                 if (!IS_NUMBER(index)) {
-                    runtimeError("List index must be a number.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("List index must be a number.");
+                    break;
                 }
 
                 ObjList* objList = AS_LIST(list);
                 int i = (int)AS_NUMBER(index);
 
                 if (i < 0 || i >= objList->elements.count) {
-                    runtimeError("List index out of bounds.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("List index out of bounds.");
+                    break;
                 }
 
                 push(objList->elements.values[i]);
@@ -789,21 +826,21 @@ static InterpretResult run() {
                 Value list = pop();
 
                 if (!IS_LIST(list)) {
-                    runtimeError("Can only index into lists.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("Can only index into lists.");
+                    break;
                 }
 
                 if (!IS_NUMBER(index)) {
-                    runtimeError("List index must be a number.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("List index must be a number.");
+                    break;
                 }
 
                 ObjList* objList = AS_LIST(list);
                 int i = (int)AS_NUMBER(index);
 
                 if (i < 0 || i >= objList->elements.count) {
-                    runtimeError("List index out of bounds.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("List index out of bounds.");
+                    break;
                 }
 
                 objList->elements.values[i] = value;
@@ -827,8 +864,8 @@ static InterpretResult run() {
             case OP_DISPATCH: {
                 Value closureVal = peek(0);
                 if (!IS_CLOSURE(closureVal)) {
-                    runtimeError("Expected closure on top of stack for dispatch.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    frame = runtimeError("Expected closure on top of stack for dispatch.");
+                    break;
                 }
 
                 ObjClosure* closure = AS_CLOSURE(closureVal);
@@ -851,6 +888,16 @@ static InterpretResult run() {
                     push(OBJ_VAL(dispatch)); // push new dispatch
                 }
 
+                break;
+            }
+            case OP_TRY: {
+                frame->saveStack = vm.stackTop;
+                frame->saveIP = frame->ip;
+                frame->hasTry = READ_BYTE();
+                break;
+            }
+            case OP_END_TRY: {
+                frame->hasTry = -1;
                 break;
             }
         }

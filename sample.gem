@@ -1,15 +1,10 @@
-class A {
-  call() { print "A"; }
+fun safeAccess() {
+  try {
+    print someVar;
+  } catch(e) {
+    print "Handled inside function";
+    print e;
+  }
 }
 
-class B < A {
-  call() { print "B"; }
-}
-
-class C < B {
-  call() { print "C"; }
-}
-
-C().call(); // expect: C
-
-print "";
+safeAccess();

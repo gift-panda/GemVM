@@ -53,6 +53,15 @@ static int invokeInstruction(const char* name, Chunk* chunk,
     return offset + 3;
 }
 
+static int tryInstruction(Chunk* chunk, int offset) {
+    uint8_t catchOffset = chunk->code[offset + 1];
+    printf("OP_TRY catch->%04d\n",
+           catchOffset
+           );
+    return offset + 2;
+}
+
+
 int disassembleInstruction(Chunk* chunk, int offset) {
     printf("%04d ", offset);
 
@@ -172,6 +181,11 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             return offset + 1;
         case OP_DISPATCH:
             return simpleInstruction("OP_DISPATCH", offset);
+        case OP_TRY:
+            return tryInstruction(chunk, offset);
+        case OP_END_TRY: {
+            return simpleInstruction("OP_END_TRY", offset);
+        }
         default:
             printf("Unknown opcode %d\n", instruction);
             return offset + 1;

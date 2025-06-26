@@ -120,6 +120,12 @@ ObjNative* newNative(NativeFn function) {
     return native;
 }
 
+ObjError* newError(ObjString* message) {
+    ObjError* error = ALLOCATE_OBJ(ObjError, OBJ_ERROR);
+    error->message = message;
+    return error;
+}
+
 static uint32_t hashString(const char* key, int length) {
     uint32_t hash = 0x811C9DC5u; // same offset as FNV-1a for compatibility
     const uint32_t prime = 0x01000193u;
@@ -228,6 +234,12 @@ void printObject(Value value) {
             ObjMultiDispatch* method = AS_MULTI_DISPATCH(value);
             printf("<fn %s>", method->name->chars);
             break;
+        }
+        case OBJ_ERROR: {
+            ObjError* error = AS_ERROR(value);
+            printf("%s", error->message->chars);
+            break;
+
         }
     }
     fflush(stdout);

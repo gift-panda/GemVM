@@ -228,8 +228,8 @@ static ObjFunction* endCompiler() {
     ObjFunction* function = current->function;
 #ifdef DEBUG_PRINT_CODE
     if (!parser.hadError) {
-        disassembleChunk(currentChunk(), function->name != NULL
-                ? function->name->chars : "<script>");
+        disassembleChunk(&function->chunk, function->name != NULL ?
+            function->name->chars : "<script>");
     }
 #endif
 
@@ -593,7 +593,7 @@ static void addLocal(Token name) {
 static void declareVariable() {
     if (current->scopeDepth == 0) return;
 
-    Token* name = &parser.previous;/*
+    Token* name = &parser.previous;
 
     for (int i = current->localCount - 1; i >= 0; i--) {
         Local* local = &current->locals[i];
@@ -601,11 +601,13 @@ static void declareVariable() {
             break;
         }
 
+        /*
         if (identifiersEqual(name, &local->name)) {
             error("Already a variable with this name in this scope.");
         }
+        */
     }
-*/
+
     addLocal(*name);
 }
 
@@ -902,6 +904,56 @@ static void whileStatement() {
     emitByte(OP_POP);
 }
 
+static void tryCatchStatement() {
+    int tryStart = currentChunk()->count;
+
+    emitByte(OP_TRY);
+    emitByte(0); // Placeholder for relative offset to catch block
+
+    // Compile try block
+    beginScope();
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before try block.");
+    block();
+    endScope();
+
+
+    // Emit jump to skip catch if no error occurred
+    emitByte(OP_END_TRY);
+    int jumpOverCatch = emitJump(OP_JUMP);
+
+    // Catch block starts here
+    int catchStart = currentChunk()->count;
+
+    // Patch the OP_TRY's catch offset
+    int catchOffset = catchStart - tryStart; // +2 = OP_TRY + offset byte
+    currentChunk()->code[tryStart + 1] = (uint8_t)catchOffset;
+
+    emitByte(OP_END_TRY); // Optional: denotes end of catch target marker
+
+    // Parse and compile catch clause
+    consume(TOKEN_CATCH, "Expect 'catch' after try block.");
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after 'catch'.");
+    beginScope();
+
+    consume(TOKEN_IDENTIFIER, "Expect variable name in catch block.");
+    Token name = parser.previous;
+    declareVariable();
+    markInitialized();
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after catch variable name.");
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before catch block.");
+
+    uint8_t slot = resolveLocal(current, &name);
+    emitBytes(OP_SET_LOCAL, slot);
+    emitByte(OP_POP);
+
+    block();
+    endScope();
+
+    // Patch jump to land after catch block
+    patchJump(jumpOverCatch);
+}
+
 static void synchronize() {
     parser.panicMode = false;
 
@@ -953,6 +1005,9 @@ static void statement() {
         beginScope();
         block();
         endScope();
+    }
+    else if (match(TOKEN_TRY)) {
+        tryCatchStatement();
     }
     else if (match(TOKEN_RETURN)) {
         returnStatement();

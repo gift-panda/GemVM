@@ -32,6 +32,9 @@
 #define IS_LIST(value)         isObjType(value, OBJ_LIST)
 #define AS_LIST(value)         ((ObjList*)AS_OBJ(value))
 
+#define IS_ERROR(value)        isObjType(value, OBJ_ERROR)
+#define AS_ERROR(value)        ((ObjError*)AS_OBJ(value))
+
 typedef enum {
     OBJ_STRING,
     OBJ_FUNCTION,
@@ -43,6 +46,7 @@ typedef enum {
     OBJ_BOUND_METHOD,
     OBJ_LIST,
     OBJ_MULTI_DISPATCH,
+    OBJ_ERROR,
 } ObjType;
 
 struct Obj {
@@ -123,6 +127,11 @@ typedef struct {
     ObjClosure* closures[10]; // Indexed by arity
 } ObjMultiDispatch;
 
+typedef struct {
+    Obj obj;
+    ObjString* message;
+} ObjError;
+
 
 ObjBoundMethod* newBoundMethod(Value receiver, ObjString*);
 ObjClass* newClass(ObjString* name);
@@ -135,6 +144,7 @@ ObjString* copyString(const char* chars, int length);
 ObjUpvalue* newUpvalue(Value* slot);
 ObjList* newList();
 ObjMultiDispatch* newMultiDispatch(ObjString*);
+ObjError* newError(ObjString* message);
 void printObject(Value value);
 
 static inline bool isObjType(Value value, ObjType type) {
