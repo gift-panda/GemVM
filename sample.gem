@@ -1,17 +1,5 @@
-fun hello(){
-    print yo;
-}
+var a = "hello";
+for(var i = 0; i < a.length(); i=i+1)
+    print a.charAt(i);
 
-try {
-  try {
-    hello();
-  } catch(e) {
-    print "Inner catch";
-    print e;
-  }
-
-  print stillMissing;
-} catch(e) {
-  print "Outer catch";
-  print e;
-}
+print a.charAt(5);

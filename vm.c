@@ -37,9 +37,41 @@ static Value stringLengthNative(int argCount, Value* args) {
     return NUMBER_VAL(string->length);
 }
 
+static Value stringCharAtNative(int argCount, Value* args) {
+    if (argCount != 1) {
+        runtimeError("string.charAt() takes a integer.");
+        return NIL_VAL;
+    }
+
+    if (!IS_STRING(args[-1])) {
+        runtimeError("string.charAt() must be called on a string.");
+        return NIL_VAL;
+    }
+
+    if (!IS_NUMBER(args[0])) {
+        runtimeError("string.charAt() index must be  an integer.");
+        return NIL_VAL;
+    }
+
+    ObjString* string = AS_STRING(args[-1]);
+    int index = AS_NUMBER(args[0]);
+    if (index < 0 || index >= string->length) {
+        runtimeError("string.charAt() index out of bounds.");
+        return NIL_VAL;
+    }
+    if (index%1 != 0) {
+        runtimeError("string.charAt() index must be an integer.");
+        return NIL_VAL;
+    }
+    return OBJ_VAL(copyString(&string->chars[index], 1));
+}
+
 void defineStringMethods() {
     ObjNative* lengthFn = newNative(stringLengthNative);
     tableSet(&vm.stringClassMethods, copyString("length", 6), OBJ_VAL(lengthFn));
+
+    ObjNative* chatAtFn = newNative(stringCharAtNative);
+    tableSet(&vm.stringClassMethods, copyString("charAt", 6), OBJ_VAL(chatAtFn));
 }
 
 static void resetStack() {
@@ -223,7 +255,7 @@ static bool call(ObjClosure* closure, int argCount) {
     }
 
     if (vm.frameCount == FRAMES_MAX) {
-        runtimeError("Stack overflow.");
+        VMError("Stack overflow.");
         return false;
     }
 
