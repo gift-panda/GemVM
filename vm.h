@@ -15,9 +15,10 @@ typedef struct {
     uint8_t* ip;
     Value* slots;
 
-    int hasTry;
-    uint8_t* saveIP;
-    Value* saveStack;
+    int hasTry[10];
+    int tryTop;
+    uint8_t *saveIP[10];
+    Value* saveStack[10];
 } CallFrame;
 
 typedef struct {

@@ -236,6 +236,10 @@ void printObject(Value value) {
             break;
         }
         case OBJ_ERROR: {
+#ifdef DEBUG_TRACE_EXECUTION
+            printf("<error>");
+            break;
+#endif
             ObjError* error = AS_ERROR(value);
             printf("%s", error->message->chars);
             break;

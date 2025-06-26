@@ -102,26 +102,63 @@ CallFrame* runtimeError(const char* format, ...) {
     while (vm.frameCount > 0) {
         CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
-        if (frame->hasTry != -1) {
-            vm.stackTop = ++frame->saveStack;
-            frame->ip = frame->saveIP + frame->hasTry - 1;
+        if (frame->hasTry[frame->tryTop] != -1) {
+            vm.stackTop = ++frame->saveStack[frame->tryTop];
+            frame->ip = frame->saveIP[frame->tryTop] + frame->hasTry[frame->tryTop] - 1;
             push(OBJ_VAL(error));
 
-            return frame;                      // Resume execution in catch block
+            return frame;
         }
 
-        // No try block — pop frame and clean stack
         vm.frameCount--;
         vm.stackTop = frame->slots;
     }
-
-    //if (offset >= sizeof(msgbuf)) offset = sizeof(msgbuf) - 1;
-    //msgbuf[offset] = '\0';
 
     fwrite(msgbuf, 1, offset, stderr);
     exit(1);
 }
 
+CallFrame* VMError(const char* format, ...) {
+    char msgbuf[1024];
+    char linebuf[256];
+    size_t offset = 0;
+
+    // Step 1: Format the error message
+    va_list args;
+    va_start(args, format);
+    offset += vsnprintf(msgbuf + offset, sizeof(msgbuf) - offset, format, args);
+    va_end(args);
+
+    offset += snprintf(msgbuf + offset, sizeof(msgbuf) - offset, "\n");
+
+    // Step 2: Add stack trace to msgbuf
+    for (int i = vm.frameCount - 1; i >= 0; i--) {
+        CallFrame* frame = &vm.frames[i];
+        ObjFunction* function = frame->closure->function;
+        size_t instruction = frame->ip - function->chunk.code - 1;
+        int line = function->chunk.lines[instruction];
+
+        int len = snprintf(linebuf, sizeof(linebuf), "[line %d] in ", line);
+        if (offset + len < sizeof(msgbuf)) {
+            memcpy(msgbuf + offset, linebuf, len);
+            offset += len;
+        }
+
+        if (function->name == NULL) {
+            len = snprintf(linebuf, sizeof(linebuf), "script\n");
+        } else {
+            len = snprintf(linebuf, sizeof(linebuf), "%s()\n", function->name->chars);
+        }
+
+        if (offset + len < sizeof(msgbuf)) {
+            memcpy(msgbuf + offset, linebuf, len);
+            offset += len;
+        }
+    }
+
+    fwrite(msgbuf, 1, offset, stderr);
+    exit(1);
+}
 
 static void defineNative(const char* name, NativeFn function) {
     push(OBJ_VAL(copyString(name, (int)strlen(name))));
@@ -194,7 +231,8 @@ static bool call(ObjClosure* closure, int argCount) {
     frame->closure = closure;
     frame->ip = closure->function->chunk.code;
     frame->slots = vm.stackTop - argCount - 1;
-    frame->hasTry = -1;
+    frame->tryTop = 0;
+    frame->hasTry[frame->tryTop] = -1;
 
     return true;
 }
@@ -891,14 +929,19 @@ static InterpretResult run() {
                 break;
             }
             case OP_TRY: {
-                frame->saveStack = vm.stackTop;
-                frame->saveIP = frame->ip;
-                frame->hasTry = READ_BYTE();
+                if (frame->tryTop == 10) VMError("Max try depth reached");
+                frame->tryTop++;
+                frame->saveStack[frame->tryTop] = vm.stackTop;
+                frame->saveIP[frame->tryTop] = frame->ip;
+                frame->hasTry[frame->tryTop] = READ_BYTE();
+
                 break;
             }
             case OP_END_TRY: {
-                frame->hasTry = -1;
-                break;
+                frame->hasTry[frame->tryTop] = -1;
+                if (frame->tryTop >= 0) {
+                    frame->tryTop--;
+                }
             }
         }
     }

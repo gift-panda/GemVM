@@ -1,10 +1,17 @@
-fun safeAccess() {
-  try {
-    print someVar;
-  } catch(e) {
-    print "Handled inside function";
-    print e;
-  }
+fun hello(){
+    print yo;
 }
 
-safeAccess();
+try {
+  try {
+    hello();
+  } catch(e) {
+    print "Inner catch";
+    print e;
+  }
+
+  print stillMissing;
+} catch(e) {
+  print "Outer catch";
+  print e;
+}
