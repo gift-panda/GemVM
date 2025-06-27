@@ -103,6 +103,9 @@ ObjMultiDispatch* newMultiDispatch(ObjString* name) {
 ObjList* newList() {
     ObjList* list = ALLOCATE_OBJ(ObjList, OBJ_LIST);
     initValueArray(&list->elements);
+
+    tableAddAll(&vm.listClassMethods, &list->methods);
+
     return list;
 }
 

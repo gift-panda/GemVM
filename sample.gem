@@ -1,5 +1,8 @@
-var a = "hello";
-for(var i = 0; i < a.length(); i=i+1)
-    print a.charAt(i);
+var a = [1,2,3];
+print a;
 
-print a.charAt(5);
+print a.append(4);
+print a[3];
+a.append(5);
+
+print a.length();

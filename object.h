@@ -119,6 +119,8 @@ typedef struct {
 typedef struct {
     Obj obj;
     ValueArray elements;
+
+    Table methods;
 } ObjList;
 
 typedef struct {

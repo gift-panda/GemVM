@@ -42,6 +42,7 @@ typedef struct {
 
     ObjString* initString;
     Table stringClassMethods;
+    Table listClassMethods;
 } VM;
 
 typedef enum {

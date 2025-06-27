@@ -36,7 +36,32 @@ static Value stringLengthNative(int argCount, Value* args) {
     ObjString* string = AS_STRING(args[-1]);
     return NUMBER_VAL(string->length);
 }
+static Value inputNative(int argCount, Value* args) {
+    if (argCount > 1) {
+        runtimeError("input() takes no or one arguments.");
+        return NIL_VAL;
+    }
 
+    if (argCount == 1) {
+        if (!IS_STRING(args[0])) {
+            runtimeError("input() prompt must be a string.");
+            return NIL_VAL;
+        }
+        printf("%s\n", AS_CSTRING(args[0]));
+    }
+
+    char buffer[1024];
+    if (fgets(buffer, sizeof(buffer), stdin) != NULL) {
+        size_t len = strlen(buffer);
+        if (len > 0 && buffer[len - 1] == '\n') {
+            buffer[len - 1] = '\0';
+            len--;
+        }
+        return OBJ_VAL(copyString(buffer, len));
+    }
+
+    return NIL_VAL;
+}
 static Value stringCharAtNative(int argCount, Value* args) {
     if (argCount != 1) {
         runtimeError("string.charAt() takes a integer.");
@@ -66,12 +91,40 @@ static Value stringCharAtNative(int argCount, Value* args) {
     return OBJ_VAL(copyString(&string->chars[index], 1));
 }
 
+
+static Value listAppendNative(int argCount, Value* args) {
+    if (argCount != 1) {
+        runtimeError("list.append() takes a value to append.");
+        return NIL_VAL;
+    }
+
+    ObjList* list = AS_LIST(args[-1]);
+    writeValueArray(&list->elements, args[0]);
+    return OBJ_VAL(list);
+}
+
+static Value listLengthNative(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError("list.length() takes no arguments.");
+        return NIL_VAL;
+    }
+    ObjList* list = AS_LIST(args[-1]);
+    return NUMBER_VAL(list->elements.count);
+}
 void defineStringMethods() {
     ObjNative* lengthFn = newNative(stringLengthNative);
     tableSet(&vm.stringClassMethods, copyString("length", 6), OBJ_VAL(lengthFn));
 
     ObjNative* chatAtFn = newNative(stringCharAtNative);
     tableSet(&vm.stringClassMethods, copyString("charAt", 6), OBJ_VAL(chatAtFn));
+}
+
+void defineListMethods() {
+    ObjNative *appendFn = newNative(listAppendNative);
+    tableSet(&vm.listClassMethods, copyString("append", 6), OBJ_VAL(appendFn));
+
+    ObjNative *lengthFn = newNative(listLengthNative);
+    tableSet(&vm.listClassMethods, copyString("length", 6), OBJ_VAL(lengthFn));
 }
 
 static void resetStack() {
@@ -206,6 +259,7 @@ void initVM() {
     initTable(&vm.strings);
     initTable(&vm.globals);
     initTable(&vm.stringClassMethods);
+    initTable(&vm.listClassMethods);
 
     vm.grayCount = 0;
     vm.grayCapacity = 0;
@@ -223,7 +277,9 @@ void initVM() {
     vm.initString = copyString("init", 4);
 
     defineNative("clock", clockNative);
+    defineNative("input", inputNative);
     defineStringMethods();
+    defineListMethods();
 }
 
 void freeVM() {
@@ -480,6 +536,19 @@ static bool invoke(ObjString* name, int argCount) {
     if (IS_STRING(receiver)) {
         Value value;
         if (tableGet(&vm.stringClassMethods, name, &value)) {
+            bool res = callBoundedNative(value, argCount);
+            Value result = pop();
+            pop();
+            push(result);
+            return res;
+        }
+        runtimeError("Undefined method '%s' on string.", name);
+        return false;
+    }
+
+    if (IS_LIST(receiver)) {
+        Value value;
+        if (tableGet(&vm.listClassMethods, name, &value)) {
             bool res = callBoundedNative(value, argCount);
             Value result = pop();
             pop();
