@@ -1,6 +1,7 @@
 #include "common.h"
 #include "vm.h"
 
+#include <ctype.h>
 #include <stdio.h>
 
 #include "compiler.h"
@@ -22,20 +23,6 @@ static Value clockNative(int argCount, Value* args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
 
-static Value stringLengthNative(int argCount, Value* args) {
-    if (argCount != 0) {
-        runtimeError("string.length() takes no arguments.");
-        return NIL_VAL;
-    }
-
-    if (!IS_STRING(args[-1])) {
-        runtimeError("string.length() must be called on a string.");
-        return NIL_VAL;
-    }
-
-    ObjString* string = AS_STRING(args[-1]);
-    return NUMBER_VAL(string->length);
-}
 static Value inputNative(int argCount, Value* args) {
     if (argCount > 1) {
         runtimeError("input() takes no or one arguments.");
@@ -62,6 +49,22 @@ static Value inputNative(int argCount, Value* args) {
 
     return NIL_VAL;
 }
+
+static Value stringLengthNative(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError("string.length() takes no arguments.");
+        return NIL_VAL;
+    }
+
+    if (!IS_STRING(args[-1])) {
+        runtimeError("string.length() must be called on a string.");
+        return NIL_VAL;
+    }
+
+    ObjString* string = AS_STRING(args[-1]);
+    return NUMBER_VAL(string->length);
+}
+
 static Value stringCharAtNative(int argCount, Value* args) {
     if (argCount != 1) {
         runtimeError("string.charAt() takes a integer.");
@@ -91,6 +94,90 @@ static Value stringCharAtNative(int argCount, Value* args) {
     return OBJ_VAL(copyString(&string->chars[index], 1));
 }
 
+static Value stringToUpperCaseNative(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError("string.toUpperCase() takes no arguments.");
+        return NIL_VAL;
+    }
+
+    if (!IS_STRING(args[-1])) {
+        runtimeError("string.toUpperCase() must be called on a string.");
+        return NIL_VAL;
+    }
+
+    ObjString* string = AS_STRING(args[-1]);
+    char* upper = ALLOCATE(char, string->length);
+    for (int i = 0; i < string->length; i++) {
+        upper[i] = toupper(string->chars[i]);
+    }
+    return OBJ_VAL(copyString(upper, string->length));
+}
+
+static Value stringToLowerCaseNative(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError("string.toLowerCase() takes no arguments.");
+        return NIL_VAL;
+    }
+
+    if (!IS_STRING(args[-1])) {
+        runtimeError("string.toLowerCase() must be called on a string.");
+        return NIL_VAL;
+    }
+
+    ObjString* string = AS_STRING(args[-1]);
+    char* lower = ALLOCATE(char, string->length);
+    for (int i = 0; i < string->length; i++) {
+        lower[i] = tolower(string->chars[i]);
+    }
+    return OBJ_VAL(copyString(lower, string->length));
+}
+
+static Value stringSubstringNative(int argCount, Value* args) {
+    if (argCount != 2) {
+        runtimeError("string.substring(start, end) takes two arguments.");
+        return NIL_VAL;
+    }
+
+    if (!IS_STRING(args[-1]) || !IS_NUMBER(args[0]) || !IS_NUMBER(args[1])) {
+        runtimeError("string.substring() must be called on a string and use integer arguments.");
+        return NIL_VAL;
+    }
+
+    ObjString* string = AS_STRING(args[-1]);
+    int start = (int)AS_NUMBER(args[0]);
+    int end = (int)AS_NUMBER(args[1]);
+
+    if (start < 0 || end > string->length || start > end) {
+        runtimeError("string.substring() indices out of bounds.");
+        return NIL_VAL;
+    }
+
+    return OBJ_VAL(copyString(&string->chars[start], end - start));
+}
+
+static Value stringIndexOfNative(int argCount, Value* args) {
+    if (argCount != 1) {
+        runtimeError("string.indexOf(substr) takes one argument.");
+        return NIL_VAL;
+    }
+
+    if (!IS_STRING(args[-1]) || !IS_STRING(args[0])) {
+        runtimeError("string.indexOf() must be called on a string with a string argument.");
+        return NIL_VAL;
+    }
+
+    ObjString* haystack = AS_STRING(args[-1]);
+    ObjString* needle = AS_STRING(args[0]);
+
+    for (int i = 0; i <= haystack->length - needle->length; i++) {
+        if (memcmp(&haystack->chars[i], needle->chars, needle->length) == 0) {
+            return NUMBER_VAL(i);
+        }
+    }
+
+    return NUMBER_VAL(-1);
+}
+
 
 static Value listAppendNative(int argCount, Value* args) {
     if (argCount != 1) {
@@ -111,20 +198,198 @@ static Value listLengthNative(int argCount, Value* args) {
     ObjList* list = AS_LIST(args[-1]);
     return NUMBER_VAL(list->elements.count);
 }
-void defineStringMethods() {
-    ObjNative* lengthFn = newNative(stringLengthNative);
-    tableSet(&vm.stringClassMethods, copyString("length", 6), OBJ_VAL(lengthFn));
 
-    ObjNative* chatAtFn = newNative(stringCharAtNative);
-    tableSet(&vm.stringClassMethods, copyString("charAt", 6), OBJ_VAL(chatAtFn));
+static Value listGetNative(int argCount, Value* args) {
+    if (argCount != 1 || !IS_NUMBER(args[0])) {
+        runtimeError("list.get(index) takes a single integer argument.");
+        return NIL_VAL;
+    }
+
+    if (!IS_LIST(args[-1])) {
+        runtimeError("list.get() must be called on a list.");
+        return NIL_VAL;
+    }
+
+    ObjList* list = AS_LIST(args[-1]);
+    int index = (int)AS_NUMBER(args[0]);
+
+    if (index < 0 || index >= list->elements.count) {
+        runtimeError("list.get() index out of bounds.");
+        return NIL_VAL;
+    }
+
+    return list->elements.values[index];
+}
+
+static Value listSetNative(int argCount, Value* args) {
+    if (argCount != 2 || !IS_NUMBER(args[0])) {
+        runtimeError("list.set(index, value) takes an index and a value.");
+        return NIL_VAL;
+    }
+
+    if (!IS_LIST(args[-1])) {
+        runtimeError("list.set() must be called on a list.");
+        return NIL_VAL;
+    }
+
+    ObjList* list = AS_LIST(args[-1]);
+    int index = (int)AS_NUMBER(args[0]);
+
+    if (index < 0 || index >= list->elements.count) {
+        runtimeError("list.set() index out of bounds.");
+        return NIL_VAL;
+    }
+
+    list->elements.values[index] = args[1];
+    return args[1];
+}
+
+static Value listPopNative(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError("list.pop() takes no arguments.");
+        return NIL_VAL;
+    }
+
+    if (!IS_LIST(args[-1])) {
+        runtimeError("list.pop() must be called on a list.");
+        return NIL_VAL;
+    }
+
+    ObjList* list = AS_LIST(args[-1]);
+
+    if (list->elements.count == 0) {
+        runtimeError("list.pop() on empty list.");
+        return NIL_VAL;
+    }
+
+    list->elements.count--;
+    return list->elements.values[list->elements.count];
+}
+
+static Value listInsertNative(int argCount, Value* args) {
+    if (argCount != 2 || !IS_NUMBER(args[0])) {
+        runtimeError("list.insert(index, value) takes an index and a value.");
+        return NIL_VAL;
+    }
+
+    if (!IS_LIST(args[-1])) {
+        runtimeError("list.insert() must be called on a list.");
+        return NIL_VAL;
+    }
+
+    ObjList* list = AS_LIST(args[-1]);
+    int index = (int)AS_NUMBER(args[0]);
+
+    if (index < 0 || index > list->elements.count) {
+        runtimeError("list.insert() index out of bounds.");
+        return NIL_VAL;
+    }
+
+    // Resize if necessary
+    if (list->elements.count + 1 > list->elements.capacity) {
+        int oldCapacity = list->elements.capacity;
+        int newCapacity = GROW_CAPACITY(oldCapacity);
+        list->elements.values = GROW_ARRAY(Value, list->elements.values, oldCapacity, newCapacity);
+        list->elements.capacity = newCapacity;
+    }
+
+    // Shift elements right
+    for (int i = list->elements.count; i > index; i--) {
+        list->elements.values[i] = list->elements.values[i - 1];
+    }
+
+    list->elements.values[index] = args[1];
+    list->elements.count++;
+    return args[1];
+}
+
+static Value listClearNative(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError("list.clear() takes no arguments.");
+        return NIL_VAL;
+    }
+
+    if (!IS_LIST(args[-1])) {
+        runtimeError("list.clear() must be called on a list.");
+        return NIL_VAL;
+    }
+
+    ObjList* list = AS_LIST(args[-1]);
+    list->elements.count = 0;
+    return NIL_VAL;
+}
+
+static Value listContainsNative(int argCount, Value* args) {
+    if (argCount != 1) {
+        runtimeError("list.contains(value) takes exactly one argument.");
+        return NIL_VAL;
+    }
+
+    if (!IS_LIST(args[-1])) {
+        runtimeError("list.contains() must be called on a list.");
+        return NIL_VAL;
+    }
+
+    ObjList* list = AS_LIST(args[-1]);
+    Value target = args[0];
+
+    for (int i = 0; i < list->elements.count; i++) {
+        if (valuesEqual(list->elements.values[i], target)) {
+            return BOOL_VAL(true);
+        }
+    }
+
+    return BOOL_VAL(false);
+}
+
+static Value listRemoveNative(int argCount, Value* args) {
+    if (argCount != 1 || !IS_NUMBER(args[0])) {
+        runtimeError("list.remove(index) takes exactly one integer argument.");
+        return NIL_VAL;
+    }
+
+    if (!IS_LIST(args[-1])) {
+        runtimeError("list.remove() must be called on a list.");
+        return NIL_VAL;
+    }
+
+    ObjList* list = AS_LIST(args[-1]);
+    int index = (int)AS_NUMBER(args[0]);
+
+    if (index < 0 || index >= list->elements.count) {
+        runtimeError("list.remove() index out of bounds.");
+        return NIL_VAL;
+    }
+
+    Value removed = list->elements.values[index];
+
+    for (int i = index; i < list->elements.count - 1; i++) {
+        list->elements.values[i] = list->elements.values[i + 1];
+    }
+
+    list->elements.count--;
+    return removed;
+}
+
+void defineStringMethods() {
+    tableSet(&vm.stringClassMethods, copyString("length", 6), OBJ_VAL(newNative(stringLengthNative)));
+    tableSet(&vm.stringClassMethods, copyString("charAt", 6), OBJ_VAL(newNative(stringCharAtNative)));
+    tableSet(&vm.stringClassMethods, copyString("toUpperCase", 11), OBJ_VAL(newNative(stringToUpperCaseNative)));
+    tableSet(&vm.stringClassMethods, copyString("toLowerCase", 11), OBJ_VAL(newNative(stringToLowerCaseNative)));
+    tableSet(&vm.stringClassMethods, copyString("substring", 9), OBJ_VAL(newNative(stringSubstringNative)));
+    tableSet(&vm.stringClassMethods, copyString("indexOf", 7), OBJ_VAL(newNative(stringIndexOfNative)));
 }
 
 void defineListMethods() {
-    ObjNative *appendFn = newNative(listAppendNative);
-    tableSet(&vm.listClassMethods, copyString("append", 6), OBJ_VAL(appendFn));
-
-    ObjNative *lengthFn = newNative(listLengthNative);
-    tableSet(&vm.listClassMethods, copyString("length", 6), OBJ_VAL(lengthFn));
+    tableSet(&vm.listClassMethods, copyString("append", 6), OBJ_VAL(newNative(listAppendNative)));
+    tableSet(&vm.listClassMethods, copyString("length", 6), OBJ_VAL(newNative(listLengthNative)));
+    tableSet(&vm.listClassMethods, copyString("get", 3), OBJ_VAL(newNative(listGetNative)));
+    tableSet(&vm.listClassMethods, copyString("set", 3), OBJ_VAL(newNative(listSetNative)));
+    tableSet(&vm.listClassMethods, copyString("pop", 3), OBJ_VAL(newNative(listPopNative)));
+    tableSet(&vm.listClassMethods, copyString("insert", 6), OBJ_VAL(newNative(listInsertNative)));
+    tableSet(&vm.listClassMethods, copyString("clear", 5), OBJ_VAL(newNative(listClearNative)));
+    tableSet(&vm.listClassMethods, copyString("contains", 8), OBJ_VAL(newNative(listContainsNative)));
+    tableSet(&vm.listClassMethods, copyString("remove", 6), OBJ_VAL(newNative(listRemoveNative)));
 }
 
 static void resetStack() {
