@@ -41,8 +41,11 @@ typedef struct {
     size_t maxRAM;
 
     ObjString* initString;
+    ObjString* toString;
     Table stringClassMethods;
     Table listClassMethods;
+
+    bool isInvokingNative;
 } VM;
 
 typedef enum {
@@ -58,5 +61,6 @@ void freeVM();
 InterpretResult interpret(const char* source);
 void push(Value value);
 Value pop();
+CallFrame* runtimeError(const char* format, ...);
 
 #endif

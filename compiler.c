@@ -866,9 +866,24 @@ static void ifStatement() {
 }
 
 static void printStatement() {
+    consume(TOKEN_LEFT_PAREN, "Expected (");
     expression();
+    consume(TOKEN_RIGHT_PAREN, "Expected )");
     consume(TOKEN_SEMICOLON, "Expect ';' after value.");
     emitByte(OP_PRINT);
+}
+
+static void printlnStatement() {
+    consume(TOKEN_LEFT_PAREN, "Expected (");
+    if (match(TOKEN_RIGHT_PAREN)) {
+        emitByte(OP_PRINTLN_BLANK);
+    }
+    else {
+        expression();
+        consume(TOKEN_RIGHT_PAREN, "Expected ')'.");
+        emitByte(OP_PRINTLN);
+    }
+    consume(TOKEN_SEMICOLON, "Expected ';'.");
 }
 
 static void returnStatement() {
@@ -995,6 +1010,9 @@ static void declaration() {
 static void statement() {
     if (match(TOKEN_PRINT)) {
         printStatement();
+    }
+    else if (match(TOKEN_PRINTLN)) {
+        printlnStatement();
     } else if (match(TOKEN_WHILE)) {
         whileStatement();
     } else if (match(TOKEN_FOR)) {

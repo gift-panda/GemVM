@@ -20,6 +20,8 @@ typedef enum {
     OP_GREATER,
     OP_LESS,
     OP_PRINT,
+    OP_PRINTLN,
+    OP_PRINTLN_BLANK,
     OP_POP,
     OP_DEFINE_GLOBAL,
     OP_GET_GLOBAL,

@@ -123,7 +123,15 @@ static TokenType identifierType() {
         case 'i': return checkKeyword(1, 1, "f", TOKEN_IF);
         case 'n': return checkKeyword(1, 2, "il", TOKEN_NIL);
         case 'o': return checkKeyword(1, 1, "r", TOKEN_OR);
-        case 'p': return checkKeyword(1, 4, "rint", TOKEN_PRINT);
+        case 'p':
+            if (memcmp(scanner.start, "println", 7) == 0) {
+                return TOKEN_PRINTLN;
+            }
+            if (memcmp(scanner.start, "print", 5) == 0) {
+                return TOKEN_PRINT;
+            }
+            return TOKEN_IDENTIFIER;
+
         case 'r': return checkKeyword(1, 5, "eturn", TOKEN_RETURN);
         case 's': return checkKeyword(1, 4, "uper", TOKEN_SUPER);
         case 'v': return checkKeyword(1, 2, "ar", TOKEN_VAR);
