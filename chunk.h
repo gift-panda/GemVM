@@ -50,6 +50,8 @@ typedef enum {
     OP_DISPATCH,
     OP_TRY,
     OP_END_TRY,
+    OP_STATIC_VAR,
+    OP_STATIC_METHOD,
 } OpCode;
 
 typedef struct {

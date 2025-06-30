@@ -61,6 +61,7 @@ typedef enum {
     TYPE_SCRIPT,
     TYPE_METHOD,
     TYPE_INITIALIZER,
+    TYPE_STATIC_METHOD,
 } FunctionType;
 
 typedef struct Compiler {
@@ -709,15 +710,26 @@ static void function(FunctionType type) {
 }
 
 static void method() {
+    bool makeStatic = false;
+    if (match(TOKEN_STATIC)) {
+        makeStatic = true;
+    }
     consume(TOKEN_IDENTIFIER, "Expect method name.");
     uint8_t constant = identifierConstant(&parser.previous);
 
-    FunctionType type = TYPE_METHOD;
+    FunctionType type = makeStatic? TYPE_STATIC_METHOD: TYPE_METHOD;
     if (parser.previous.length == 4 && memcmp(parser.previous.start, "init", 4) == 0) {
         type = TYPE_INITIALIZER;
     }
+
+    if (makeStatic && type == TYPE_INITIALIZER) {
+        error("Initializer cannot be static..");
+    }
     function(type);
-    emitBytes(OP_METHOD, constant);
+    if (makeStatic)
+        emitBytes(OP_STATIC_METHOD, constant);
+    else
+        emitBytes(OP_METHOD, constant);
 }
 
 static Token syntheticToken(const char* text) {
@@ -761,7 +773,22 @@ static void classDeclaration() {
     namedVariable(className, false);
     consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
     while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
-        method();
+        if (match(TOKEN_VAR)) {
+            uint8_t global = parseVariable("Expect variable name.");
+
+            if (match(TOKEN_EQUAL)) {
+                expression();
+            } else {
+                emitByte(OP_NIL);
+            }
+            consume(TOKEN_SEMICOLON,
+                    "Expect ';' after variable declaration.");
+
+            emitBytes(OP_STATIC_VAR, global);
+        }
+        else {
+            method();
+        }
     }
     consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
     emitByte(OP_POP);
@@ -779,7 +806,7 @@ static void funDeclaration() {
     markInitialized();
     function(TYPE_FUNCTION);
     emitByte(OP_DISPATCH);
-    defineVariable(global); // ✅ DON'T remove this
+    defineVariable(global);
 }
 
 static void varDeclaration() {

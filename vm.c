@@ -532,6 +532,18 @@ static bool invoke(ObjString* name, int argCount) {
         return false;
     }
 
+    if (IS_CLASS(receiver)) {
+        Value value;
+        ObjClass* klass = AS_CLASS(receiver);
+        if (tableGet(&klass->staticMethods, name, &value)) {
+            bool res = callValue(value, argCount);
+            Value result = pop();
+            pop();
+            push(result);
+            return res;
+        }
+    }
+
 
     if (!IS_INSTANCE(receiver)) {
         runtimeError("Only instances have methods.");
@@ -844,27 +856,56 @@ static InterpretResult run() {
                 push(OBJ_VAL(newClass(READ_STRING())));
                 break;
             case OP_GET_PROPERTY: {
-                if (!IS_INSTANCE(peek(0))) {
-                    frame = runtimeError("Only instances have properties.");
+                if (IS_INSTANCE(peek(0))) {
+                    ObjInstance* instance = AS_INSTANCE(peek(0));
+                    ObjString* name = READ_STRING();
+
+                    Value value;
+                    if (tableGet(&instance->fields, name, &value)) {
+                        pop();
+                        push(value);
+                        break;
+                    }
+
+                    if (!bindMethod(instance->klass, name)) {
+                        break;
+                    }
                     break;
                 }
 
-                ObjInstance* instance = AS_INSTANCE(peek(0));
-                ObjString* name = READ_STRING();
+                if (IS_CLASS(peek(0))) {
+                    ObjClass* klass = AS_CLASS(peek(0));
+                    ObjString* name = READ_STRING();
 
-                Value value;
-                if (tableGet(&instance->fields, name, &value)) {
+                    Value value;
+                    if (tableGet(&klass->staticVars, name, &value)) {
+                        pop();
+                        push(value);
+                        break;
+                    }
+                    if (tableGet(&klass->staticMethods, name, &value)) {
+                        pop();
+                        push(value);
+                        break;
+                    }
+                    frame = runtimeError("Undefined property '%s'.", name->chars);
+                    break;
+                }
+
+                frame = runtimeError("Only instances and classes have fields.");
+                break;
+            }
+            case OP_SET_PROPERTY: {
+                if (IS_CLASS(peek(1))) {
+                    ObjClass* klass = AS_CLASS(peek(1));
+                    ObjString* name = READ_STRING();
+                    tableSet(&klass->staticVars, name, peek(0));
+                    Value value = pop();
                     pop();
                     push(value);
                     break;
                 }
 
-                if (!bindMethod(instance->klass, name)) {
-                    break;
-                }
-                break;
-            }
-            case OP_SET_PROPERTY: {
                 if (!IS_INSTANCE(peek(1))) {
                     frame = runtimeError("Only instances have fields.");
                     break;
@@ -1048,6 +1089,31 @@ static InterpretResult run() {
                 if (frame->tryTop >= 0) {
                     frame->tryTop--;
                 }
+            }
+            case OP_STATIC_VAR: {
+                ObjString* name = READ_STRING();
+                Value value = pop();
+                ObjClass* klass = AS_CLASS(peek(0));
+                tableSet(&klass->staticVars, name, value);
+                break;
+            }
+            case OP_STATIC_METHOD: {
+                Value method = peek(0);
+                ObjClass* klass = AS_CLASS(peek(1));
+                ObjString* name = READ_STRING();
+
+                Value dispatcher;
+                if (tableGet(&klass->staticMethods, name, &dispatcher)) {
+                    ObjMultiDispatch* md = AS_MULTI_DISPATCH(dispatcher);
+                    multiDispatchAdd(md, AS_CLOSURE(method));
+                }
+                else {
+                    ObjMultiDispatch* md = newMultiDispatch(name);
+                    multiDispatchAdd(md, AS_CLOSURE(method));
+                    tableSet(&klass->staticMethods, name, OBJ_VAL(md));
+                }
+                pop();
+                break;
             }
         }
     }

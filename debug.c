@@ -190,6 +190,10 @@ int disassembleInstruction(Chunk* chunk, int offset) {
         case OP_END_TRY: {
             return simpleInstruction("OP_END_TRY", offset);
         }
+        case OP_STATIC_VAR:
+            return constantInstruction("OP_STATIC_VAR", chunk, offset);
+        case OP_STATIC_METHOD:
+            return constantInstruction("OP_STATIC_METHOD", chunk, offset);
         default:
             printf("Unknown opcode %d\n", instruction);
             return offset + 1;

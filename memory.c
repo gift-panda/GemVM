@@ -140,6 +140,10 @@ static void blackenObject(Obj* object) {
             }
             break;
         }
+        case OBJ_ERROR: {
+            ObjError* error = (ObjError*)object;
+            markObject((Obj*)error->message);
+        }
     }
 }
 
@@ -200,6 +204,9 @@ static void freeObject(Obj* object) {
         case OBJ_MULTI_DISPATCH: {
             FREE(ObjMultiDispatch, object);
             break;
+        }
+        case OBJ_ERROR: {
+            FREE(ObjError, object);
         }
     }
 }

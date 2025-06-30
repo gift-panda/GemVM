@@ -35,6 +35,12 @@
 #define IS_ERROR(value)        isObjType(value, OBJ_ERROR)
 #define AS_ERROR(value)        ((ObjError*)AS_OBJ(value))
 
+#define IS_MULTI_DISPATCH(value) isObjType(value, OBJ_MULTI_DISPATCH)
+#define AS_MULTI_DISPATCH(value) ((ObjMultiDispatch*)AS_OBJ(value))
+
+#define IS_META_DATA(value)    isObjType(value, OBJ_METADATA)
+#define AS_META_DATA(value)    ((ObjMetaData*)AS_OBJ(value))
+
 typedef enum {
     OBJ_STRING,
     OBJ_FUNCTION,
@@ -47,6 +53,7 @@ typedef enum {
     OBJ_LIST,
     OBJ_MULTI_DISPATCH,
     OBJ_ERROR,
+    OBJ_METADATA,
 } ObjType;
 
 struct Obj {
@@ -62,10 +69,6 @@ typedef struct {
     Chunk chunk;
     ObjString* name;
 } ObjFunction;
-
-#define IS_MULTI_DISPATCH(value) isObjType(value, OBJ_MULTI_DISPATCH)
-#define AS_MULTI_DISPATCH(value) ((ObjMultiDispatch*)AS_OBJ(value))
-
 
 typedef Value (*NativeFn)(int argCount, Value* args);
 
@@ -101,6 +104,8 @@ typedef struct {
     Obj obj;
     ObjString* name;
     Table methods;
+    Table staticVars;
+    Table staticMethods;
 } ObjClass;
 
 typedef struct {
@@ -134,6 +139,11 @@ typedef struct {
     ObjString* message;
 } ObjError;
 
+typedef struct {
+    Obj obj;
+    bool isStatic;
+    bool isPrivate;
+} ObjMetaData;
 
 ObjBoundMethod* newBoundMethod(Value receiver, ObjString*);
 ObjClass* newClass(ObjString* name);
@@ -147,6 +157,7 @@ ObjUpvalue* newUpvalue(Value* slot);
 ObjList* newList();
 ObjMultiDispatch* newMultiDispatch(ObjString*);
 ObjError* newError(ObjString* message);
+ObjMetaData* newMetaData(bool isStatic, bool isPrivate);
 void printObject(Value value);
 
 static inline bool isObjType(Value value, ObjType type) {
