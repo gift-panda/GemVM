@@ -50,6 +50,7 @@ ObjClass* newClass(ObjString* name) {
     initTable(&klass->methods);
     initTable(&klass->staticVars);
     initTable(&klass->staticMethods);
+    klass->superclass = NULL;
     return klass;
 }
 
@@ -64,6 +65,7 @@ ObjClosure* newClosure(ObjFunction* function) {
     closure->function = function;
     closure->upvalues = upvalues;
     closure->upvalueCount = function->upvalueCount;
+    closure->klass = NULL;
     return closure;
 }
 

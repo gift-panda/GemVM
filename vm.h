@@ -19,6 +19,7 @@ typedef struct {
     int tryTop;
     uint8_t *saveIP[10];
     Value* saveStack[10];
+    ObjClass* klass;
 } CallFrame;
 
 typedef struct {

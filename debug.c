@@ -194,6 +194,16 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             return constantInstruction("OP_STATIC_VAR", chunk, offset);
         case OP_STATIC_METHOD:
             return constantInstruction("OP_STATIC_METHOD", chunk, offset);
+        case OP_CONSTANT_LONG: {
+            uint32_t index = (chunk->code[offset + 1] << 16) |
+                             (chunk->code[offset + 2] << 8) |
+                             chunk->code[offset + 3];
+            printf("%-16s %4d '", "OP_CONSTANT_LONG", index);
+            printValue(chunk->constants.values[index]);
+            printf("'\n");
+            return offset + 4;
+        }
+
         default:
             printf("Unknown opcode %d\n", instruction);
             return offset + 1;

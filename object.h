@@ -93,20 +93,23 @@ typedef struct ObjUpvalue {
     struct ObjUpvalue* next;
 } ObjUpvalue;
 
-typedef struct {
-    Obj obj;
-    ObjFunction* function;
-    ObjUpvalue** upvalues;
-    int upvalueCount;
-} ObjClosure;
 
-typedef struct {
+typedef struct ObjClass{
     Obj obj;
     ObjString* name;
     Table methods;
     Table staticVars;
     Table staticMethods;
-} ObjClass;
+    struct ObjClass* superclass;
+}ObjClass;
+
+typedef struct {
+    Obj obj;
+    ObjFunction* function;
+    ObjUpvalue** upvalues;
+    int upvalueCount;
+    ObjClass* klass;
+} ObjClosure;
 
 typedef struct {
     Obj obj;

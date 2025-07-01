@@ -187,7 +187,15 @@ static uint8_t makeConstant(Value value) {
 }
 
 static void emitConstant(Value value) {
-    emitBytes(OP_CONSTANT, makeConstant(value));
+    int constant = makeConstant(value);
+    if (constant <= 255) {
+        emitBytes(OP_CONSTANT, (uint8_t)constant);
+    } else {
+        emitByte(OP_CONSTANT_LONG);
+        emitByte((constant >> 16) & 0xFF);
+        emitByte((constant >> 8) & 0xFF);
+        emitByte(constant & 0xFF);
+    }
 }
 
 static void patchJump(int offset) {
@@ -614,6 +622,10 @@ static void declareVariable() {
 
 static uint8_t parseVariable(const char* errorMessage) {
     consume(TOKEN_IDENTIFIER, errorMessage);
+
+    if (parser.previous.start[0] == '#' && currentClass == NULL) {
+        error("Usage of private types outside of class.");
+    }
 
     declareVariable();
     if (current->scopeDepth > 0) return 0;

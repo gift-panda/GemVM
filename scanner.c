@@ -124,13 +124,16 @@ static TokenType identifierType() {
         case 'n': return checkKeyword(1, 2, "il", TOKEN_NIL);
         case 'o': return checkKeyword(1, 1, "r", TOKEN_OR);
         case 'p':
-            if (memcmp(scanner.start, "println", 7) == 0) {
-                return TOKEN_PRINTLN;
-            }
-            if (memcmp(scanner.start, "print", 5) == 0) {
+            if ((scanner.current - scanner.start) == 5 &&
+                memcmp(scanner.start, "print", 5) == 0) {
                 return TOKEN_PRINT;
-            }
+                }
+            if ((scanner.current - scanner.start) == 7 &&
+                memcmp(scanner.start, "println", 7) == 0) {
+                return TOKEN_PRINTLN;
+                }
             return TOKEN_IDENTIFIER;
+
 
         case 'r': return checkKeyword(1, 5, "eturn", TOKEN_RETURN);
         case 's':
@@ -172,9 +175,17 @@ static TokenType identifierType() {
 }
 
 static Token identifier() {
+    // Allow # only at the first position
+    if (scanner.start[0] == '#') {
+        if (!isAlpha(peek()) && !isDigit(peek())) {
+            return errorToken("Invalid identifier after '#'.");
+        }
+    }
+
     while (isAlpha(peek()) || isDigit(peek())) advance();
     return makeToken(identifierType());
 }
+
 
 static Token number() {
     while (isDigit(peek())) advance();
@@ -210,7 +221,7 @@ Token scanToken() {
     if (isAtEnd()) return makeToken(TOKEN_EOF);
 
     char c = advance();
-    if (isAlpha(c)) return identifier();
+    if (isAlpha(c) || c == '#') return identifier();
     if (isDigit(c)) return number();
 
     switch (c) {

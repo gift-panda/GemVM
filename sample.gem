@@ -1,15 +1,13 @@
-class Hello{
-    var a = 1;
-    var b = 2;
-    static hi(){
-        println("hi");
-    }
-    static hi(a){
-        println("hi 2");
-    }
+class F {
+  init() {
+    this.#x = 100;
+  }
 }
-println(Hello.b + Hello.a);
-Hello.b = 100;
-println(Hello.b + Hello.a);
-Hello.hi();
-Hello.hi(1);
+
+class G {
+  hack(f) {
+    print(f.#x);      // Error: Cannot access F's private field from G
+  }
+}
+
+G().hack(F());

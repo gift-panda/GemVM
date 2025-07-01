@@ -291,6 +291,7 @@ static bool call(ObjClosure* closure, int argCount) {
     frame->slots = vm.stackTop - argCount - 1;
     frame->tryTop = 0;
     frame->hasTry[frame->tryTop] = -1;
+    frame->klass = closure->klass;
 
     return true;
 }
@@ -359,6 +360,12 @@ static bool callValue(Value callee, int argCount) {
             }
             case OBJ_BOUND_METHOD: {
                 ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
+                ObjClosure* closure = bound->method[argCount];
+                if (closure == NULL) {
+                    runtimeError("No method for arity %d.", argCount);
+                    return false;
+                }
+
                 vm.stackTop[-argCount - 1] = bound->receiver;
                 return call(bound->method[argCount], argCount);
             }
@@ -370,11 +377,10 @@ static bool callValue(Value callee, int argCount) {
                     runtimeError("No method for arity %d.", argCount);
                     return false;
                 }
-
                 return call(closure, argCount);
             }
             default:
-                break; // Non-callable object type.
+                break;
         }
     }
     runtimeError("Can only call functions and classes.");
@@ -445,6 +451,7 @@ void multiBoundAdd(ObjBoundMethod* dispatch, ObjClosure* closure) {
 static void defineMethod(ObjString* name) {
     Value method = peek(0);
     ObjClass* klass = AS_CLASS(peek(1));
+    AS_CLOSURE(method)->klass = klass;
 
     Value dispatcher;
     if (tableGet(&klass->methods, name, &dispatcher)) {
@@ -462,7 +469,6 @@ static void defineMethod(ObjString* name) {
 static bool bindMethod(ObjClass* klass, ObjString* name) {
     Value method;
     if (!tableGet(&klass->methods, name, &method)) {
-        runtimeError("Undefined property '%s'.", name->chars);
         return false;
     }
 
@@ -478,13 +484,22 @@ static bool bindMethod(ObjClass* klass, ObjString* name) {
 static bool invokeFromClass(ObjClass* klass, ObjString* name,
                             int argCount) {
     Value method;
-    if (!tableGet(&klass->methods, name, &method)) {
-        runtimeError("Undefined property '%s'.", name->chars);
-        return false;
+    if (tableGet(&klass->methods, name, &method)) {
+        AS_BOUND_METHOD(method)->receiver = peek(argCount);
+        bool yes = callValue(OBJ_VAL(AS_BOUND_METHOD(method)), argCount);
+        return yes;
     }
-    AS_BOUND_METHOD(method)->receiver = peek(argCount);
-    bool yes = callValue(OBJ_VAL(AS_BOUND_METHOD(method)), argCount);
-    return yes;
+
+    if (tableGet(&klass->staticMethods, name, &method)) {
+        bool res = callValue(method, argCount);
+        Value result = pop();
+        pop();
+        push(result);
+        return res;
+    }
+    runtimeError("Undefined method '%s' on instance of class '%s'.",
+                 name->chars, klass->name->chars);
+    return false;
 }
 
 void printStack() {
@@ -500,8 +515,12 @@ void printStack() {
     printf("\n");
 }
 
+static bool isPrivate(ObjString* name) {
+    // Make sure it’s non‑empty, then check the first char.
+    return name->length > 0 && name->chars[0] == '#';
+}
 
-static bool invoke(ObjString* name, int argCount) {
+static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
     Value receiver = peek(argCount);
 
     if (IS_STRING(receiver)) {
@@ -535,6 +554,9 @@ static bool invoke(ObjString* name, int argCount) {
     if (IS_CLASS(receiver)) {
         Value value;
         ObjClass* klass = AS_CLASS(receiver);
+
+        if (isPrivate(name) && klass != frame->klass) frame = runtimeError("Cannot access private field from a different class.");
+
         if (tableGet(&klass->staticMethods, name, &value)) {
             bool res = callValue(value, argCount);
             Value result = pop();
@@ -542,6 +564,18 @@ static bool invoke(ObjString* name, int argCount) {
             push(result);
             return res;
         }
+
+        klass = klass->superclass;
+        if (klass != NULL && tableGet(&klass->staticMethods, name, &value)) {
+            bool res = callValue(value, argCount);
+            Value result = pop();
+            pop();
+            push(result);
+            return res;
+        }
+        runtimeError("Undefined static method '%s' on class '%s'.",
+                     name->chars, klass->name->chars);
+        return false;
     }
 
 
@@ -551,6 +585,8 @@ static bool invoke(ObjString* name, int argCount) {
     }
 
     ObjInstance* instance = AS_INSTANCE(receiver);
+
+    if (isPrivate(name) && instance->klass != frame->klass) frame = runtimeError("Cannot access private field of a different class.");
 
     Value value;
     if (tableGet(&instance->fields, name, &value)) {
@@ -730,7 +766,7 @@ static InterpretResult run() {
                     Value method;
                     if (tableGet(&instance->klass->methods, vm.toString, &method)) {
                         frame->ip--;
-                        invoke(vm.toString, 0);
+                        invoke(vm.toString, 0, frame);
                         frame = &vm.frames[vm.frameCount - 1];
                         break;
                     }
@@ -746,7 +782,7 @@ static InterpretResult run() {
                     Value method;
                     if (tableGet(&instance->klass->methods, vm.toString, &method)) {
                         frame->ip--;
-                        invoke(vm.toString, 0);
+                        invoke(vm.toString, 0, frame);
                         frame = &vm.frames[vm.frameCount - 1];
                         break;
                     }
@@ -860,6 +896,8 @@ static InterpretResult run() {
                     ObjInstance* instance = AS_INSTANCE(peek(0));
                     ObjString* name = READ_STRING();
 
+                    if (isPrivate(name) && instance->klass != frame->klass) frame = runtimeError("Cannot access private field from a different class.");
+
                     Value value;
                     if (tableGet(&instance->fields, name, &value)) {
                         pop();
@@ -867,15 +905,16 @@ static InterpretResult run() {
                         break;
                     }
 
-                    if (!bindMethod(instance->klass, name)) {
+                    if (bindMethod(instance->klass, name)) {
                         break;
                     }
-                    break;
                 }
 
                 if (IS_CLASS(peek(0))) {
                     ObjClass* klass = AS_CLASS(peek(0));
                     ObjString* name = READ_STRING();
+
+                    if (isPrivate(name) && klass != frame->klass) frame = runtimeError("Cannot access private field from a different class.");
 
                     Value value;
                     if (tableGet(&klass->staticVars, name, &value)) {
@@ -888,6 +927,21 @@ static InterpretResult run() {
                         push(value);
                         break;
                     }
+
+                    klass = klass->superclass;
+                    if (klass != NULL) {
+                        Value value;
+                        if (tableGet(&klass->staticVars, name, &value)) {
+                            pop();
+                            push(value);
+                            break;
+                        }
+                        if (tableGet(&klass->staticMethods, name, &value)) {
+                            pop();
+                            push(value);
+                            break;
+                        }
+                    }
                     frame = runtimeError("Undefined property '%s'.", name->chars);
                     break;
                 }
@@ -899,6 +953,24 @@ static InterpretResult run() {
                 if (IS_CLASS(peek(1))) {
                     ObjClass* klass = AS_CLASS(peek(1));
                     ObjString* name = READ_STRING();
+
+                    /*
+                    if (tableGet(&klass->staticVars, name, NULL)) {
+                        tableSet(&klass->staticVars, name, peek(0));
+                        Value value = pop();
+                        pop();
+                        push(value);
+                        break;
+                    }
+                    */
+
+                    if (klass->superclass != NULL && tableGet(&klass->superclass->staticVars, name, NULL)) {
+                        tableSet(&klass->superclass->staticVars, name, peek(0));
+                        Value value = pop();
+                        pop();
+                        push(value);
+                        break;
+                    }
                     tableSet(&klass->staticVars, name, peek(0));
                     Value value = pop();
                     pop();
@@ -924,7 +996,7 @@ static InterpretResult run() {
             case OP_INVOKE: {
                 ObjString* method = READ_STRING();
                 int argCount = READ_BYTE();
-                if (!invoke(method, argCount)) {
+                if (!invoke(method, argCount, frame)) {
                     break;
                 }
                 //pop();
@@ -942,6 +1014,7 @@ static InterpretResult run() {
                 //tableAddAll(&AS_CLASS(superclass)->methods,
                 //            &subclass->methods);
 
+                subclass->superclass = superclass;
                 for (int i = 0; i < superclass->methods.capacity; i++) {
                     Entry* entry = &superclass->methods.entries[i];
                     if (entry == NULL) continue;
@@ -1102,6 +1175,8 @@ static InterpretResult run() {
                 ObjClass* klass = AS_CLASS(peek(1));
                 ObjString* name = READ_STRING();
 
+                AS_CLOSURE(method)->klass = klass;
+
                 Value dispatcher;
                 if (tableGet(&klass->staticMethods, name, &dispatcher)) {
                     ObjMultiDispatch* md = AS_MULTI_DISPATCH(dispatcher);
@@ -1115,6 +1190,13 @@ static InterpretResult run() {
                 pop();
                 break;
             }
+            case OP_CONSTANT_LONG: {
+                uint32_t index = (READ_BYTE() << 16) |
+                                 (READ_BYTE() << 8) |
+                                 READ_BYTE();
+                push(frame->closure->function->chunk.constants.values[index]);                break;
+            }
+
         }
     }
 
