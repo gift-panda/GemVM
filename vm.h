@@ -43,6 +43,8 @@ typedef struct {
 
     ObjString* initString;
     ObjString* toString;
+    ObjString* errorString;
+    ObjClass* errorClass;
     Table stringClassMethods;
     Table listClassMethods;
 

@@ -139,11 +139,6 @@ typedef struct {
 
 typedef struct {
     Obj obj;
-    ObjString* message;
-} ObjError;
-
-typedef struct {
-    Obj obj;
     bool isStatic;
     bool isPrivate;
 } ObjMetaData;
@@ -159,7 +154,6 @@ ObjString* copyString(const char* chars, int length);
 ObjUpvalue* newUpvalue(Value* slot);
 ObjList* newList();
 ObjMultiDispatch* newMultiDispatch(ObjString*);
-ObjError* newError(ObjString* message);
 ObjMetaData* newMetaData(bool isStatic, bool isPrivate);
 void printObject(Value value);
 

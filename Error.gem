@@ -1,0 +1,11 @@
+class Error{
+    init(msg){
+        this.msg = msg;
+        this.stackTrace = nil;
+    }
+    init(){}
+    toString(){
+        println("this getting called: ");
+        return this.msg + "\n" + this.stackTrace;
+    }
+}

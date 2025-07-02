@@ -203,7 +203,8 @@ int disassembleInstruction(Chunk* chunk, int offset) {
             printf("'\n");
             return offset + 4;
         }
-
+        case OP_THROW:
+            return simpleInstruction("OP_THROW", offset);
         default:
             printf("Unknown opcode %d\n", instruction);
             return offset + 1;

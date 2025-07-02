@@ -1,13 +1,8 @@
-class F {
-  init() {
-    this.#x = 100;
-  }
+class Hi < Error{}
+try{
+    throw Hi("Hello");
 }
-
-class G {
-  hack(f) {
-    print(f.#x);      // Error: Cannot access F's private field from G
-  }
+catch(i){
+    println(i.msg);
+    print(i.stackTrace);
 }
-
-G().hack(F());

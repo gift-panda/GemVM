@@ -127,12 +127,6 @@ ObjNative* newNative(NativeFn function) {
     return native;
 }
 
-ObjError* newError(ObjString* message) {
-    ObjError* error = ALLOCATE_OBJ(ObjError, OBJ_ERROR);
-    error->message = message;
-    return error;
-}
-
 static uint32_t hashString(const char* key, int length) {
     uint32_t hash = 0x811C9DC5u; // same offset as FNV-1a for compatibility
     const uint32_t prime = 0x01000193u;
@@ -157,28 +151,84 @@ static uint32_t hashString(const char* key, int length) {
 }
 
 ObjString* takeString(char* chars, int length) {
-    uint32_t hash = hashString(chars, length);
-    ObjString* interned = tableFindString(&vm.strings, chars, length,
-                                       hash);
+    // Allocate enough space (worst case: no escapes)
+    char* unescaped = ALLOCATE(char, length + 1);
+    int write = 0;
+
+    for (int read = 0; read < length; read++) {
+        if (chars[read] == '\\' && read + 1 < length) {
+            read++;
+            switch (chars[read]) {
+                case 'n':  unescaped[write++] = '\n'; break;
+                case 'r':  unescaped[write++] = '\r'; break;
+                case 't':  unescaped[write++] = '\t'; break;
+                case '"':  unescaped[write++] = '"';  break;
+                case '\'': unescaped[write++] = '\''; break;
+                case '\\': unescaped[write++] = '\\'; break;
+                case '0':  unescaped[write++] = '\0'; break;
+                default:
+                    // Unknown escape → preserve both backslash and char
+                    unescaped[write++] = '\\';
+                    unescaped[write++] = chars[read];
+                    break;
+            }
+        } else {
+            unescaped[write++] = chars[read];
+        }
+    }
+
+    unescaped[write] = '\0';
+
+    uint32_t hash = hashString(unescaped, write);
+    ObjString* interned = tableFindString(&vm.strings, unescaped, write, hash);
     if (interned != NULL) {
         FREE_ARRAY(char, chars, length + 1);
+        FREE_ARRAY(char, unescaped, length + 1);
         return interned;
     }
 
-    return allocateString(chars, length, hash);
+    FREE_ARRAY(char, chars, length + 1);
+    return allocateString(unescaped, write, hash);
 }
 
 ObjString* copyString(const char* chars, int length) {
-    uint32_t hash = hashString(chars, length);
-    ObjString* interned = tableFindString(&vm.strings, chars, length,
-                                        hash);
-    if (interned != NULL) return interned;
+    // Allocate buffer large enough (worst case: no escapes)
+    char* unescaped = ALLOCATE(char, length + 1);
+    int write = 0;
 
-    char* heapChars = ALLOCATE(char, length + 1);
-    memcpy(heapChars, chars, length);
-    heapChars[length] = '\0';
-    return allocateString(heapChars, length, hash);
+    for (int read = 0; read < length; read++) {
+        if (chars[read] == '\\' && read + 1 < length) {
+            read++;
+            switch (chars[read]) {
+                case 'n':  unescaped[write++] = '\n'; break;
+                case 'r':  unescaped[write++] = '\r'; break;
+                case 't':  unescaped[write++] = '\t'; break;
+                case '"':  unescaped[write++] = '"';  break;
+                case '\'': unescaped[write++] = '\''; break;
+                case '\\': unescaped[write++] = '\\'; break;
+                case '0':  unescaped[write++] = '\0'; break;
+                default:
+                    unescaped[write++] = '\\';
+                    unescaped[write++] = chars[read];
+                    break;
+            }
+        } else {
+            unescaped[write++] = chars[read];
+        }
+    }
+
+    unescaped[write] = '\0';
+
+    uint32_t hash = hashString(unescaped, write);
+    ObjString* interned = tableFindString(&vm.strings, unescaped, write, hash);
+    if (interned != NULL) {
+        FREE_ARRAY(char, unescaped, length + 1);
+        return interned;
+    }
+
+    return allocateString(unescaped, write, hash);
 }
+
 
 ObjUpvalue* newUpvalue(Value* slot) {
     ObjUpvalue* upvalue = ALLOCATE_OBJ(ObjUpvalue, OBJ_UPVALUE);
@@ -241,16 +291,6 @@ void printObject(Value value) {
             ObjMultiDispatch* method = AS_MULTI_DISPATCH(value);
             printf("<fn %s>", method->name->chars);
             break;
-        }
-        case OBJ_ERROR: {
-#ifdef DEBUG_TRACE_EXECUTION
-            printf("<error>");
-            break;
-#endif
-            ObjError* error = AS_ERROR(value);
-            printf("%s", error->message->chars);
-            break;
-
         }
     }
     fflush(stdout);

@@ -26,7 +26,7 @@
 
 VM vm;
 void printStack();
-
+ObjClass* errorClass;
 
 static Value clockNative(int argCount, Value* args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
@@ -88,28 +88,22 @@ static void resetStack() {
     vm.frameCount = 0;
     vm.openUpvalues = NULL;
 }
-void buffered_stderr(const char* msg) {
-    fflush(stdout);
-    usleep(1000);
-    fprintf(stderr, "%s", msg);  // error message (will flush immediately if unbuffered)
-    fflush(stderr);              // always flush to be safe
-
-}
 
 CallFrame* runtimeError(const char* format, ...) {
-    char msgbuf[1024];
+    char msgbuf[512];      // message only
+    char tracebuf[1024];   // stack trace
     char linebuf[256];
-    size_t offset = 0;
+    size_t msgOffset = 0;
+    size_t traceOffset = 0;
 
-    // Step 1: Format the error message
     va_list args;
     va_start(args, format);
-    offset += vsnprintf(msgbuf + offset, sizeof(msgbuf) - offset, format, args);
+    msgOffset += vsnprintf(msgbuf + msgOffset, sizeof(msgbuf) - msgOffset, format, args);
     va_end(args);
 
-    offset += snprintf(msgbuf + offset, sizeof(msgbuf) - offset, "\n");
+    msgOffset += snprintf(msgbuf + msgOffset, sizeof(msgbuf) - msgOffset, "\n");
 
-    // Step 2: Add stack trace to msgbuf
+    // Step 2: Build the stack trace string separately
     for (int i = vm.frameCount - 1; i >= 0; i--) {
         CallFrame* frame = &vm.frames[i];
         ObjFunction* function = frame->closure->function;
@@ -117,8 +111,68 @@ CallFrame* runtimeError(const char* format, ...) {
         int line = function->chunk.lines[instruction];
 
         int len = snprintf(linebuf, sizeof(linebuf), "[line %d] in ", line);
-        if (offset + len < sizeof(msgbuf)) {
-            memcpy(msgbuf + offset, linebuf, len);
+        if (traceOffset + len < sizeof(tracebuf)) {
+            memcpy(tracebuf + traceOffset, linebuf, len);
+            traceOffset += len;
+        }
+
+        if (function->name == NULL) {
+            len = snprintf(linebuf, sizeof(linebuf), "script\n");
+        } else {
+            len = snprintf(linebuf, sizeof(linebuf), "%s()\n", function->name->chars);
+        }
+
+        if (traceOffset + len < sizeof(tracebuf)) {
+            memcpy(tracebuf + traceOffset, linebuf, len);
+            traceOffset += len;
+        }
+    }
+
+    // Step 3: Create the error instance and set msg + stackTrace
+    ObjInstance* errorInstance = newInstance(vm.errorClass);
+
+    ObjString* msgString = copyString(msgbuf, msgOffset);
+    ObjString* traceString = copyString(tracebuf, traceOffset);
+
+    tableSet(&errorInstance->fields, copyString("msg", 3), OBJ_VAL(msgString));
+    tableSet(&errorInstance->fields, copyString("stackTrace", 10), OBJ_VAL(traceString));
+
+    // Step 4: Unwind the call stack looking for try block
+    while (vm.frameCount > 0) {
+        CallFrame* frame = &vm.frames[vm.frameCount - 1];
+
+        if (frame->hasTry[frame->tryTop] != -1) {
+            vm.stackTop = ++frame->saveStack[frame->tryTop];
+            frame->ip = frame->saveIP[frame->tryTop] + frame->hasTry[frame->tryTop] - 1;
+            push(OBJ_VAL(errorInstance));
+            return frame;
+        }
+
+        vm.frameCount--;
+        vm.stackTop = frame->slots;
+    }
+
+    // Step 5: No try/catch found — print msg and stack trace, then exit
+    fwrite(msgbuf, 1, msgOffset, stderr);
+    fwrite(tracebuf, 1, traceOffset, stderr);
+    exit(1);
+}
+
+CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
+    char tracebuf[1024];
+    char linebuf[256];
+    size_t offset = 0;
+
+    // Build the stack trace string
+    for (int i = vm.frameCount - 1; i >= 0; i--) {
+        CallFrame* frame = &vm.frames[i];
+        ObjFunction* function = frame->closure->function;
+        size_t instruction = frame->ip - function->chunk.code - 1;
+        int line = function->chunk.lines[instruction];
+
+        int len = snprintf(linebuf, sizeof(linebuf), "[line %d] in ", line);
+        if (offset + len < sizeof(tracebuf)) {
+            memcpy(tracebuf + offset, linebuf, len);
             offset += len;
         }
 
@@ -128,26 +182,25 @@ CallFrame* runtimeError(const char* format, ...) {
             len = snprintf(linebuf, sizeof(linebuf), "%s()\n", function->name->chars);
         }
 
-        if (offset + len < sizeof(msgbuf)) {
-            memcpy(msgbuf + offset, linebuf, len);
+        if (offset + len < sizeof(tracebuf)) {
+            memcpy(tracebuf + offset, linebuf, len);
             offset += len;
         }
     }
 
-    // Step 3: Create ObjString and ObjError
-    ObjString* errorMessage = copyString(msgbuf, offset);
-    ObjError* error = newError(errorMessage);
+    // Create and set the 'stackTrace' field
+    ObjString* traceString = copyString(tracebuf, offset);
+    Value traceValue = OBJ_VAL(traceString);
+    tableSet(&errorInstance->fields, copyString("stackTrace", 10), traceValue);
 
-    //printStack();
-    // Step 4: Unwind call stack looking for try block
+    // Unwind the call stack looking for a try block
     while (vm.frameCount > 0) {
         CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
         if (frame->hasTry[frame->tryTop] != -1) {
             vm.stackTop = ++frame->saveStack[frame->tryTop];
             frame->ip = frame->saveIP[frame->tryTop] + frame->hasTry[frame->tryTop] - 1;
-            push(OBJ_VAL(error));
-
+            push(OBJ_VAL(errorInstance));
             return frame;
         }
 
@@ -155,9 +208,17 @@ CallFrame* runtimeError(const char* format, ...) {
         vm.stackTop = frame->slots;
     }
 
-    fwrite(msgbuf, 1, offset, stderr);
+    // No try block found — print message and stack trace, then exit
+    Value msgVal;
+    if (tableGet(&errorInstance->fields, copyString("msg", 3), &msgVal) && IS_STRING(msgVal)) {
+        fwrite(AS_CSTRING(msgVal), 1, AS_STRING(msgVal)->length, stderr);
+        fputc('\n', stderr); // <- Add a newline after the message
+    }
+
+    fwrite(tracebuf, 1, offset, stderr);
     exit(1);
 }
+
 
 CallFrame* VMError(const char* format, ...) {
     char msgbuf[1024];
@@ -245,6 +306,9 @@ void initVM() {
 
     vm.toString = NULL;
     vm.toString = copyString("toString", 8);
+
+    vm.errorString = NULL;
+    vm.errorString = copyString("Error", 5);
 
     defineNative("clock", clockNative);
     defineNative("input", inputNative);
@@ -350,11 +414,11 @@ static bool callValue(Value callee, int argCount) {
                 vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
                 Value initializer;
                 if (tableGet(&klass->methods, vm.initString, &initializer)) {
+                    if (AS_BOUND_METHOD(initializer)->method[argCount] == NULL) {
+                        runtimeError("No matching initializer found with %d arguments.", argCount);
+                        return false;
+                    }
                     return call(AS_BOUND_METHOD(initializer)->method[argCount], argCount);
-                } else if (argCount != 0) {
-                    runtimeError("Expected 0 arguments but got %d.",
-                                 argCount);
-                    return false;
                 }
                 return true;
             }
@@ -614,6 +678,15 @@ static int resolveMultiDispatch(Value* result, ObjString* name) {
 
     // Then try global table
     return tableGet(&vm.globals, name, result);
+}
+
+bool hasAncestor(ObjInstance* instance, ObjClass* ancestor) {
+    ObjClass* current = instance->klass;
+    while (current != NULL) {
+        if (current == ancestor) return true;
+        current = current->superclass;
+    }
+    return false;
 }
 
 static InterpretResult run() {
@@ -1158,10 +1231,12 @@ static InterpretResult run() {
                 break;
             }
             case OP_END_TRY: {
+                if (frame->tryTop == 0) VMError("No try block to end");
                 frame->hasTry[frame->tryTop] = -1;
                 if (frame->tryTop >= 0) {
                     frame->tryTop--;
                 }
+                break;
             }
             case OP_STATIC_VAR: {
                 ObjString* name = READ_STRING();
@@ -1196,6 +1271,22 @@ static InterpretResult run() {
                                  READ_BYTE();
                 push(frame->closure->function->chunk.constants.values[index]);                break;
             }
+            case OP_THROW: {
+                Value error = pop();
+                if (!IS_INSTANCE(error)) {
+                    runtimeError("Can only throw instances of error classes.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                ObjInstance* instance = AS_INSTANCE(error);
+                if (!hasAncestor(instance, vm.errorClass)) {
+                    runtimeError("Can only throw instances of error.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                throwRuntimeError(instance); // a function you'll define
+                break;
+            }
 
         }
     }
@@ -1215,6 +1306,11 @@ InterpretResult interpret(const char* source) {
     pop();
     push(OBJ_VAL(closure));
     call(closure, 0);
+
+    Value value;
+    if (tableGet(&vm.globals, vm.errorString, &value)) {
+        vm.errorClass = AS_CLASS(value);
+    }
 
     return run();
 }

@@ -533,11 +533,13 @@ ParseRule rules[] = {
     [TOKEN_OR]            = {NULL,     or_,    PREC_OR},
     [TOKEN_PRINT]         = {NULL,     NULL,   PREC_NONE},
     [TOKEN_RETURN]        = {NULL,     NULL,   PREC_NONE},
-    [TOKEN_SUPER]         = {super_,   NULL,   PREC_NONE},  [TOKEN_THIS]          = {this_,    NULL,   PREC_NONE},
+    [TOKEN_SUPER]         = {super_,   NULL,   PREC_NONE},
+    [TOKEN_THIS]          = {this_,    NULL,   PREC_NONE},
     [TOKEN_TRUE]          = {literal,  NULL,   PREC_NONE},
     [TOKEN_VAR]           = {NULL,     NULL,   PREC_NONE},
     [TOKEN_WHILE]         = {NULL,     NULL,   PREC_NONE},
     [TOKEN_ERROR]         = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_THROW]         = {NULL,     NULL,   PREC_NONE},
     [TOKEN_EOF]           = {NULL,     NULL,   PREC_NONE},
 };
 
@@ -885,6 +887,15 @@ static void forStatement() {
     endScope();
 }
 
+static void throwStatement() {
+    // Parse the expression to be thrown
+    expression();
+    consume(TOKEN_SEMICOLON, "Expect ';' after throw expression.");
+
+    // Emit runtime type check and throw
+    emitByte(OP_THROW);
+}
+
 static void ifStatement() {
     consume(TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
     expression();
@@ -1058,6 +1069,9 @@ static void statement() {
         forStatement();
     } else if (match(TOKEN_IF)) {
         ifStatement();
+    }
+    else if (match(TOKEN_THROW)) {
+        throwStatement();
     } else if (match(TOKEN_LEFT_BRACE)) {
         beginScope();
         block();
