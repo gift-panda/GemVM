@@ -60,6 +60,8 @@ typedef struct {
     ObjClass* illegalArgumentsErrorClass;
     ObjString* lookUpErrorString;
     ObjClass* lookUpErrorClass;
+    ObjString* formatErrorString;
+    ObjClass* formatErrorClass;
 
     bool isInvokingNative;
 } VM;

@@ -69,6 +69,7 @@ void defineStringMethods() {
     tableSet(&vm.stringClassMethods, copyString("asNum", 5), OBJ_VAL(newNative(stringParseNumberNative)));
     tableSet(&vm.stringClassMethods, copyString("asBool", 6), OBJ_VAL(newNative(stringParseBooleanNative)));
     tableSet(&vm.stringClassMethods, copyString("charCode", 8), OBJ_VAL(newNative(stringCharCodeNative)));
+    tableSet(&vm.stringClassMethods, copyString("parse", 5), OBJ_VAL(newNative(str_parse)));
 }
 
 void defineListMethods() {
@@ -339,6 +340,9 @@ void initVM() {
 
     vm.lookUpErrorString = NULL;
     vm.lookUpErrorString = copyString("LookUpError", 11);
+
+    vm.formatErrorString = NULL;
+    vm.formatErrorString = copyString("FormatError", 11);
     // for unresolved superclass methods, bad super/binding
 
     defineNative("clock", clockNative);
@@ -807,6 +811,25 @@ static InterpretResult run() {
                 break;
 
             case OP_ADD: {
+                if (IS_INSTANCE(peek(0)) && IS_INSTANCE(peek(1))) {
+                    ObjInstance* a = AS_INSTANCE(peek(0));
+                    ObjInstance* b = AS_INSTANCE(peek(1));
+
+                    if (a->klass != b->klass) {
+                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("+", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("+", 1), argCount, frame);
+                        frame = &vm.frames[vm.frameCount - 1];
+                        break;
+                    }
+                    frame = runtimeError(vm.typeErrorClass, "No overload of '+' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
                 if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
                     concatenate();
                 } else if (IS_NUMBER(peek(0)) && IS_NUMBER(peek(1))) {
@@ -863,9 +886,71 @@ static InterpretResult run() {
                     break;
                 }
                 break;
-            }            case OP_SUBTRACT: BINARY_OP(NUMBER_VAL, -); break;
-            case OP_MULTIPLY: BINARY_OP(NUMBER_VAL, *); break;
-            case OP_DIVIDE:   BINARY_OP(NUMBER_VAL, /); break;
+            }
+            case OP_SUBTRACT:
+                if (IS_INSTANCE(peek(0)) && IS_INSTANCE(peek(1))) {
+                    ObjInstance* a = AS_INSTANCE(peek(0));
+                    ObjInstance* b = AS_INSTANCE(peek(1));
+
+                    if (a->klass != b->klass) {
+                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("-", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("-", 1), argCount, frame);
+                        frame = &vm.frames[vm.frameCount - 1];
+                        break;
+                    }
+                    frame = runtimeError(vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
+                BINARY_OP(NUMBER_VAL, -); break;
+            case OP_MULTIPLY: {
+                if (IS_INSTANCE(peek(0)) && IS_INSTANCE(peek(1))) {
+                    ObjInstance* a = AS_INSTANCE(peek(0));
+                    ObjInstance* b = AS_INSTANCE(peek(1));
+
+                    if (a->klass != b->klass) {
+                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("*", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("*", 1), argCount, frame);
+                        frame = &vm.frames[vm.frameCount - 1];
+                        break;
+                    }
+                    frame = runtimeError(vm.typeErrorClass, "No overload of '*' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
+                BINARY_OP(NUMBER_VAL, *); break;
+            }
+            case OP_DIVIDE:
+                if (IS_INSTANCE(peek(0)) && IS_INSTANCE(peek(1))) {
+                    ObjInstance* a = AS_INSTANCE(peek(0));
+                    ObjInstance* b = AS_INSTANCE(peek(1));
+
+                    if (a->klass != b->klass) {
+                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("/", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("/", 1), argCount, frame);
+                        frame = &vm.frames[vm.frameCount - 1];
+                        break;
+                    }
+                    frame = runtimeError(vm.typeErrorClass, "No overload of '/' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
+                BINARY_OP(NUMBER_VAL, /); break;
             case OP_NIL: push(NIL_VAL); break;
             case OP_TRUE: push(BOOL_VAL(true)); break;
             case OP_FALSE: push(BOOL_VAL(false)); break;
@@ -1020,6 +1105,7 @@ static InterpretResult run() {
                 if (name == vm.accessErrorString) vm.accessErrorClass = klass;
                 if (name == vm.illegalArgumentsErrorString) vm.illegalArgumentsErrorClass = klass;
                 if (name == vm.lookUpErrorString) vm.lookUpErrorClass = klass;
+                if (name == vm.formatErrorString) vm.formatErrorClass = klass;
 
                 push(OBJ_VAL(klass));
                 break;
@@ -1318,7 +1404,8 @@ static InterpretResult run() {
                 uint32_t index = (READ_BYTE() << 16) |
                                  (READ_BYTE() << 8) |
                                  READ_BYTE();
-                push(frame->closure->function->chunk.constants.values[index]);                break;
+                push(frame->closure->function->chunk.constants.values[index]);
+                break;
             }
             case OP_THROW: {
                 Value error = pop();

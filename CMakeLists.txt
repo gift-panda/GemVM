@@ -27,7 +27,5 @@ add_executable(GemVM main.c
         table.c
         table.h
         stringMethods.c
-        stringMethods.h
         listMethods.c
-        listMethods.h
 )

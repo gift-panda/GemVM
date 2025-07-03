@@ -8,6 +8,7 @@ typedef struct {
     const char* start;
     const char* current;
     int line;
+    Token previous;
 } Scanner;
 
 Scanner scanner;
@@ -50,6 +51,8 @@ static Token makeToken(TokenType type) {
     token.start = scanner.start;
     token.length = (int)(scanner.current - scanner.start);
     token.line = scanner.line;
+
+    scanner.previous = token;
     return token;
 }
 
@@ -122,7 +125,13 @@ static TokenType identifierType() {
         case 'e': return checkKeyword(1, 3, "lse", TOKEN_ELSE);
         case 'i': return checkKeyword(1, 1, "f", TOKEN_IF);
         case 'n': return checkKeyword(1, 2, "il", TOKEN_NIL);
-        case 'o': return checkKeyword(1, 1, "r", TOKEN_OR);
+        case 'o':
+            if (scanner.current - scanner.start > 1) {
+                switch (scanner.start[1]) {
+                    case 'r': return checkKeyword(2, 0, "", TOKEN_OR);
+                    case 'p': return checkKeyword(2, 6, "erator", TOKEN_OPERATOR);
+                }
+            }
         case 'p':
             if ((scanner.current - scanner.start) == 5 &&
                 memcmp(scanner.start, "print", 5) == 0) {
@@ -189,6 +198,14 @@ static Token identifier() {
         }
     }
 
+    switch (scanner.start[0]) {
+        case '*':
+        case '/':
+        case '+':
+        case '-': return makeToken(TOKEN_IDENTIFIER);
+        default: ;
+    }
+
     while (isAlpha(peek()) || isDigit(peek())) advance();
     return makeToken(identifierType());
 }
@@ -229,6 +246,7 @@ Token scanToken() {
 
     char c = advance();
     if (isAlpha(c) || c == '#') return identifier();
+    if (scanner.previous.type == TOKEN_OPERATOR) return identifier();
     if (isDigit(c)) return number();
 
     switch (c) {

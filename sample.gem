@@ -1,9 +1,9 @@
-fun fib(n) {
-  if (n < 2) return n;
-  return fib(n - 1) + fib(n - 2);
+class Hi{
+    init(){
+        this.x = 1;
+    }
+    operator *(h){
+        return this.x * h.x;
+    }
 }
-
-var before = clock();
-println(fib(40));
-var after = clock();
-println(after - before);
+println(Hi() * Hi());

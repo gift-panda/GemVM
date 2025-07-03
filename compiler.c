@@ -801,6 +801,7 @@ static void classDeclaration() {
             emitBytes(OP_STATIC_VAR, global);
         }
         else {
+            match(TOKEN_OPERATOR);
             method();
         }
     }
