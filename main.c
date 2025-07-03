@@ -60,9 +60,6 @@ static void runFile(const char* path) {
 int main(int argc, const char* argv[]) {
     initVM();
     runFile("/home/meow/CLionProjects/GemVM/Error.gem");
-    setvbuf(stdout, NULL, _IOLBF, 0);  // line-buffered stdout
-    setvbuf(stderr, NULL, _IONBF, 0);  // unbuffered stderr
-
     if (argc == 1) {
         repl();
     } else if (argc == 2) {

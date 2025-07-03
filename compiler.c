@@ -767,7 +767,7 @@ static void classDeclaration() {
     classCompiler.enclosing = currentClass;
     currentClass = &classCompiler;
 
-    if (match(TOKEN_LESS)) {
+    if (match(TOKEN_DOUBLE_COLON)) {
         consume(TOKEN_IDENTIFIER, "Expect superclass name.");
         variable(false);
 

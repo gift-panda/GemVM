@@ -4,7 +4,7 @@
 
 static Value listAppendNative(int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError("list.append() takes a value to append.");
+        runtimeError(vm.illegalArgumentsErrorClass, "list.append() takes a value to append.");
         return NIL_VAL;
     }
 
@@ -15,7 +15,7 @@ static Value listAppendNative(int argCount, Value* args) {
 
 static Value listLengthNative(int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError("list.length() takes no arguments.");
+        runtimeError(vm.illegalArgumentsErrorClass, "list.length() takes no arguments.");
         return NIL_VAL;
     }
     ObjList* list = AS_LIST(args[-1]);
@@ -23,21 +23,24 @@ static Value listLengthNative(int argCount, Value* args) {
 }
 
 static Value listGetNative(int argCount, Value* args) {
-    if (argCount != 1 || !IS_NUMBER(args[0])) {
-        runtimeError("list.get(index) takes a single integer argument.");
+    if (argCount != 1) {
+        runtimeError(vm.illegalArgumentsErrorClass, "list.get(index) takes a single integer argument.");
         return NIL_VAL;
     }
 
     if (!IS_LIST(args[-1])) {
-        runtimeError("list.get() must be called on a list.");
+        runtimeError(vm.typeErrorClass, "list.get() must be called on a list.");
         return NIL_VAL;
     }
 
     ObjList* list = AS_LIST(args[-1]);
+    if (!IS_NUMBER(args[0])) {
+        runtimeError(vm.typeErrorClass, "list.get() index must be a number.");
+        return NIL_VAL;
+    }
     int index = (int)AS_NUMBER(args[0]);
-
-    if (index < 0 || index >= list->elements.count) {
-        runtimeError("list.get() index out of bounds.");
+    if (index < 0 || index >= list->elements.capacity) {
+        runtimeError(vm.indexErrorClass, "list.get() index out of bounds.");
         return NIL_VAL;
     }
 
@@ -45,21 +48,24 @@ static Value listGetNative(int argCount, Value* args) {
 }
 
 static Value listSetNative(int argCount, Value* args) {
-    if (argCount != 2 || !IS_NUMBER(args[0])) {
-        runtimeError("list.set(index, value) takes an index and a value.");
+    if (argCount != 2) {
+        runtimeError(vm.illegalArgumentsErrorClass, "list.set(index, value) takes an index and a value.");
         return NIL_VAL;
     }
 
     if (!IS_LIST(args[-1])) {
-        runtimeError("list.set() must be called on a list.");
+        runtimeError(vm.typeErrorClass, "list.set() must be called on a list.");
         return NIL_VAL;
     }
 
     ObjList* list = AS_LIST(args[-1]);
+    if (!IS_NUMBER(args[0])) {
+        runtimeError(vm.typeErrorClass, "list.set() index must be a number.");
+        return NIL_VAL;
+    }
     int index = (int)AS_NUMBER(args[0]);
-
-    if (index < 0 || index >= list->elements.count) {
-        runtimeError("list.set() index out of bounds.");
+    if (index < 0 || index >= list->elements.capacity) {
+        runtimeError(vm.indexErrorClass, "list.set() index out of bounds.");
         return NIL_VAL;
     }
 
@@ -69,19 +75,18 @@ static Value listSetNative(int argCount, Value* args) {
 
 static Value listPopNative(int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError("list.pop() takes no arguments.");
+        runtimeError(vm.illegalArgumentsErrorClass, "list.pop() takes no arguments.");
         return NIL_VAL;
     }
 
     if (!IS_LIST(args[-1])) {
-        runtimeError("list.pop() must be called on a list.");
+        runtimeError(vm.typeErrorClass, "list.pop() must be called on a list.");
         return NIL_VAL;
     }
 
     ObjList* list = AS_LIST(args[-1]);
-
-    if (list->elements.count == 0) {
-        runtimeError("list.pop() on empty list.");
+    if (list->elements.capacity == 0) {
+        runtimeError(vm.indexErrorClass, "list.pop() on empty list.");
         return NIL_VAL;
     }
 
@@ -90,21 +95,24 @@ static Value listPopNative(int argCount, Value* args) {
 }
 
 static Value listInsertNative(int argCount, Value* args) {
-    if (argCount != 2 || !IS_NUMBER(args[0])) {
-        runtimeError("list.insert(index, value) takes an index and a value.");
+    if (argCount != 2) {
+        runtimeError(vm.illegalArgumentsErrorClass, "list.insert(index, value) takes an index and a value.");
         return NIL_VAL;
     }
 
     if (!IS_LIST(args[-1])) {
-        runtimeError("list.insert() must be called on a list.");
+        runtimeError(vm.typeErrorClass, "list.insert() must be called on a list.");
         return NIL_VAL;
     }
 
     ObjList* list = AS_LIST(args[-1]);
+    if (!IS_NUMBER(args[0])) {
+        runtimeError(vm.typeErrorClass, "list.insert() index must be a number.");
+        return NIL_VAL;
+    }
     int index = (int)AS_NUMBER(args[0]);
-
-    if (index < 0 || index > list->elements.count) {
-        runtimeError("list.insert() index out of bounds.");
+    if (index < 0 || index > list->elements.capacity) {
+        runtimeError(vm.indexErrorClass, "list.insert() index out of bounds.");
         return NIL_VAL;
     }
 
@@ -128,12 +136,12 @@ static Value listInsertNative(int argCount, Value* args) {
 
 static Value listClearNative(int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError("list.clear() takes no arguments.");
+        runtimeError(vm.illegalArgumentsErrorClass, "list.clear() takes no arguments.");
         return NIL_VAL;
     }
 
     if (!IS_LIST(args[-1])) {
-        runtimeError("list.clear() must be called on a list.");
+        runtimeError(vm.typeErrorClass, "list.clear() must be called on a list.");
         return NIL_VAL;
     }
 
@@ -144,12 +152,12 @@ static Value listClearNative(int argCount, Value* args) {
 
 static Value listContainsNative(int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError("list.contains(value) takes exactly one argument.");
+        runtimeError(vm.illegalArgumentsErrorClass, "list.contains(value) takes exactly one argument.");
         return NIL_VAL;
     }
 
     if (!IS_LIST(args[-1])) {
-        runtimeError("list.contains() must be called on a list.");
+        runtimeError(vm.typeErrorClass, "list.contains() must be called on a list.");
         return NIL_VAL;
     }
 
@@ -166,21 +174,25 @@ static Value listContainsNative(int argCount, Value* args) {
 }
 
 static Value listRemoveNative(int argCount, Value* args) {
-    if (argCount != 1 || !IS_NUMBER(args[0])) {
-        runtimeError("list.remove(index) takes exactly one integer argument.");
+    if (argCount != 1) {
+        runtimeError(vm.illegalArgumentsErrorClass, "list.remove(index) takes exactly one integer argument.");
         return NIL_VAL;
     }
 
     if (!IS_LIST(args[-1])) {
-        runtimeError("list.remove() must be called on a list.");
+        runtimeError(vm.typeErrorClass, "list.remove() must be called on a list.");
+        return NIL_VAL;
+    }
+
+    if (!IS_NUMBER(args[0])) {
+        runtimeError(vm.typeErrorClass, "list.remove() index must be a number.");
         return NIL_VAL;
     }
 
     ObjList* list = AS_LIST(args[-1]);
     int index = (int)AS_NUMBER(args[0]);
-
-    if (index < 0 || index >= list->elements.count) {
-        runtimeError("list.remove() index out of bounds.");
+    if (index < 0 || index >= list->elements.capacity) {
+        runtimeError(vm.indexErrorClass, "list.remove() index out of bounds.");
         return NIL_VAL;
     }
 

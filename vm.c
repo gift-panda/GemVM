@@ -34,13 +34,13 @@ static Value clockNative(int argCount, Value* args) {
 
 static Value inputNative(int argCount, Value* args) {
     if (argCount > 1) {
-        runtimeError("input() takes no or one arguments.");
+        runtimeError(vm.illegalArgumentsErrorClass, "input() takes no or one arguments.");
         return NIL_VAL;
     }
 
     if (argCount == 1) {
         if (!IS_STRING(args[0])) {
-            runtimeError("input() prompt must be a string.");
+            runtimeError(vm.illegalArgumentsErrorClass, "input() prompt must be a string.");
             return NIL_VAL;
         }
         printf("%s\n", AS_CSTRING(args[0]));
@@ -89,7 +89,7 @@ static void resetStack() {
     vm.openUpvalues = NULL;
 }
 
-CallFrame* runtimeError(const char* format, ...) {
+CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
     char msgbuf[512];      // message only
     char tracebuf[1024];   // stack trace
     char linebuf[256];
@@ -98,10 +98,17 @@ CallFrame* runtimeError(const char* format, ...) {
 
     va_list args;
     va_start(args, format);
+
+    // Add the error type first
+    msgOffset += snprintf(msgbuf + msgOffset, sizeof(msgbuf) - msgOffset, "%s: ", errorClass->name->chars);
+
+    // Then the actual error message
     msgOffset += vsnprintf(msgbuf + msgOffset, sizeof(msgbuf) - msgOffset, format, args);
     va_end(args);
 
+    // Add newline
     msgOffset += snprintf(msgbuf + msgOffset, sizeof(msgbuf) - msgOffset, "\n");
+
 
     // Step 2: Build the stack trace string separately
     for (int i = vm.frameCount - 1; i >= 0; i--) {
@@ -129,7 +136,7 @@ CallFrame* runtimeError(const char* format, ...) {
     }
 
     // Step 3: Create the error instance and set msg + stackTrace
-    ObjInstance* errorInstance = newInstance(vm.errorClass);
+    ObjInstance* errorInstance = newInstance(errorClass);
 
     ObjString* msgString = copyString(msgbuf, msgOffset);
     ObjString* traceString = copyString(tracebuf, traceOffset);
@@ -310,6 +317,30 @@ void initVM() {
     vm.errorString = NULL;
     vm.errorString = copyString("Error", 5);
 
+    vm.indexErrorString = NULL;
+    vm.indexErrorString = copyString("IndexOutOfBoundsError", 21);
+    // use this for index errors on lists/strings
+
+    vm.typeErrorString = NULL;
+    vm.typeErrorString = copyString("TypeError", 9);
+    // for invalid operand types, etc.
+
+    vm.nameErrorString = NULL;
+    vm.nameErrorString = copyString("NameError", 9);
+    // for undefined variable or property
+
+    vm.accessErrorString = NULL;
+    vm.accessErrorString = copyString("AccessError", 11);
+    // for visibility violations (private/protected)
+
+    vm.illegalArgumentsErrorString = NULL;
+    vm.illegalArgumentsErrorString = copyString("IllegalArgumentsError", 21);
+    // for invalid arguments (e.g. wrong type, value, or count)
+
+    vm.lookUpErrorString = NULL;
+    vm.lookUpErrorString = copyString("LookUpError", 11);
+    // for unresolved superclass methods, bad super/binding
+
     defineNative("clock", clockNative);
     defineNative("input", inputNative);
     defineStringMethods();
@@ -339,7 +370,7 @@ static Value peek(int distance) {
 
 static bool call(ObjClosure* closure, int argCount) {
     if (argCount != closure->function->arity) {
-        runtimeError("Expected %d arguments but got %d.",
+        runtimeError(vm.illegalArgumentsErrorClass, "Expected %d arguments but got %d.",
             closure->function->arity, argCount);
         return false;
     }
@@ -411,11 +442,11 @@ static bool callValue(Value callee, int argCount) {
             }
             case OBJ_CLASS: {
                 ObjClass* klass = AS_CLASS(callee);
-                vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
+                vm.stackTop[-argCount - 1] = OBJ_VAL(                                                        newInstance(klass));
                 Value initializer;
                 if (tableGet(&klass->methods, vm.initString, &initializer)) {
                     if (AS_BOUND_METHOD(initializer)->method[argCount] == NULL) {
-                        runtimeError("No matching initializer found with %d arguments.", argCount);
+                        runtimeError(vm.illegalArgumentsErrorClass, "No matching initializer found with %d arguments.", argCount);
                         return false;
                     }
                     return call(AS_BOUND_METHOD(initializer)->method[argCount], argCount);
@@ -426,7 +457,7 @@ static bool callValue(Value callee, int argCount) {
                 ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
                 ObjClosure* closure = bound->method[argCount];
                 if (closure == NULL) {
-                    runtimeError("No method for arity %d.", argCount);
+                    runtimeError(vm.illegalArgumentsErrorClass, "No method with arity %d found.", argCount);
                     return false;
                 }
 
@@ -438,7 +469,7 @@ static bool callValue(Value callee, int argCount) {
 
                 ObjClosure* closure = md->closures[argCount];
                 if (closure == NULL) {
-                    runtimeError("No method for arity %d.", argCount);
+                    runtimeError(vm.illegalArgumentsErrorClass, "No method for arity %d.", argCount);
                     return false;
                 }
                 return call(closure, argCount);
@@ -447,7 +478,7 @@ static bool callValue(Value callee, int argCount) {
                 break;
         }
     }
-    runtimeError("Can only call functions and classes.");
+    runtimeError(vm.typeErrorClass, "Can only call functions and classes.");
     return false;
 }
 
@@ -561,7 +592,7 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name,
         push(result);
         return res;
     }
-    runtimeError("Undefined method '%s' on instance of class '%s'.",
+    runtimeError(vm.nameErrorClass, "Undefined method '%s' on instance of class '%s'.",
                  name->chars, klass->name->chars);
     return false;
 }
@@ -597,7 +628,7 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
             push(result);
             return res;
         }
-        runtimeError("Undefined method '%s' on string.", name->chars);
+        runtimeError(vm.nameErrorClass, "Undefined method '%s' on string.", name->chars);
         return false;
     }
 
@@ -611,7 +642,7 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
             push(result);
             return res;
         }
-        runtimeError("Undefined method '%s' on string.", name);
+        runtimeError(vm.nameErrorClass, "Undefined method '%s' on string.", name);
         return false;
     }
 
@@ -619,7 +650,7 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
         Value value;
         ObjClass* klass = AS_CLASS(receiver);
 
-        if (isPrivate(name) && klass != frame->klass) frame = runtimeError("Cannot access private field from a different class.");
+        if (isPrivate(name) && klass != frame->klass) frame = runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
 
         if (tableGet(&klass->staticMethods, name, &value)) {
             bool res = callValue(value, argCount);
@@ -637,20 +668,20 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
             push(result);
             return res;
         }
-        runtimeError("Undefined static method '%s' on class '%s'.",
+        runtimeError(vm.nameErrorClass, "Undefined static method '%s' on class '%s'.",
                      name->chars, klass->name->chars);
         return false;
     }
 
 
     if (!IS_INSTANCE(receiver)) {
-        runtimeError("Only instances have methods.");
+        runtimeError(vm.typeErrorClass, "Only instances have methods.");
         return false;
     }
 
     ObjInstance* instance = AS_INSTANCE(receiver);
 
-    if (isPrivate(name) && instance->klass != frame->klass) frame = runtimeError("Cannot access private field of a different class.");
+    if (isPrivate(name) && instance->klass != frame->klass) frame = runtimeError(vm.accessErrorClass, "Cannot access private field of a different class.");
 
     Value value;
     if (tableGet(&instance->fields, name, &value)) {
@@ -705,7 +736,7 @@ static InterpretResult run() {
     do { \
         bool fl = false; \
         if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
-            frame = runtimeError("Operands must be numbers."); \
+            frame = runtimeError(vm.typeErrorClass, "Operands must be numbers."); \
             fl = true; \
             break; \
         } \
@@ -743,6 +774,23 @@ static InterpretResult run() {
                 vm.stackTop = frame->slots;
                 push(result);
                 frame = &vm.frames[vm.frameCount - 1];
+
+                if (IS_INSTANCE(result)) {
+                    ObjInstance* instance = AS_INSTANCE(result);
+                    if (hasAncestor(instance, vm.errorClass)) {
+                        Value msgVal;
+                        if (tableGet(&instance->fields, copyString("msg", 3), &msgVal) && IS_STRING(msgVal)) {
+                            ObjString* msgStr = AS_STRING(msgVal);
+                            ObjString* className = instance->klass->name;
+
+                            char formatted[512];
+                            int len = snprintf(formatted, sizeof(formatted), "%s: %s", className->chars, msgStr->chars);
+
+                            ObjString* fullMsg = copyString(formatted, len);
+                            tableSet(&instance->fields, copyString("msg", 3), OBJ_VAL(fullMsg));
+                        }
+                    }
+                }
                 break;
             }
             case OP_CONSTANT: {
@@ -752,7 +800,7 @@ static InterpretResult run() {
             }
             case OP_NEGATE:
                 if (!IS_NUMBER(peek(0))) {
-                    frame = runtimeError("Operand must be a number.");
+                    frame = runtimeError(vm.typeErrorClass, "Operand must be a number.");
                     break;
                 }
                 push(NUMBER_VAL(-AS_NUMBER(pop())));
@@ -810,7 +858,7 @@ static InterpretResult run() {
                     push(OBJ_VAL(result));
                 }
                 else {
-                    frame = runtimeError(
+                    frame = runtimeError(vm.typeErrorClass,
                         "Operands must be two numbers or two strings.");
                     break;
                 }
@@ -880,7 +928,7 @@ static InterpretResult run() {
                 ObjString* name = READ_STRING();
                 Value value;
                 if (!tableGet(&vm.globals, name, &value)) {
-                    frame = runtimeError("Undefined variable '%s'.", name->chars);
+                    frame = runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
                     fflush(stdout);
                     break;
                 }
@@ -891,7 +939,7 @@ static InterpretResult run() {
                 ObjString* name = READ_STRING();
                 if (tableSet(&vm.globals, name, peek(0))) {
                     tableDelete(&vm.globals, name);
-                    frame = runtimeError("Undefined variable '%s'.", name->chars);
+                    frame = runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
                     break;
                 }
                 break;
@@ -962,14 +1010,25 @@ static InterpretResult run() {
                 pop();
                 break;
             case OP_CLASS:
-                push(OBJ_VAL(newClass(READ_STRING())));
+                ObjString* name = READ_STRING();
+                ObjClass* klass = newClass(name);
+                if (name == vm.errorString) vm.errorClass = klass;
+                if (name == vm.errorString) vm.errorClass = klass;
+                if (name == vm.indexErrorString) vm.indexErrorClass = klass;
+                if (name == vm.typeErrorString) vm.typeErrorClass = klass;
+                if (name == vm.nameErrorString) vm.nameErrorClass = klass;
+                if (name == vm.accessErrorString) vm.accessErrorClass = klass;
+                if (name == vm.illegalArgumentsErrorString) vm.illegalArgumentsErrorClass = klass;
+                if (name == vm.lookUpErrorString) vm.lookUpErrorClass = klass;
+
+                push(OBJ_VAL(klass));
                 break;
             case OP_GET_PROPERTY: {
                 if (IS_INSTANCE(peek(0))) {
                     ObjInstance* instance = AS_INSTANCE(peek(0));
                     ObjString* name = READ_STRING();
 
-                    if (isPrivate(name) && instance->klass != frame->klass) frame = runtimeError("Cannot access private field from a different class.");
+                    if (isPrivate(name) && instance->klass != frame->klass) frame = runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
 
                     Value value;
                     if (tableGet(&instance->fields, name, &value)) {
@@ -987,7 +1046,7 @@ static InterpretResult run() {
                     ObjClass* klass = AS_CLASS(peek(0));
                     ObjString* name = READ_STRING();
 
-                    if (isPrivate(name) && klass != frame->klass) frame = runtimeError("Cannot access private field from a different class.");
+                    if (isPrivate(name) && klass != frame->klass) frame = runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
 
                     Value value;
                     if (tableGet(&klass->staticVars, name, &value)) {
@@ -1015,27 +1074,17 @@ static InterpretResult run() {
                             break;
                         }
                     }
-                    frame = runtimeError("Undefined property '%s'.", name->chars);
+                    frame = runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                     break;
                 }
 
-                frame = runtimeError("Only instances and classes have fields.");
+                frame = runtimeError(vm.typeErrorClass, "Only instances and classes have fields.");
                 break;
             }
             case OP_SET_PROPERTY: {
                 if (IS_CLASS(peek(1))) {
                     ObjClass* klass = AS_CLASS(peek(1));
                     ObjString* name = READ_STRING();
-
-                    /*
-                    if (tableGet(&klass->staticVars, name, NULL)) {
-                        tableSet(&klass->staticVars, name, peek(0));
-                        Value value = pop();
-                        pop();
-                        push(value);
-                        break;
-                    }
-                    */
 
                     if (klass->superclass != NULL && tableGet(&klass->superclass->staticVars, name, NULL)) {
                         tableSet(&klass->superclass->staticVars, name, peek(0));
@@ -1052,7 +1101,7 @@ static InterpretResult run() {
                 }
 
                 if (!IS_INSTANCE(peek(1))) {
-                    frame = runtimeError("Only instances have fields.");
+                    frame = runtimeError(vm.typeErrorClass, "Only instances have fields.");
                     break;
                 }
 
@@ -1078,7 +1127,7 @@ static InterpretResult run() {
             }
             case OP_INHERIT: {
                 if (!IS_CLASS(peek(1))) {
-                    frame = runtimeError("Superclass must be a class.");
+                    frame = runtimeError(vm.typeErrorClass, "Superclass must be a class.");
                     break;
                 }
 
@@ -1130,12 +1179,12 @@ static InterpretResult run() {
                 Value list = pop();
 
                 if (!IS_LIST(list)) {
-                    frame = runtimeError("Can only index into lists.");
+                    frame = runtimeError(vm.typeErrorClass, "Can only index into lists.");
                     break;
                 }
 
                 if (!IS_NUMBER(index)) {
-                    frame = runtimeError("List index must be a number.");
+                    frame = runtimeError(vm.typeErrorClass, "List index must be a number.");
                     break;
                 }
 
@@ -1143,7 +1192,7 @@ static InterpretResult run() {
                 int i = (int)AS_NUMBER(index);
 
                 if (i < 0 || i >= objList->elements.count) {
-                    frame = runtimeError("List index out of bounds.");
+                    frame = runtimeError(vm.indexErrorClass, "List index out of bounds.");
                     break;
                 }
 
@@ -1157,12 +1206,12 @@ static InterpretResult run() {
                 Value list = pop();
 
                 if (!IS_LIST(list)) {
-                    frame = runtimeError("Can only index into lists.");
+                    frame = runtimeError(vm.typeErrorClass, "Can only index into lists.");
                     break;
                 }
 
                 if (!IS_NUMBER(index)) {
-                    frame = runtimeError("List index must be a number.");
+                    frame = runtimeError(vm.typeErrorClass, "List index must be a number.");
                     break;
                 }
 
@@ -1170,7 +1219,7 @@ static InterpretResult run() {
                 int i = (int)AS_NUMBER(index);
 
                 if (i < 0 || i >= objList->elements.count) {
-                    frame = runtimeError("List index out of bounds.");
+                    frame = runtimeError(vm.indexErrorClass, "List index out of bounds.");
                     break;
                 }
 
@@ -1195,7 +1244,7 @@ static InterpretResult run() {
             case OP_DISPATCH: {
                 Value closureVal = peek(0);
                 if (!IS_CLOSURE(closureVal)) {
-                    frame = runtimeError("Expected closure on top of stack for dispatch.");
+                    frame = runtimeError(vm.typeErrorClass, "Expected function to dispatch.");
                     break;
                 }
 
@@ -1274,13 +1323,13 @@ static InterpretResult run() {
             case OP_THROW: {
                 Value error = pop();
                 if (!IS_INSTANCE(error)) {
-                    runtimeError("Can only throw instances of error classes.");
+                    runtimeError(vm.typeErrorClass, "Can only throw instances of error classes.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
                 ObjInstance* instance = AS_INSTANCE(error);
                 if (!hasAncestor(instance, vm.errorClass)) {
-                    runtimeError("Can only throw instances of error.");
+                    runtimeError(vm.typeErrorClass, "Can only throw instances of error.");
                     return INTERPRET_RUNTIME_ERROR;
                 }
 
@@ -1306,11 +1355,6 @@ InterpretResult interpret(const char* source) {
     pop();
     push(OBJ_VAL(closure));
     call(closure, 0);
-
-    Value value;
-    if (tableGet(&vm.globals, vm.errorString, &value)) {
-        vm.errorClass = AS_CLASS(value);
-    }
 
     return run();
 }

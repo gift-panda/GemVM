@@ -43,10 +43,23 @@ typedef struct {
 
     ObjString* initString;
     ObjString* toString;
-    ObjString* errorString;
-    ObjClass* errorClass;
     Table stringClassMethods;
     Table listClassMethods;
+
+    ObjString* errorString;
+    ObjClass* errorClass;
+    ObjString* indexErrorString;
+    ObjClass* indexErrorClass;
+    ObjString* typeErrorString;
+    ObjClass* typeErrorClass;
+    ObjString* nameErrorString;
+    ObjClass* nameErrorClass;
+    ObjString* accessErrorString;
+    ObjClass* accessErrorClass;
+    ObjString* illegalArgumentsErrorString;
+    ObjClass* illegalArgumentsErrorClass;
+    ObjString* lookUpErrorString;
+    ObjClass* lookUpErrorClass;
 
     bool isInvokingNative;
 } VM;
@@ -64,6 +77,6 @@ void freeVM();
 InterpretResult interpret(const char* source);
 void push(Value value);
 Value pop();
-CallFrame* runtimeError(const char* format, ...);
+CallFrame* runtimeError(ObjClass*, const char* format, ...);
 
 #endif
