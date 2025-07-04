@@ -82,8 +82,6 @@ struct ObjString {
     int length;
     char* chars;
     uint32_t hash;
-
-    Table methods;
 };
 
 typedef struct ObjUpvalue {
@@ -127,8 +125,6 @@ typedef struct {
 typedef struct {
     Obj obj;
     ValueArray elements;
-
-    Table methods;
 } ObjList;
 
 typedef struct {

@@ -22,6 +22,7 @@
 #include "debug.h"
 #include "stringMethods.c"
 #include "listMethods.c"
+#include "windowMethods.h"
 
 
 VM vm;
@@ -446,16 +447,16 @@ static bool callValue(Value callee, int argCount) {
             }
             case OBJ_CLASS: {
                 ObjClass* klass = AS_CLASS(callee);
-                vm.stackTop[-argCount - 1] = OBJ_VAL(                                                        newInstance(klass));
                 Value initializer;
                 if (tableGet(&klass->methods, vm.initString, &initializer)) {
+                    vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
                     if (AS_BOUND_METHOD(initializer)->method[argCount] == NULL) {
                         runtimeError(vm.illegalArgumentsErrorClass, "No matching initializer found with %d arguments.", argCount);
                         return false;
                     }
                     return call(AS_BOUND_METHOD(initializer)->method[argCount], argCount);
                 }
-                return true;
+                return false;
             }
             case OBJ_BOUND_METHOD: {
                 ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
@@ -583,6 +584,7 @@ static bool bindMethod(ObjClass* klass, ObjString* name) {
 static bool invokeFromClass(ObjClass* klass, ObjString* name,
                             int argCount) {
     Value method;
+
     if (tableGet(&klass->methods, name, &method)) {
         AS_BOUND_METHOD(method)->receiver = peek(argCount);
         bool yes = callValue(OBJ_VAL(AS_BOUND_METHOD(method)), argCount);
@@ -590,16 +592,25 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name,
     }
 
     if (tableGet(&klass->staticMethods, name, &method)) {
+        if (IS_NATIVE(method)) {
+            bool res = callBoundedNative(method, argCount);
+            Value result = pop();
+            pop();
+            push(result);
+            return res;
+        }
         bool res = callValue(method, argCount);
         Value result = pop();
         pop();
         push(result);
         return res;
     }
+
     runtimeError(vm.nameErrorClass, "Undefined method '%s' on instance of class '%s'.",
                  name->chars, klass->name->chars);
     return false;
 }
+
 
 void printStack() {
     printf("          ");
@@ -657,6 +668,13 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
         if (isPrivate(name) && klass != frame->klass) frame = runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
 
         if (tableGet(&klass->staticMethods, name, &value)) {
+            if (IS_NATIVE(value)) {
+                bool res = callBoundedNative(value, argCount);
+                Value result = pop();
+                pop();
+                push(result);
+                return res;
+            }
             bool res = callValue(value, argCount);
             Value result = pop();
             pop();
@@ -951,6 +969,36 @@ static InterpretResult run() {
                     break;
                 }
                 BINARY_OP(NUMBER_VAL, /); break;
+            case OP_MOD:
+                if (IS_INSTANCE(peek(0)) && IS_INSTANCE(peek(1))) {
+                    ObjInstance* a = AS_INSTANCE(peek(0));
+                    ObjInstance* b = AS_INSTANCE(peek(1));
+
+                    if (a->klass != b->klass) {
+                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("-", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("-", 1), argCount, frame);
+                        frame = &vm.frames[vm.frameCount - 1];
+                        break;
+                    }
+                    frame = runtimeError(vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
+                bool fl = false;
+                if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {
+                    frame = runtimeError(vm.typeErrorClass, "Operands must be numbers.");
+                    fl = true;
+                    break;
+                }
+                double b = AS_NUMBER(pop());
+                double a = AS_NUMBER(pop());
+                push(NUMBER_VAL(fmod(a, b)));
+                break;
             case OP_NIL: push(NIL_VAL); break;
             case OP_TRUE: push(BOOL_VAL(true)); break;
             case OP_FALSE: push(BOOL_VAL(false)); break;
@@ -1106,6 +1154,17 @@ static InterpretResult run() {
                 if (name == vm.illegalArgumentsErrorString) vm.illegalArgumentsErrorClass = klass;
                 if (name == vm.lookUpErrorString) vm.lookUpErrorClass = klass;
                 if (name == vm.formatErrorString) vm.formatErrorClass = klass;
+
+                if (name == copyString("Window", 6)) {
+                    tableSet(&klass->staticMethods, copyString("init", 4),       OBJ_VAL(newNative(window_init)));
+                    tableSet(&klass->staticMethods, copyString("clear", 5),      OBJ_VAL(newNative(window_clear)));
+                    tableSet(&klass->staticMethods, copyString("drawRect", 8),   OBJ_VAL(newNative(window_drawRect)));
+                    tableSet(&klass->staticMethods, copyString("update", 6),     OBJ_VAL(newNative(window_update)));
+                    tableSet(&klass->staticMethods, copyString("pollEvent", 9),  OBJ_VAL(newNative(window_pollEvent)));
+                    tableSet(&klass->staticMethods, copyString("mousePos", 8),   OBJ_VAL(newNative(window_getMousePosition)));
+                    tableSet(&klass->staticMethods, copyString("drawCircle", 10),OBJ_VAL(newNative(window_drawCircle)));
+//                    tableSet(&klass->staticMethods, copyString("drawImage", 9),   OBJ_VAL(newNative(window_drawImage)));
+                }
 
                 push(OBJ_VAL(klass));
                 break;

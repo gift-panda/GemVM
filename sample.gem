@@ -1,9 +1,35 @@
-class Hi{
-    init(){
-        this.x = 1;
+var win = Window;
+win.init(640, 480, "Gem Test");
+
+var a = [1, 23, 4];
+print(a[0]);
+
+var clicks = []; // stores [ [x1, y1], [x2, y2], ... ]
+
+var run = true;
+while (run) {
+    win.clear(0); // Black
+
+    // Draw a green rectangle
+    win.drawRect(50, 50, 100, 100, 65280); // 0x00FF00
+
+    win.drawCircle(200, 100, 50, 16711680);
+
+    // Draw all previously clicked points as small blue circles
+    var i = 0;
+    while (i < clicks.length()) {
+        var pt = clicks[i];
+        win.drawCircle(pt[0], pt[1], 5, 255); // 0x0000FF
+        i = i + 1;
     }
-    operator *(h){
-        return this.x * h.x;
+
+    // Handle events
+    var evt = win.pollEvent();
+    if (evt == "quit") run = false;
+    if (evt == "mouse_left") {
+        var pos = win.mousePos();
+        clicks.append(pos);
     }
+
+    win.update();
 }
-println(Hi() * Hi());

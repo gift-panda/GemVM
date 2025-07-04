@@ -79,9 +79,6 @@ static ObjString* allocateString(char* chars, int length, uint32_t hash) {
     tableSet(&vm.strings, string, NIL_VAL);
     pop();
 
-    initTable(&string->methods);
-    tableAddAll(&vm.stringClassMethods, &string->methods);
-
     return string;
 }
 
@@ -107,9 +104,6 @@ ObjMultiDispatch* newMultiDispatch(ObjString* name) {
 ObjList* newList() {
     ObjList* list = ALLOCATE_OBJ(ObjList, OBJ_LIST);
     initValueArray(&list->elements);
-
-    tableAddAll(&vm.listClassMethods, &list->methods);
-
     return list;
 }
 
