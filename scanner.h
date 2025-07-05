@@ -19,7 +19,7 @@ typedef enum {
     TOKEN_AND, TOKEN_CLASS, TOKEN_STATIC, TOKEN_ELSE, TOKEN_FALSE,
     TOKEN_FOR, TOKEN_FUN, TOKEN_IF, TOKEN_NIL, TOKEN_OR,
     TOKEN_PRINT, TOKEN_PRINTLN, TOKEN_RETURN, TOKEN_SUPER, TOKEN_THIS,
-    TOKEN_TRUE, TOKEN_VAR, TOKEN_WHILE, TOKEN_THROW,
+    TOKEN_TRUE, TOKEN_VAR, TOKEN_WHILE, TOKEN_THROW, TOKEN_IMPORT,
     TOKEN_TRY, TOKEN_CATCH, TOKEN_FINALLY, TOKEN_OPERATOR,
 
     TOKEN_ERROR, TOKEN_EOF
@@ -35,6 +35,9 @@ typedef struct {
 void initScanner(const char* source);
 Token scanToken();
 Token returnToken();
+
+void saveState();
+void restoreState();
 
 
 #endif

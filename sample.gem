@@ -1,35 +1,32 @@
+import Window;
+import Error;
+
 var win = Window;
 win.init(640, 480, "Gem Test");
-
-var a = [1, 23, 4];
-print(a[0]);
-
-var clicks = []; // stores [ [x1, y1], [x2, y2], ... ]
+var clicks = [];
+var hold = false;
 
 var run = true;
 while (run) {
-    win.clear(0); // Black
-
-    // Draw a green rectangle
-    win.drawRect(50, 50, 100, 100, 65280); // 0x00FF00
-
-    win.drawCircle(200, 100, 50, 16711680);
-
-    // Draw all previously clicked points as small blue circles
+    win.clear(0);
     var i = 0;
     while (i < clicks.length()) {
         var pt = clicks[i];
-        win.drawCircle(pt[0], pt[1], 5, 255); // 0x0000FF
+        win.drawCircle(pt[0], pt[1], 5, 255);
         i = i + 1;
     }
-
-    // Handle events
     var evt = win.pollEvent();
-    if (evt == "quit") run = false;
-    if (evt == "mouse_left") {
-        var pos = win.mousePos();
-        clicks.append(pos);
+    if (evt != nil) {
+        if (evt[0] == "quit") run = false;
+        if (evt[0] == "mouse_down" and evt[1] == "mouse_left") {
+            hold = true;
+        }
+        if (evt[0] == "mouse_up") {
+            hold = false;
+        }
     }
+    var pos = win.mousePos();
+    if (hold == true and pos != nil) clicks.append(pos);
 
     win.update();
 }

@@ -65,31 +65,53 @@ Value window_pollEvent(int argCount, Value* args) {
         return NIL_VAL;
     }
 
+    ObjList* list = newList();
+
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
         switch (event.type) {
             case SDL_QUIT:
-                return OBJ_VAL(copyString("quit", 4));
+                writeValueArray(&list->elements, OBJ_VAL(copyString("quit", 4)));
+                return OBJ_VAL(list);
 
             case SDL_MOUSEBUTTONDOWN:
+                writeValueArray(&list->elements, OBJ_VAL(copyString("mouse_down", 10)));
                 switch (event.button.button) {
-                case SDL_BUTTON_LEFT:   return OBJ_VAL(copyString("mouse_left", 10));
-                case SDL_BUTTON_RIGHT:  return OBJ_VAL(copyString("mouse_right", 11));
-                case SDL_BUTTON_MIDDLE: return OBJ_VAL(copyString("mouse_middle", 12));
-                default:                return OBJ_VAL(copyString("mouse_default", 13));
+                    case SDL_BUTTON_LEFT: writeValueArray(&list->elements, OBJ_VAL(copyString("mouse_left", 10))); break;
+                    case SDL_BUTTON_RIGHT:  writeValueArray(&list->elements, OBJ_VAL(copyString("mouse_right", 11))); break;
+                    case SDL_BUTTON_MIDDLE: writeValueArray(&list->elements, OBJ_VAL(copyString("mouse_middle", 12))); break;
+                    default:
+                        writeValueArray(&list->elements, OBJ_VAL(copyString("mouse_other", 14))); break;
                 }
+                return OBJ_VAL(list);
+
+            case SDL_MOUSEBUTTONUP:
+                writeValueArray(&list->elements, OBJ_VAL(copyString("mouse_up", 8)));
+                switch (event.button.button) {
+                    case SDL_BUTTON_LEFT: writeValueArray(&list->elements, OBJ_VAL(copyString("mouse_left", 10))); break;
+                    case SDL_BUTTON_RIGHT:  writeValueArray(&list->elements, OBJ_VAL(copyString("mouse_right", 11))); break;
+                    case SDL_BUTTON_MIDDLE: writeValueArray(&list->elements, OBJ_VAL(copyString("mouse_middle", 12))); break;
+                    default:
+                        writeValueArray(&list->elements, OBJ_VAL(copyString("mouse_other", 14))); break;
+                }
+                return OBJ_VAL(list);
 
             case SDL_KEYDOWN:
-                return OBJ_VAL(copyString("key_down", 7));
+                writeValueArray(&list->elements, OBJ_VAL(copyString("key_down", 7)));
+                writeValueArray(&list->elements, OBJ_VAL(copyString(SDL_GetKeyName(event.key.keysym.sym), strlen(SDL_GetKeyName(event.key.keysym.sym)))));
+                return OBJ_VAL(list);
 
             case SDL_KEYUP:
-                return OBJ_VAL(copyString("key_up", 5));
+                writeValueArray(&list->elements, OBJ_VAL(copyString("key_up", 7)));
+                writeValueArray(&list->elements, OBJ_VAL(copyString(SDL_GetKeyName(event.key.keysym.sym), strlen(SDL_GetKeyName(event.key.keysym.sym)))));
+                return OBJ_VAL(list);
 
             default:
                 break;
         }
     }
 
+    writeValueArray(&list->elements, OBJ_VAL(copyString("no_event", 8)));
     return NIL_VAL;
 }
 

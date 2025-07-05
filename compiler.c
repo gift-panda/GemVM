@@ -14,6 +14,7 @@
 
 #include "memory.h"
 #include "scanner.h"
+#include "vm.h"
 
 typedef struct {
     Token current;
@@ -1060,9 +1061,78 @@ static void declaration() {
     if (parser.panicMode) synchronize();
 }
 
+char* appendStrings(const char* a, const char* b) {
+    size_t lenA = strlen(a);
+    size_t lenB = strlen(b);
+
+    // +1 for null terminator
+    char* result = (char*)malloc(lenA + lenB + 1);
+    if (result == NULL) return NULL;
+
+    memcpy(result, a, lenA);
+    memcpy(result + lenA, b, lenB);
+
+    result[lenA + lenB] = '\0'; // null terminate
+    return result;
+}
+
+static char* readFile(const char* path) {
+    FILE* file = fopen(path, "rb");
+    if (file == NULL) {
+        fprintf(stderr, "Could not open file \"%s\".\n", path);
+        exit(74);
+    }
+
+    fseek(file, 0L, SEEK_END);
+    size_t fileSize = ftell(file);
+    rewind(file);
+
+    char* buffer = (char*)malloc(fileSize + 1);
+    if (buffer == NULL) {
+        fprintf(stderr, "Not enough memory to read \"%s\".\n", path);
+        exit(74);
+    }
+
+    size_t bytesRead = fread(buffer, sizeof(char), fileSize, file);
+    if (bytesRead < fileSize) {
+        fprintf(stderr, "Could not read file \"%s\".\n", path);
+        exit(74);
+    }
+
+    buffer[bytesRead] = '\0';
+
+    fclose(file);
+    return buffer;
+}
+
 static void statement() {
     if (match(TOKEN_PRINT)) {
         printStatement();
+    } else if (match(TOKEN_IMPORT)) {
+        consume(TOKEN_IDENTIFIER, "Expect file name after import.");
+        ObjString* fileName = copyString(parser.previous.start,
+                                         parser.previous.length);
+        consume(TOKEN_SEMICOLON, "Expect ';' after file name.");
+
+        char* file = appendStrings("../", fileName->chars);
+        file = appendStrings(file, ".gem");
+
+        char* source = readFile(file);
+
+        saveState();
+        ObjFunction* function = compile(source);
+        restoreState();
+
+        function->name = fileName;
+        int constant = makeConstant(OBJ_VAL(function));
+        emitBytes(OP_CLOSURE, constant);
+        emitBytes(OP_CALL, 0);
+
+        advance();
+        emitByte(OP_POP);
+
+        free(source);
+        free(file);
     }
     else if (match(TOKEN_PRINTLN)) {
         printlnStatement();
@@ -1094,6 +1164,7 @@ ObjFunction* compile(const char* source) {
     initScanner(source);
     Compiler compiler;
     initCompiler(&compiler, TYPE_SCRIPT);
+
 
     parser.hadError = false;
     parser.panicMode = false;

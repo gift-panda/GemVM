@@ -16,6 +16,3 @@ class IllegalArgumentError :: Error{}
 class LookUpError :: Error{}
 class FormatError :: Error{}
 
-class Window{
-    init(){}
-}

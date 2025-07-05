@@ -9,6 +9,10 @@ typedef struct {
     const char* current;
     int line;
     Token previous;
+
+    const char* prevstart;
+    const char* prevcurrent;
+    int prevline;
 } Scanner;
 
 Scanner scanner;
@@ -17,6 +21,18 @@ void initScanner(const char* source) {
     scanner.start = source;
     scanner.current = source;
     scanner.line = 1;
+}
+
+void saveState() {
+    scanner.prevstart = scanner.start;
+    scanner.prevcurrent = scanner.current;
+    scanner.prevline = scanner.line;
+}
+
+void restoreState() {
+    scanner.start = scanner.prevstart;
+    scanner.current = scanner.prevcurrent;
+    scanner.line = scanner.prevline;
 }
 
 static bool isAlpha(char c) {
@@ -123,7 +139,13 @@ static TokenType identifierType() {
                 }
             }
         case 'e': return checkKeyword(1, 3, "lse", TOKEN_ELSE);
-        case 'i': return checkKeyword(1, 1, "f", TOKEN_IF);
+        case 'i':
+            if (scanner.current - scanner.start > 1) {
+                switch (scanner.start[1]) {
+                    case 'f': return checkKeyword(2, 0, "", TOKEN_IF);
+                    case 'm': return checkKeyword(2, 4, "port", TOKEN_IMPORT);
+                }
+            }
         case 'n': return checkKeyword(1, 2, "il", TOKEN_NIL);
         case 'o':
             if (scanner.current - scanner.start > 1) {
