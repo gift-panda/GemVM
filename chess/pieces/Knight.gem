@@ -1,0 +1,24 @@
+class Knight :: Piece {
+    init(pos, color, board) {
+        super.init(pos, color, board);
+        this.setImage("knight");
+        this.type = "knight";
+    }
+
+    getMoves() {
+        var moves = [];
+        var deltas = [[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]];
+        var i = 0;
+        while (i < deltas.length()) {
+            var dx = deltas[i][0];
+            var dy = deltas[i][1];
+            var x = this.pos[0] + dx;
+            var y = this.pos[1] + dy;
+            if (this.inBounds(x, y) and (this.isEmpty(x, y) or this.isEnemy(x, y))) {
+                moves.append([x, y]);
+            }
+            i = i + 1;
+        }
+        return moves;
+    }
+}

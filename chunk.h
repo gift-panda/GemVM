@@ -55,6 +55,7 @@ typedef enum {
     OP_CONSTANT_LONG,
     OP_THROW,
     OP_MOD,
+    OP_INS,
 } OpCode;
 
 typedef struct {

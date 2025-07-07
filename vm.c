@@ -83,6 +83,9 @@ void defineListMethods() {
     tableSet(&vm.listClassMethods, copyString("clear", 5), OBJ_VAL(newNative(listClearNative)));
     tableSet(&vm.listClassMethods, copyString("contains", 8), OBJ_VAL(newNative(listContainsNative)));
     tableSet(&vm.listClassMethods, copyString("remove", 6), OBJ_VAL(newNative(listRemoveNative)));
+
+    tableSet(&vm.imageClassMethods, copyString("getWidth", 8), OBJ_VAL(newNative(Image_getWidth)));
+    tableSet(&vm.imageClassMethods, copyString("getHeight", 9), OBJ_VAL(newNative(Image_getHeight)));
 }
 
 static void resetStack() {
@@ -286,6 +289,7 @@ void initVM() {
     initTable(&vm.globals);
     initTable(&vm.stringClassMethods);
     initTable(&vm.listClassMethods);
+    initTable(&vm.imageClassMethods);
 
     vm.grayCount = 0;
     vm.grayCapacity = 0;
@@ -647,6 +651,20 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
         return false;
     }
 
+    if (IS_IMAGE(receiver)) {
+        Value value;
+        if (tableGet(&vm.imageClassMethods, name, &value)) {
+            vm.isInvokingNative = true;
+            bool res = callBoundedNative(value, argCount);
+            Value result = pop();
+            pop();
+            push(result);
+            return res;
+        }
+        runtimeError(vm.nameErrorClass, "Undefined method '%s' on image.", name->chars);
+        return false;
+    }
+
     if (IS_LIST(receiver)) {
         Value value;
         if (tableGet(&vm.listClassMethods, name, &value)) {
@@ -657,7 +675,7 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
             push(result);
             return res;
         }
-        runtimeError(vm.nameErrorClass, "Undefined method '%s' on string.", name);
+        runtimeError(vm.nameErrorClass, "Undefined method '%s' on list.", name->chars);
         return false;
     }
 
@@ -757,7 +775,8 @@ static InterpretResult run() {
     #define BINARY_OP(valueType, op) \
     do { \
         bool fl = false; \
-        if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) { \
+        int peeker = 1; \
+        if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(peeker))) { \
             frame = runtimeError(vm.typeErrorClass, "Operands must be numbers."); \
             fl = true; \
             break; \
@@ -969,7 +988,7 @@ static InterpretResult run() {
                     break;
                 }
                 BINARY_OP(NUMBER_VAL, /); break;
-            case OP_MOD:
+            case OP_MOD: {
                 if (IS_INSTANCE(peek(0)) && IS_INSTANCE(peek(1))) {
                     ObjInstance* a = AS_INSTANCE(peek(0));
                     ObjInstance* b = AS_INSTANCE(peek(1));
@@ -989,6 +1008,7 @@ static InterpretResult run() {
                     frame = runtimeError(vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
+
                 bool fl = false;
                 if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {
                     frame = runtimeError(vm.typeErrorClass, "Operands must be numbers.");
@@ -999,6 +1019,39 @@ static InterpretResult run() {
                 double a = AS_NUMBER(pop());
                 push(NUMBER_VAL(fmod(a, b)));
                 break;
+            }
+            case OP_INS: {
+                if (IS_INSTANCE(peek(0)) && IS_INSTANCE(peek(1))) {
+                    ObjInstance* a = AS_INSTANCE(peek(0));
+                    ObjInstance* b = AS_INSTANCE(peek(1));
+
+                    if (a->klass != b->klass) {
+                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("-", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("-", 1), argCount, frame);
+                        frame = &vm.frames[vm.frameCount - 1];
+                        break;
+                    }
+                    frame = runtimeError(vm.typeErrorClass, "No overload of '\' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
+
+                bool fl = false;
+                if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {
+                    frame = runtimeError(vm.typeErrorClass, "Operands must be numbers.");
+                    fl = true;
+                    break;
+                }
+                double b = AS_NUMBER(pop());
+                double a = AS_NUMBER(pop());
+                push(NUMBER_VAL((int)(a / b)));
+                break;
+            }
             case OP_NIL: push(NIL_VAL); break;
             case OP_TRUE: push(BOOL_VAL(true)); break;
             case OP_FALSE: push(BOOL_VAL(false)); break;
@@ -1161,9 +1214,10 @@ static InterpretResult run() {
                     tableSet(&klass->staticMethods, copyString("drawRect", 8),   OBJ_VAL(newNative(window_drawRect)));
                     tableSet(&klass->staticMethods, copyString("update", 6),     OBJ_VAL(newNative(window_update)));
                     tableSet(&klass->staticMethods, copyString("pollEvent", 9),  OBJ_VAL(newNative(window_pollEvent)));
-                    tableSet(&klass->staticMethods, copyString("mousePos", 8),   OBJ_VAL(newNative(window_getMousePosition)));
+                    tableSet(&klass->staticMethods, copyString("getMousePos", 11),   OBJ_VAL(newNative(window_getMousePosition)));
                     tableSet(&klass->staticMethods, copyString("drawCircle", 10),OBJ_VAL(newNative(window_drawCircle)));
-//                    tableSet(&klass->staticMethods, copyString("drawImage", 9),   OBJ_VAL(newNative(window_drawImage)));
+                    tableSet(&klass->staticMethods, copyString("drawImage", 9),   OBJ_VAL(newNative(window_drawImage)));
+                    tableSet(&klass->staticMethods, copyString("loadImage", 9),   OBJ_VAL(newNative(window_loadImage)));
                 }
 
                 push(OBJ_VAL(klass));
@@ -1185,6 +1239,8 @@ static InterpretResult run() {
                     if (bindMethod(instance->klass, name)) {
                         break;
                     }
+
+                    frame = runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
 
                 if (IS_CLASS(peek(0))) {

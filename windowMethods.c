@@ -162,7 +162,7 @@ Value window_drawCircle(int argCount, Value* args) {
     return NIL_VAL;
 }
 
-/*#include <SDL_image.h>
+#include <SDL_image.h>
 static SDL_Texture* loadTexture(const char* path) {
     SDL_Surface* surface = IMG_Load(path);
     if (!surface) {
@@ -174,25 +174,105 @@ static SDL_Texture* loadTexture(const char* path) {
     return texture;
 }
 
+Value window_loadImage(int argCount, Value* args) {
+    if (argCount != 1 && argCount != 3) {
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "loadImage(path[, width, height]) expects 1 or 3 arguments.");
+        return NIL_VAL;
+    }
+
+    if (!IS_STRING(args[0])) {
+        runtimeError(vm.illegalArgumentsErrorClass, "loadImage: first argument must be a string path.");
+        return NIL_VAL;
+    }
+
+    ObjString* path = AS_STRING(args[0]);
+
+    SDL_Texture* tex = loadTexture(path->chars);
+    if (!tex) return NIL_VAL;
+
+    int texW, texH;
+    SDL_QueryTexture(tex, NULL, NULL, &texW, &texH);
+
+    ObjImage* image = newImage(tex, texW, texH);
+
+    if (argCount == 3) {
+        if (!IS_NUMBER(args[1]) || !IS_NUMBER(args[2])) {
+            runtimeError(vm.illegalArgumentsErrorClass, "loadImage: width and height must be numbers.");
+            return NIL_VAL;
+        }
+        image->width = (int)AS_NUMBER(args[1]);
+        image->height = (int)AS_NUMBER(args[2]);
+    }
+
+    return OBJ_VAL(image);
+}
+
 Value window_drawImage(int argCount, Value* args) {
-    if (argCount != 3 || !IS_NUMBER(args[0]) || !IS_NUMBER(args[1]) || !IS_STRING(args[2])) {
-        runtimeError(vm.illegalArgumentsErrorClass, "drawImage(x, y, path) expects 2 numbers and a string.");
+    if (argCount < 3 || argCount > 5) {
+        runtimeError(vm.illegalArgumentsErrorClass, "drawImage(x, y, imageOrPath[, width, height]) expects 3–5 arguments.");
+        return NIL_VAL;
+    }
+
+    if (!IS_NUMBER(args[0]) || !IS_NUMBER(args[1])) {
+        runtimeError(vm.illegalArgumentsErrorClass, "drawImage: x and y must be numbers.");
         return NIL_VAL;
     }
 
     int x = (int)AS_NUMBER(args[0]);
     int y = (int)AS_NUMBER(args[1]);
-    ObjString* path = AS_STRING(args[2]);
 
-    SDL_Texture* tex = loadTexture(path->chars);
-    if (!tex) return NIL_VAL;
-
+    SDL_Texture* tex = NULL;
     int w, h;
-    SDL_QueryTexture(tex, NULL, NULL, &w, &h);
+
+    if (IS_STRING(args[2])) {
+        ObjString* path = AS_STRING(args[2]);
+        tex = loadTexture(path->chars);
+        if (!tex) return NIL_VAL;
+        SDL_QueryTexture(tex, NULL, NULL, &w, &h);
+    } else if (IS_OBJ(args[2]) && AS_OBJ(args[2])->type == OBJ_IMAGE) {
+        ObjImage* image = (ObjImage*)AS_OBJ(args[2]);
+        tex = image->texture;
+        w = image->width;
+        h = image->height;
+    } else {
+        runtimeError(vm.illegalArgumentsErrorClass, "drawImage: third argument must be string or Image.");
+        return NIL_VAL;
+    }
+
+    if (argCount >= 5) {
+        if (!IS_NUMBER(args[3]) || !IS_NUMBER(args[4])) {
+            runtimeError(vm.illegalArgumentsErrorClass, "drawImage: width and height must be numbers.");
+            return NIL_VAL;
+        }
+        w = (int)AS_NUMBER(args[3]);
+        h = (int)AS_NUMBER(args[4]);
+    }
+
     SDL_Rect dst = {x, y, w, h};
     SDL_RenderCopy(gw.renderer, tex, NULL, &dst);
 
-    SDL_DestroyTexture(tex); // Optional: cache if reused
+    if (IS_STRING(args[2])) SDL_DestroyTexture(tex); // Don't destroy shared image
+
     return NIL_VAL;
 }
-*/
+
+Value Image_getWidth(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError(vm.illegalArgumentsErrorClass, "getWidth() takes no arguments.");
+        return NIL_VAL;
+    }
+
+    ObjImage* image = AS_IMAGE(args[-1]);
+    return NUMBER_VAL(image->width);
+}
+
+Value Image_getHeight(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError(vm.illegalArgumentsErrorClass, "getWidth() takes no arguments.");
+        return NIL_VAL;
+    }
+
+    ObjImage* image = AS_IMAGE(args[-1]);
+    return NUMBER_VAL(image->height);
+}

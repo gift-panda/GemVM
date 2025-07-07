@@ -1,0 +1,31 @@
+class Queen :: Piece {
+    init(pos, color, board) {
+        super.init(pos, color, board);
+        this.setImage("queen");
+        this.type = "queen";
+    }
+
+    getMoves() {
+        var moves = [];
+        var dirs = [[1,0], [-1,0], [0,1], [0,-1], [1,1], [-1,1], [1,-1], [-1,-1]];
+        var i = 0;
+        while (i < dirs.length()) {
+            var dx = dirs[i][0];
+            var dy = dirs[i][1];
+            var x = this.pos[0] + dx;
+            var y = this.pos[1] + dy;
+            while (this.inBounds(x, y)) {
+                if (this.isEmpty(x, y)) {
+                    moves.append([x, y]);
+                } else {
+                    if (this.isEnemy(x, y)) moves.append([x, y]);
+                    break;
+                }
+                x = x + dx;
+                y = y + dy;
+            }
+            i = i + 1;
+        }
+        return moves;
+    }
+}

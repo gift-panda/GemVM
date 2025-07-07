@@ -1,5 +1,7 @@
 #ifndef clox_object_h
 #define clox_object_h
+#include <SDL_render.h>
+
 #include "chunk.h"
 #include "common.h"
 #include "table.h"
@@ -38,8 +40,8 @@
 #define IS_MULTI_DISPATCH(value) isObjType(value, OBJ_MULTI_DISPATCH)
 #define AS_MULTI_DISPATCH(value) ((ObjMultiDispatch*)AS_OBJ(value))
 
-#define IS_META_DATA(value)    isObjType(value, OBJ_METADATA)
-#define AS_META_DATA(value)    ((ObjMetaData*)AS_OBJ(value))
+#define IS_IMAGE(value)    isObjType(value, OBJ_IMAGE)
+#define AS_IMAGE(value)    ((ObjImage*)AS_OBJ(value))
 
 typedef enum {
     OBJ_STRING,
@@ -53,7 +55,7 @@ typedef enum {
     OBJ_LIST,
     OBJ_MULTI_DISPATCH,
     OBJ_ERROR,
-    OBJ_METADATA,
+    OBJ_IMAGE,
 } ObjType;
 
 struct Obj {
@@ -135,9 +137,11 @@ typedef struct {
 
 typedef struct {
     Obj obj;
-    bool isStatic;
-    bool isPrivate;
-} ObjMetaData;
+    SDL_Texture* texture;
+    int width;
+    int height;
+} ObjImage;
+
 
 ObjBoundMethod* newBoundMethod(Value receiver, ObjString*);
 ObjClass* newClass(ObjString* name);
@@ -150,7 +154,7 @@ ObjString* copyString(const char* chars, int length);
 ObjUpvalue* newUpvalue(Value* slot);
 ObjList* newList();
 ObjMultiDispatch* newMultiDispatch(ObjString*);
-ObjMetaData* newMetaData(bool isStatic, bool isPrivate);
+ObjImage* newImage(SDL_Texture* texture, int width, int height);
 void printObject(Value value);
 
 static inline bool isObjType(Value value, ObjType type) {

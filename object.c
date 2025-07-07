@@ -232,6 +232,14 @@ ObjUpvalue* newUpvalue(Value* slot) {
     return upvalue;
 }
 
+ObjImage* newImage(SDL_Texture* texture, int width, int height) {
+    ObjImage* image = ALLOCATE_OBJ(ObjImage, OBJ_IMAGE);
+    image->texture = texture;
+    image->width = width;
+    image->height = height;
+    return image;
+}
+
 static void printFunction(ObjFunction* function) {
     if (function->name == NULL) {
         printf("<script>");
@@ -270,7 +278,6 @@ void printObject(Value value) {
             printf(">");
             break;
         case OBJ_LIST: {
-            //printf("list");
             ObjList* list = AS_LIST(value);
             printf("[");
             for (int i = 0; i < list->elements.count; i++) {

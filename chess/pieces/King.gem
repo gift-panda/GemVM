@@ -1,0 +1,23 @@
+class King :: Piece {
+    init(pos, color, board) {
+        super.init(pos, color, board);
+        this.setImage("king");
+        this.type = "king";
+    }
+
+    getMoves() {
+        var moves = [];
+        var dirs = [[1,0], [-1,0], [0,1], [0,-1], [1,1], [-1,1], [1,-1], [-1,-1]];
+        var i = 0;
+        while (i < dirs.length()) {
+            var x = this.pos[0] + dirs[i][0];
+            var y = this.pos[1] + dirs[i][1];
+            if (this.inBounds(x, y) and (this.isEmpty(x, y) or this.isEnemy(x, y))) {
+                moves.append([x, y]);
+            }
+            i = i + 1;
+        }
+        // TODO: castling
+        return moves;
+    }
+}

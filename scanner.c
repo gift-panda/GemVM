@@ -131,11 +131,13 @@ static TokenType checkKeyword(int start, int length,
 static TokenType identifierType() {
     switch (scanner.start[0]) {
         case 'a': return checkKeyword(1, 2, "nd", TOKEN_AND);
+        case 'b': return checkKeyword(1, 4, "reak", TOKEN_BREAK);
         case 'c':
             if (scanner.current - scanner.start > 1) {
                 switch (scanner.start[1]) {
                     case 'l': return checkKeyword(2, 3, "ass", TOKEN_CLASS);
                     case 'a': return checkKeyword(2, 3, "tch", TOKEN_CATCH);
+                    case 'o': return checkKeyword(2, 6, "ntinue", TOKEN_CONTINUE);
                 }
             }
         case 'e': return checkKeyword(1, 3, "lse", TOKEN_ELSE);
@@ -228,7 +230,7 @@ static Token identifier() {
         default: ;
     }
 
-    while (isAlpha(peek()) || isDigit(peek())) advance();
+    while (isAlpha(peek()) || isDigit(peek()) || scanner.previous.type == TOKEN_IMPORT && peek() == '.') advance();
     return makeToken(identifierType());
 }
 
@@ -286,6 +288,7 @@ Token scanToken() {
         case '/': return makeToken(TOKEN_SLASH);
         case '*': return makeToken(TOKEN_STAR);
         case '%': return makeToken(TOKEN_PERCENT);
+        case '\\': return makeToken(TOKEN_INS);
         case ':': if (match(':')) return makeToken(TOKEN_DOUBLE_COLON);
         case '!': return makeToken(
             match('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);
@@ -299,5 +302,6 @@ Token scanToken() {
 
     }
 
+    fprintf(stderr, "Unexpected character: %c\n", c);
     return errorToken("Unexpected character.");
 }

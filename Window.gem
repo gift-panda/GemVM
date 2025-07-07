@@ -1,5 +1,6 @@
 class Window{
-    init(){
-
-    }
+    init(){}
 }
+
+var a = "hola";
+println("hello");

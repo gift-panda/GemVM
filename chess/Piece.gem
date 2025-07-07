@@ -1,0 +1,35 @@
+class Piece {
+    init(pos, color, board) {
+        this.pos = pos;
+        this.color = color;
+        this.board = board;
+        this.img = nil;
+    }
+
+    setImage(pieceName) {
+        var prefix = "w";
+        if (this.color == "black") {
+            prefix = "b";
+        }
+
+        var path = "chess/imgs/" + prefix + "_" + pieceName + ".png";
+        this.img = Window.loadImage(path, tileSize - 10, tileSize - 10);
+    }
+
+    getMoves() {
+        return [];
+    }
+
+    isEnemy(x, y) {
+        var target = this.board.get(x, y);
+        return target != nil and target.color != this.color;
+    }
+
+    isEmpty(x, y) {
+        return this.board.get(x, y) == nil;
+    }
+
+    inBounds(x, y) {
+        return this.board.inBounds(x, y);
+    }
+}

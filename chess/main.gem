@@ -1,0 +1,76 @@
+var tileSize = 100;
+var boardSize = tileSize * 8;
+Window.init(boardSize, boardSize, "Chess");
+var win = Window;
+
+fun drawBoard(win, game) {
+    var y = 0;
+    while (y < 8) {
+        var x = 0;
+        while (x < 8) {
+            var light = (x + y) % 2 == 0;
+            var color = 15658734;
+            if (!light) {
+                color = 6710886;
+            }
+            win.drawRect(x * tileSize, y * tileSize, tileSize, tileSize, color);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+
+    // Draw legal moves if selected
+    if (game.selected != nil) {
+        var moves = game.selected[1];
+        var i = 0;
+        while (i < moves.length()) {
+            var move = moves[i];
+            var mx = move[0];
+            var my = move[1];
+            win.drawRect(mx * tileSize, my * tileSize, tileSize, tileSize, 65280); // green
+            i = i + 1;
+        }
+    }
+
+
+    // ✅ Draw pieces last (always on top)
+    var y = 0;
+    while (y < 8) {
+        var x = 0;
+        while (x < 8) {
+            var piece = game.board.get(x, y);
+            if (piece != nil) {
+                win.drawImage(x * tileSize + 3, y * tileSize, piece.img);
+            }
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+}
+
+var game = Game();
+var running = true;
+
+while (running) {
+    win.clear(0); // black background
+    drawBoard(win, game);
+    win.update();
+
+    var event = win.pollEvent();
+    if (event != nil) {
+        if (event[0] == "quit") {
+            running = false;
+        }
+
+        if (event[0] == "mouse_down") {
+            var mouse = win.getMousePos();
+            var mx = mouse[0];
+            var my = mouse[1];
+
+            var tx = mx \ tileSize;
+            var ty = my \ tileSize;
+
+            game.clickTile(tx, ty);
+        }
+    }
+}

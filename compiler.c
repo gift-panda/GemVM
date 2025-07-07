@@ -23,6 +23,17 @@ typedef struct {
     bool panicMode;
 } Parser;
 
+#define MAX_LOOP_DEPTH 64
+
+typedef struct {
+    int breakJumpOffsets[MAX_LOOP_DEPTH];
+    int breakCount;
+} LoopContext;
+
+static LoopContext loopStack[MAX_LOOP_DEPTH];
+static int loopDepth = 0;
+static int continueJumpOffset = -1;
+
 typedef enum {
     PREC_NONE,
     PREC_ASSIGNMENT,  // =
@@ -73,6 +84,8 @@ typedef struct Compiler {
     int localCount;
     Upvalue upvalues[UINT8_COUNT];
     int scopeDepth;
+
+    bool inLoop;
 } Compiler;
 
 typedef struct ClassCompiler {
@@ -211,6 +224,35 @@ static void patchJump(int offset) {
     currentChunk()->code[offset + 1] = jump & 0xff;
 }
 
+static void patchJumpTo(int offset, int target) {
+    int jump = target - offset - 2; // -2 for the operand bytes
+    if (jump > UINT16_MAX) {
+        error("Too much code to jump over.");
+    }
+
+    currentChunk()->code[offset] = (jump >> 8) & 0xff;
+    currentChunk()->code[offset + 1] = jump & 0xff;
+}
+
+static void beginLoop() {
+    if (loopDepth == MAX_LOOP_DEPTH) {
+        error("Too many nested loops.");
+        return;
+    }
+
+    LoopContext* loop = &loopStack[loopDepth++];
+    loop->breakCount = 0;
+}
+
+static void endLoop(int loopExitTarget) {
+    loopDepth--;
+    LoopContext* loop = &loopStack[loopDepth];
+
+    for (int i = 0; i < loop->breakCount; i++) {
+        patchJump(loop->breakJumpOffsets[i]);
+    }
+}
+
 static void initCompiler(Compiler* compiler, FunctionType type) {
     compiler->enclosing = current;
     compiler->function = NULL;
@@ -278,6 +320,7 @@ static void binary(bool canAssign) {
         case TOKEN_MINUS:         emitByte(OP_SUBTRACT); break;
         case TOKEN_STAR:          emitByte(OP_MULTIPLY); break;
         case TOKEN_PERCENT:       emitByte(OP_MOD); break;
+        case TOKEN_INS:           emitByte(OP_INS); break;
         case TOKEN_SLASH:         emitByte(OP_DIVIDE); break;
         case TOKEN_BANG_EQUAL:    emitBytes(OP_EQUAL, OP_NOT); break;
         case TOKEN_EQUAL_EQUAL:   emitByte(OP_EQUAL); break;
@@ -514,6 +557,7 @@ ParseRule rules[] = {
     [TOKEN_SLASH]         = {NULL,     binary, PREC_FACTOR},
     [TOKEN_STAR]          = {NULL,     binary, PREC_FACTOR},
     [TOKEN_PERCENT]       = {NULL,     binary, PREC_FACTOR},
+    [TOKEN_INS]       = {NULL,     binary, PREC_FACTOR},
     [TOKEN_BANG]          = {unary,    NULL,   PREC_NONE},
     [TOKEN_BANG_EQUAL]    = {NULL,     binary, PREC_EQUALITY},
     [TOKEN_EQUAL]         = {NULL,     NULL,   PREC_NONE},
@@ -859,35 +903,50 @@ static void forStatement() {
     }
 
     int loopStart = currentChunk()->count;
-
     int exitJump = -1;
+
     if (!match(TOKEN_SEMICOLON)) {
         expression();
-        consume(TOKEN_SEMICOLON, "Expect ';' after loop condition.");
-
+        consume(TOKEN_SEMICOLON, "Expect ';' after condition.");
         exitJump = emitJump(OP_JUMP_IF_FALSE);
-        emitByte(OP_POP); // Condition.
+        emitByte(OP_POP);
     }
 
+    int bodyJump = -1;
+    int incrementStart = -1;
+    int continueTarget;
+
     if (!match(TOKEN_RIGHT_PAREN)) {
-        int bodyJump = emitJump(OP_JUMP);
-        int incrementStart = currentChunk()->count;
+        bodyJump = emitJump(OP_JUMP);
+        incrementStart = currentChunk()->count;
         expression();
         emitByte(OP_POP);
         consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
-
         emitLoop(loopStart);
         loopStart = incrementStart;
         patchJump(bodyJump);
+
+        continueTarget = incrementStart;
+    } else {
+        consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+        continueTarget = loopStart;
     }
 
-    statement();
+    int prevContinue = continueJumpOffset;
+    continueJumpOffset = continueTarget;
+
+    beginLoop(); // break support
+    statement(); // loop body
     emitLoop(loopStart);
 
     if (exitJump != -1) {
         patchJump(exitJump);
         emitByte(OP_POP);
     }
+
+    continueJumpOffset = prevContinue;
+
+    endLoop(currentChunk()->count); // patch breaks
     endScope();
 }
 
@@ -960,17 +1019,30 @@ static void returnStatement() {
 
 static void whileStatement() {
     int loopStart = currentChunk()->count;
+
+    // Save and update the continue jump target
+    int prevContinue = continueJumpOffset;
+    continueJumpOffset = loopStart;
+
+    beginLoop(); // enable break support
+
     consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
-    expression();
+    expression(); // condition
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
 
     int exitJump = emitJump(OP_JUMP_IF_FALSE);
-    emitByte(OP_POP);
-    statement();
-    emitLoop(loopStart);
+    emitByte(OP_POP); // Pop condition result
+
+    statement(); // loop body
+
+    emitLoop(loopStart); // jump back to condition
 
     patchJump(exitJump);
-    emitByte(OP_POP);
+    emitByte(OP_POP); // Pop leftover condition result
+
+    endLoop(currentChunk()->count); // patch breaks
+
+    continueJumpOffset = prevContinue; // restore previous continue target
 }
 
 static void tryCatchStatement() {
@@ -1060,49 +1132,112 @@ static void declaration() {
     }
     if (parser.panicMode) synchronize();
 }
+#include <unistd.h>
+bool fileExists(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (f) {
+        fclose(f);
+        return true;
+    }
+    return false;
+}
+
+void replaceDotsWithSlashes(char* str) {
+    for (int i = 0; str[i]; i++) {
+        if (str[i] == '.') str[i] = '/';
+    }
+}
 
 char* appendStrings(const char* a, const char* b) {
-    size_t lenA = strlen(a);
-    size_t lenB = strlen(b);
-
-    // +1 for null terminator
-    char* result = (char*)malloc(lenA + lenB + 1);
-    if (result == NULL) return NULL;
-
-    memcpy(result, a, lenA);
-    memcpy(result + lenA, b, lenB);
-
-    result[lenA + lenB] = '\0'; // null terminate
+    size_t len = strlen(a) + strlen(b) + 1;
+    char* result = malloc(len);
+    strcpy(result, a);
+    strcat(result, b);
     return result;
 }
 
-static char* readFile(const char* path) {
-    FILE* file = fopen(path, "rb");
-    if (file == NULL) {
-        fprintf(stderr, "Could not open file \"%s\".\n", path);
-        exit(74);
-    }
-
-    fseek(file, 0L, SEEK_END);
-    size_t fileSize = ftell(file);
-    rewind(file);
-
-    char* buffer = (char*)malloc(fileSize + 1);
-    if (buffer == NULL) {
-        fprintf(stderr, "Not enough memory to read \"%s\".\n", path);
-        exit(74);
-    }
-
-    size_t bytesRead = fread(buffer, sizeof(char), fileSize, file);
-    if (bytesRead < fileSize) {
-        fprintf(stderr, "Could not read file \"%s\".\n", path);
-        exit(74);
-    }
-
-    buffer[bytesRead] = '\0';
-
-    fclose(file);
+char* readFile(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    size_t size = ftell(f);
+    rewind(f);
+    char* buffer = malloc(size + 1);
+    fread(buffer, 1, size, f);
+    buffer[size] = '\0';
+    fclose(f);
     return buffer;
+}
+
+// Build a path like "../" * depth + "dira/dirb/file.gem"
+char* buildPath(int depth, const char* modulePath) {
+    char prefix[PATH_MAX] = "";
+    for (int i = 0; i < depth; i++) {
+        strcat(prefix, "../");
+    }
+
+    char* fullPath = appendStrings(prefix, modulePath);
+    return fullPath;
+}
+
+char* loadModuleFile(const char* fileName) {
+    char* modulePath = strdup(fileName);
+    replaceDotsWithSlashes(modulePath);
+
+    char* relativePath = appendStrings(modulePath, ".gem");
+    free(modulePath);
+
+    // Try from current directory up to some limit (e.g., 10 levels)
+    for (int depth = 0; depth < 10; depth++) {
+        char* candidate = buildPath(depth, relativePath);
+        if (fileExists(candidate)) {
+            char* source = readFile(candidate);
+            free(relativePath);
+            free(candidate);
+            return source;
+        }
+        free(candidate);
+    }
+
+    fprintf(stderr, "Module not found: %s\n", fileName);
+    free(relativePath);
+    return nullptr;
+}
+
+static void breakStatement() {
+    if (loopDepth == 0) {
+        error("Cannot use 'break' outside of a loop.");
+        return;
+    }
+
+    consume(TOKEN_SEMICOLON, "Expect ';' after 'break'.");
+
+    int jump = emitJump(OP_JUMP);
+
+    LoopContext* loop = &loopStack[loopDepth - 1];
+    loop->breakJumpOffsets[loop->breakCount++] = jump;
+}
+
+static void emitJumpTo(uint8_t instruction, int target) {
+    emitByte(instruction);
+    int offset = target - currentChunk()->count - 2;  // 2 = size of jump operands
+    if (offset > UINT16_MAX) {
+        error("Too much code to jump over.");
+    }
+    emitByte((offset >> 8) & 0xff);
+    emitByte(offset & 0xff);
+}
+
+
+static void continueStatement() {
+    if (loopDepth == 0) {
+        error("Cannot use 'continue' outside of a loop.");
+        return;
+    }
+
+    consume(TOKEN_SEMICOLON, "Expect ';' after 'continue'.");
+    printf("continue statement to: %d\n", continueJumpOffset);
+    emitLoop(continueJumpOffset);
 }
 
 static void statement() {
@@ -1112,18 +1247,22 @@ static void statement() {
         consume(TOKEN_IDENTIFIER, "Expect file name after import.");
         ObjString* fileName = copyString(parser.previous.start,
                                          parser.previous.length);
-        consume(TOKEN_SEMICOLON, "Expect ';' after file name.");
+        if (!check(TOKEN_SEMICOLON)) {
+            errorAtCurrent("Expect ';' after file name.");
+        }
+        char* file = fileName->chars;
 
-        char* file = appendStrings("../", fileName->chars);
-        file = appendStrings(file, ".gem");
-
-        char* source = readFile(file);
+        char* source = loadModuleFile(file);
+        if (source == NULL) {
+            exit(70);
+        }
 
         saveState();
         ObjFunction* function = compile(source);
         restoreState();
 
         function->name = fileName;
+        printObject(OBJ_VAL(fileName));
         int constant = makeConstant(OBJ_VAL(function));
         emitBytes(OP_CLOSURE, constant);
         emitBytes(OP_CALL, 0);
@@ -1132,7 +1271,6 @@ static void statement() {
         emitByte(OP_POP);
 
         free(source);
-        free(file);
     }
     else if (match(TOKEN_PRINTLN)) {
         printlnStatement();
@@ -1142,8 +1280,11 @@ static void statement() {
         forStatement();
     } else if (match(TOKEN_IF)) {
         ifStatement();
-    }
-    else if (match(TOKEN_THROW)) {
+    }else if (match(TOKEN_BREAK)) {
+        breakStatement();
+    }else if (match(TOKEN_CONTINUE)) {
+        continueStatement();
+    }else if (match(TOKEN_THROW)) {
         throwStatement();
     } else if (match(TOKEN_LEFT_BRACE)) {
         beginScope();
