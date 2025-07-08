@@ -10,7 +10,7 @@ class Game {
         if (this.selected == nil) {
             // Nothing selected yet
             if (clickedPiece != nil and clickedPiece.color == this.board.turn) {
-                var moves = clickedPiece.getMoves();
+                var moves = clickedPiece.getLegalMoves();
                 this.selected = [clickedPiece, moves];
             }
         } else {
@@ -30,6 +30,10 @@ class Game {
 
             if (legal) {
                 this.board.movePiece(piece.pos, [x, y]);
+                if(this.board.wKing.isInCheck() and this.board.wKing.isInMate())
+                    println("Black Won!");
+                if(this.board.bKing.isInCheck() and this.board.bKing.isInMate())
+                    println("White Won!");
             }
 
             this.selected = nil; // Deselect after click (move or cancel)

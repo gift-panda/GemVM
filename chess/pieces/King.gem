@@ -20,4 +20,33 @@ class King :: Piece {
         // TODO: castling
         return moves;
     }
+
+    isInCheck(){
+        for(var i = 0; i < 8; i = i + 1){
+            for(var j = 0; j < 8; j = j + 1){
+                var piece = this.board.get(i, j);
+                if(!this.isEmpty(i, j) and this.isEnemy(i, j)){
+                    var moves = piece.getMoves();
+                    for(var x = 0; x < moves.length(); x = x + 1){
+                        if(moves[x][0] == this.pos[0] and moves[x][1] == this.pos[1]) return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    isInMate(){
+        for(var i = 0; i < 8; i = i + 1){
+            for(var j = 0; j < 8; j = j + 1){
+                var piece = this.board.get(i, j);
+                if(!this.isEmpty(i, j) and !this.isEnemy(i, j)){
+                    if(piece.getLegalMoves().length() != 0){
+                        return false;
+                    }
+                }
+            }
+        }
+        return true;
+    }
 }

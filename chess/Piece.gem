@@ -32,4 +32,36 @@ class Piece {
     inBounds(x, y) {
         return this.board.inBounds(x, y);
     }
+
+    getLegalMoves() {
+            var moves = this.getMoves();
+            var legal = [];
+
+            var originalPos = this.pos;
+
+            for (var i = 0; i < moves.length(); i = i + 1) {
+                var target = moves[i];
+
+                // Save state
+                var captured = this.board.get(target);
+
+                this.board.set(originalPos, nil);
+                this.board.set(target, this);
+                this.pos = target;
+
+                // Check if king is in check
+                var safe = true;
+                if (this.color == "white" and this.board.wKing.isInCheck()) safe = false;
+                if (this.color == "black" and this.board.bKing.isInCheck()) safe = false;
+
+                // Undo move
+                this.board.set(target, captured);
+                this.board.set(originalPos, this);
+                this.pos = originalPos;
+
+                if (safe) legal.append(target);
+            }
+
+            return legal;
+        }
 }

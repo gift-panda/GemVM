@@ -61,6 +61,7 @@ int main(int argc, const char* argv[]) {
     initVM();
     runFile("Window.gem");
     runFile("Error.gem");
+
     runFile("chess/Board.gem");
     runFile("chess/Piece.gem");
     runFile("chess/pieces/Bishop.gem");
@@ -71,6 +72,7 @@ int main(int argc, const char* argv[]) {
     runFile("chess/pieces/Rook.gem");
     runFile("chess/Game.gem");
     runFile("chess/main.gem");
+
 
 
     if (argc == 1) {

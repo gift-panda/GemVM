@@ -40,6 +40,9 @@ fun drawBoard(win, game) {
         while (x < 8) {
             var piece = game.board.get(x, y);
             if (piece != nil) {
+                if(piece.type == "king" and piece.isInCheck()){
+                    win.drawRect(x * tileSize, y * tileSize, tileSize, tileSize, 16711680);
+                }
                 win.drawImage(x * tileSize + 3, y * tileSize, piece.img);
             }
             x = x + 1;

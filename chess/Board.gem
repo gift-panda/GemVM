@@ -16,6 +16,9 @@ class Board {
         this.pieces = [];
         this.turn = "white";
 
+        this.bKing = nil;
+        this.wKing = nil;
+
         this.initPosition();
     }
 
@@ -38,12 +41,28 @@ class Board {
         }
         return this.grid[y][x];
     }
+    get(pos) {
+
+        var x = pos[0]; var y = pos[1];
+            if (!this.inBounds(x, y)) {
+                return nil;
+            }
+            return this.grid[y][x];
+        }
 
     set(x, y, piece) {
         if (this.inBounds(x, y)) {
             this.grid[y][x] = piece;
         }
     }
+    set(pos, piece) {
+            var x = pos[0]; var y = pos[1];
+
+
+            if (this.inBounds(x, y)) {
+                this.grid[y][x] = piece;
+            }
+        }
 
     movePiece(from, to) {
         var fx = from[0];
@@ -88,6 +107,7 @@ class Board {
 
             // White back row
             var p1 = pieceType([x, 7], "white", this);
+            if(pieceType == King) this.wKing = p1;
             this.set(x, 7, p1);
             this.pieces.append(p1);
 
@@ -98,6 +118,7 @@ class Board {
 
             // Black back row
             var p3 = pieceType([x, 0], "black", this);
+            if(pieceType == King) this.bKing = p3;
             this.set(x, 0, p3);
             this.pieces.append(p3);
 
