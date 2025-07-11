@@ -29,6 +29,19 @@ Value window_init(int argCount, Value* args) {
     gw.renderer = SDL_CreateRenderer(gw.window, -1, SDL_RENDERER_ACCELERATED);
     gw.isInitialized = true;
 
+    return NIL_VAL;
+}
+
+Value window_exit(int argCount, Value* args) {
+    if (!gw.isInitialized) return NIL_VAL;  // No window to clean up
+
+    SDL_DestroyRenderer(gw.renderer);
+    SDL_DestroyWindow(gw.window);
+    SDL_Quit();
+
+    gw.window = NULL;
+    gw.renderer = NULL;
+    gw.isInitialized = false;
 
     return NIL_VAL;
 }

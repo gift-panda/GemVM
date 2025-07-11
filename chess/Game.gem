@@ -29,7 +29,34 @@ class Game {
             }
 
             if (legal) {
+                if (piece.type == "king" and this.abs(x - piece.pos[0]) == 2) {
+                    var rookFromCol;
+                    var rookToCol;
+                    if (x > piece.pos[0]) {
+                        rookFromCol = 7;
+                        rookToCol = x - 1;
+                    } else {
+                        rookFromCol = 0;
+                        rookToCol = x + 1;
+                    }
+                    this.board.movePiece([rookFromCol, y], [rookToCol, y]);
+                    if (this.board.turn == "white") {
+                        this.board.turn = "black";
+                    } else {
+                        this.board.turn = "white";
+                    }
+                }
+
                 this.board.movePiece(piece.pos, [x, y]);
+
+                if(piece.type == "pawn"){
+                    if(piece.color == "white" and y == 0){
+                        this.board.set([x, y], Queen([x, y], "white", this.board));
+                    }
+                    if(piece.color == "black" and y == 7){
+                        this.board.set([x, y], Queen([x, y], "black", this.board));
+                    }
+                }
                 if(this.board.wKing.isInCheck() and this.board.wKing.isInMate())
                     println("Black Won!");
                 if(this.board.bKing.isInCheck() and this.board.bKing.isInMate())
@@ -40,8 +67,8 @@ class Game {
         }
     }
 
-    draw(win) {
-        // To be implemented in GUI step
-        // Calls board.draw(win), highlights legal moves, etc.
+    abs(x){
+        if(x < 0) return -x;
+        return x;
     }
 }

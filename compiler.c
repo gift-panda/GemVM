@@ -1257,12 +1257,21 @@ static void statement() {
             exit(70);
         }
 
-        saveState();
+        Scanner* sc = getScanner();
+
+        //Storing state
+        int prevLine = sc->line;
+        const char* prevStart = sc->start;
+        const char* prevCurrent = sc->current;
+
         ObjFunction* function = compile(source);
-        restoreState();
+
+        //Restoring state
+        sc->current = prevCurrent;
+        sc->start = prevStart;
+        sc->line = prevLine;
 
         function->name = fileName;
-        printObject(OBJ_VAL(fileName));
         int constant = makeConstant(OBJ_VAL(function));
         emitBytes(OP_CLOSURE, constant);
         emitBytes(OP_CALL, 0);

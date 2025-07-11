@@ -42,7 +42,6 @@ class Board {
         return this.grid[y][x];
     }
     get(pos) {
-
         var x = pos[0]; var y = pos[1];
             if (!this.inBounds(x, y)) {
                 return nil;
@@ -75,7 +74,6 @@ class Board {
 
         var target = this.get(tx, ty);
         if (target != nil) {
-            // Remove captured piece from list
             var i = 0;
             while (i < this.pieces.length()) {
                 if (this.pieces[i] == target) {
@@ -90,7 +88,6 @@ class Board {
         this.set(fx, fy, nil);
         piece.pos = [tx, ty];
 
-        // Flip turn
         if (this.turn == "white") {
             this.turn = "black";
         } else {

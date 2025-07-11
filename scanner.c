@@ -4,17 +4,6 @@
 #include "common.h"
 #include "scanner.h"
 
-typedef struct {
-    const char* start;
-    const char* current;
-    int line;
-    Token previous;
-
-    const char* prevstart;
-    const char* prevcurrent;
-    int prevline;
-} Scanner;
-
 Scanner scanner;
 
 void initScanner(const char* source) {
@@ -23,16 +12,8 @@ void initScanner(const char* source) {
     scanner.line = 1;
 }
 
-void saveState() {
-    scanner.prevstart = scanner.start;
-    scanner.prevcurrent = scanner.current;
-    scanner.prevline = scanner.line;
-}
-
-void restoreState() {
-    scanner.start = scanner.prevstart;
-    scanner.current = scanner.prevcurrent;
-    scanner.line = scanner.prevline;
+Scanner* getScanner() {
+    return &scanner;
 }
 
 static bool isAlpha(char c) {

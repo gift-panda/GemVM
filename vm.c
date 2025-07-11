@@ -1218,6 +1218,7 @@ static InterpretResult run() {
                     tableSet(&klass->staticMethods, copyString("drawCircle", 10),OBJ_VAL(newNative(window_drawCircle)));
                     tableSet(&klass->staticMethods, copyString("drawImage", 9),   OBJ_VAL(newNative(window_drawImage)));
                     tableSet(&klass->staticMethods, copyString("loadImage", 9),   OBJ_VAL(newNative(window_loadImage)));
+                    tableSet(&klass->staticMethods, copyString("exit", 4),        OBJ_VAL(newNative(window_exit)));
                 }
 
                 push(OBJ_VAL(klass));

@@ -62,19 +62,6 @@ int main(int argc, const char* argv[]) {
     runFile("Window.gem");
     runFile("Error.gem");
 
-    runFile("chess/Board.gem");
-    runFile("chess/Piece.gem");
-    runFile("chess/pieces/Bishop.gem");
-    runFile("chess/pieces/King.gem");
-    runFile("chess/pieces/Knight.gem");
-    runFile("chess/pieces/Pawn.gem");
-    runFile("chess/pieces/Queen.gem");
-    runFile("chess/pieces/Rook.gem");
-    runFile("chess/Game.gem");
-    runFile("chess/main.gem");
-
-
-
     if (argc == 1) {
         repl();
     } else if (argc == 2) {
@@ -84,6 +71,6 @@ int main(int argc, const char* argv[]) {
         exit(64);
     }
 
-    freeVM();
+    //freeVM();
     return 0;
 }

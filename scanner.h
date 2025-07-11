@@ -32,12 +32,22 @@ typedef struct {
     int line;
 } Token;
 
+typedef struct {
+    const char* start;
+    const char* current;
+    int line;
+    Token previous;
+
+    const char* prevstart;
+    const char* prevcurrent;
+    int prevline;
+} Scanner;
+
 void initScanner(const char* source);
 Token scanToken();
 Token returnToken();
 
-void saveState();
-void restoreState();
+Scanner* getScanner();
 
 
 #endif

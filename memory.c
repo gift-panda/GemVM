@@ -109,6 +109,8 @@ static void blackenObject(Obj* object) {
             ObjClass* klass = (ObjClass*)object;
             markObject((Obj*)klass->name);
             markTable(&klass->methods);
+            markTable(&klass->staticMethods);
+            markTable(&klass->staticVars);
             break;
         }
         case OBJ_INSTANCE: {
@@ -160,10 +162,6 @@ static void freeObject(Obj* object) {
             FREE(ObjFunction, object);
             break;
         }
-        case OBJ_NATIVE: {
-            FREE(ObjNative, object);
-            break;
-        }
         case OBJ_CLOSURE: {
             FREE(ObjClosure, object);
             break;
@@ -179,12 +177,15 @@ static void freeObject(Obj* object) {
         case OBJ_CLASS: {
             ObjClass* klass = (ObjClass*)object;
             freeTable(&klass->methods);
+            freeTable(&klass->staticMethods);
+            freeTable(&klass->staticVars);
             FREE(ObjClass, object);
             break;
         }
         case OBJ_INSTANCE: {
             ObjInstance* instance = (ObjInstance*)object;
             freeTable(&instance->fields);
+
             FREE(ObjInstance, object);
             break;
         }
@@ -210,6 +211,7 @@ void freeObjects() {
         Obj* next = object->next;
         freeObject(object);
         object = next;
+        printf("%p\n", next);
     }
 
     free(vm.grayStack);

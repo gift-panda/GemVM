@@ -4,6 +4,7 @@ class Piece {
         this.color = color;
         this.board = board;
         this.img = nil;
+        this.hasMoved = false;
     }
 
     setImage(pieceName) {

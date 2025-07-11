@@ -1,9 +1,18 @@
+import chess.Board;
+import chess.Piece;
+import chess.pieces.Bishop;
+import chess.pieces.King;
+import chess.pieces.Knight;
+import chess.pieces.Pawn;
+import chess.pieces.Queen;
+import chess.pieces.Rook;
+import chess.Game;
+
 var tileSize = 100;
 var boardSize = tileSize * 8;
 Window.init(boardSize, boardSize, "Chess");
-var win = Window;
 
-fun drawBoard(win, game) {
+fun drawBoard(Window, game) {
     var y = 0;
     while (y < 8) {
         var x = 0;
@@ -13,7 +22,7 @@ fun drawBoard(win, game) {
             if (!light) {
                 color = 6710886;
             }
-            win.drawRect(x * tileSize, y * tileSize, tileSize, tileSize, color);
+            Window.drawRect(x * tileSize, y * tileSize, tileSize, tileSize, color);
             x = x + 1;
         }
         y = y + 1;
@@ -27,7 +36,7 @@ fun drawBoard(win, game) {
             var move = moves[i];
             var mx = move[0];
             var my = move[1];
-            win.drawRect(mx * tileSize, my * tileSize, tileSize, tileSize, 65280); // green
+            Window.drawRect(mx * tileSize, my * tileSize, tileSize, tileSize, 65280); // green
             i = i + 1;
         }
     }
@@ -41,9 +50,9 @@ fun drawBoard(win, game) {
             var piece = game.board.get(x, y);
             if (piece != nil) {
                 if(piece.type == "king" and piece.isInCheck()){
-                    win.drawRect(x * tileSize, y * tileSize, tileSize, tileSize, 16711680);
+                    Window.drawRect(x * tileSize, y * tileSize, tileSize, tileSize, 16711680);
                 }
-                win.drawImage(x * tileSize + 3, y * tileSize, piece.img);
+                Window.drawImage(x * tileSize + 3, y * tileSize, piece.img);
             }
             x = x + 1;
         }
@@ -54,19 +63,20 @@ fun drawBoard(win, game) {
 var game = Game();
 var running = true;
 
-while (running) {
-    win.clear(0); // black background
-    drawBoard(win, game);
-    win.update();
+while (true) {
+    Window.clear(0); // black background
+    drawBoard(Window, game);
+    Window.update();
 
-    var event = win.pollEvent();
+    var event = Window.pollEvent();
     if (event != nil) {
         if (event[0] == "quit") {
-            running = false;
+            Window.exit();
+            break;
         }
 
         if (event[0] == "mouse_down") {
-            var mouse = win.getMousePos();
+            var mouse = Window.getMousePos();
             var mx = mouse[0];
             var my = mouse[1];
 
