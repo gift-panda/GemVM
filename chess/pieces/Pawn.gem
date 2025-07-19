@@ -1,0 +1,51 @@
+class Pawn :: Piece {
+    init(pos, color, board) {
+        super.init(pos, color, board);
+        this.setImage("pawn");
+        this.type = "pawn";
+    }
+
+    getMoves() {
+        var moves = [];
+
+        var dir;
+        if (this.color == "white") {
+            dir = -1;
+        } else {
+            dir = 1;
+        }
+
+        var startRow;
+        if (this.color == "white") {
+            startRow = 6;
+        } else {
+            startRow = 1;
+        }
+
+        var x = this.pos[0];
+        var y = this.pos[1];
+
+        var fy = y + dir;
+        if (this.inBounds(x, fy) and this.isEmpty(x, fy)) {
+            moves.append([x, fy]);
+
+            var fy2 = y + 2 * dir;
+            if (y == startRow and this.inBounds(x, fy2) and this.isEmpty(x, fy2)) {
+                moves.append([x, fy2]);
+            }
+        }
+
+        var cx1 = x - 1;
+        if (this.inBounds(cx1, fy) and this.isEnemy(cx1, fy)) {
+            moves.append([cx1, fy]);
+        }
+
+        var cx2 = x + 1;
+        if (this.inBounds(cx2, fy) and this.isEnemy(cx2, fy)) {
+            moves.append([cx2, fy]);
+        }
+
+        // TODO: en passant, promotion
+        return moves;
+    }
+}

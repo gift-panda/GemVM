@@ -1,0 +1,90 @@
+import Window;
+import chess.Board;
+import chess.Piece;
+import chess.pieces.Bishop;
+import chess.pieces.King;
+import chess.pieces.Knight;
+import chess.pieces.Pawn;
+import chess.pieces.Queen;
+import chess.pieces.Rook;
+import chess.Game;
+
+var tileSize = 100;
+var boardSize = tileSize * 8;
+Window.init(boardSize, boardSize, "Chess");
+
+func drawBoard(Window, game) {
+    var y = 0;
+    while (y < 8) {
+        var x = 0;
+        while (x < 8) {
+            var light = (x + y) % 2 == 0;
+            var color = 15658734;
+            if (!light) {
+                color = 6710886;
+            }
+            Window.drawRect(x * tileSize, y * tileSize, tileSize, tileSize, color);
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+
+    // Draw legal moves if selected
+    if (game.selected != nil) {
+        var moves = game.selected[1];
+        var i = 0;
+        while (i < moves.length()) {
+            var move = moves[i];
+            var mx = move[0];
+            var my = move[1];
+            Window.drawRect(mx * tileSize, my * tileSize, tileSize, tileSize, 65280); // green
+            i = i + 1;
+        }
+    }
+
+
+    // ✅ Draw pieces last (always on top)
+    var y = 0;
+    while (y < 8) {
+        var x = 0;
+        while (x < 8) {
+            var piece = game.board.get(x, y);
+            if (piece != nil) {
+                if(piece.type == "king" and piece.isInCheck()){
+                    Window.drawRect(x * tileSize, y * tileSize, tileSize, tileSize, 16711680);
+                }
+                Window.drawImage(x * tileSize + 3, y * tileSize, piece.img);
+            }
+            x = x + 1;
+        }
+        y = y + 1;
+    }
+}
+
+var game = Game();
+var running = true;
+
+while (true) {
+    Window.clear(0); // black background
+    drawBoard(Window, game);
+    Window.update();
+
+    var event = Window.pollEvent();
+    if (event != nil) {
+        if (event[0] == "quit") {
+            Window.exit();
+            break;
+        }
+
+        if (event[0] == "mouse_down") {
+            var mouse = Window.getMousePos();
+            var mx = mouse[0];
+            var my = mouse[1];
+
+            var tx = mx \ tileSize;
+            var ty = my \ tileSize;
+
+            game.clickTile(tx, ty);
+        }
+    }
+}

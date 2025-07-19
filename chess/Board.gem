@@ -1,0 +1,130 @@
+class Board {
+    init() {
+        this.grid = [];
+        var y = 0;
+        while (y < 8) {
+            var row = [];
+            var x = 0;
+            while (x < 8) {
+                row.append(nil);
+                x = x + 1;
+            }
+            this.grid.append(row);
+            y = y + 1;
+        }
+
+        this.pieces = [];
+        this.turn = "white";
+
+        this.bKing = nil;
+        this.wKing = nil;
+
+        this.initPosition();
+    }
+
+    inBounds(x, y) {
+        if (x >= 0) {
+            if (x < 8) {
+                if (y >= 0) {
+                    if (y < 8) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    get(x, y) {
+        if (!this.inBounds(x, y)) {
+            return nil;
+        }
+        return this.grid[y][x];
+    }
+    get(pos) {
+        var x = pos[0]; var y = pos[1];
+            if (!this.inBounds(x, y)) {
+                return nil;
+            }
+            return this.grid[y][x];
+        }
+
+    set(x, y, piece) {
+        if (this.inBounds(x, y)) {
+            this.grid[y][x] = piece;
+        }
+    }
+    set(pos, piece) {
+            var x = pos[0]; var y = pos[1];
+
+
+            if (this.inBounds(x, y)) {
+                this.grid[y][x] = piece;
+            }
+        }
+
+    movePiece(from, to) {
+        var fx = from[0];
+        var fy = from[1];
+        var tx = to[0];
+        var ty = to[1];
+
+        var piece = this.get(fx, fy);
+        if (piece == nil) return;
+
+        var target = this.get(tx, ty);
+        if (target != nil) {
+            var i = 0;
+            while (i < this.pieces.length()) {
+                if (this.pieces[i] == target) {
+                    this.pieces.remove(i);
+                    break;
+                }
+                i = i + 1;
+            }
+        }
+
+        this.set(tx, ty, piece);
+        this.set(fx, fy, nil);
+        piece.pos = [tx, ty];
+
+        if (this.turn == "white") {
+            this.turn = "black";
+        } else {
+            this.turn = "white";
+        }
+    }
+
+    initPosition() {
+        var pieceRow = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook];
+
+        var x = 0;
+        while (x < 8) {
+            var pieceType = pieceRow[x];
+
+            // White back row
+            var p1 = pieceType([x, 7], "white", this);
+            if(pieceType == King) this.wKing = p1;
+            this.set(x, 7, p1);
+            this.pieces.append(p1);
+
+            // White pawn
+            var p2 = Pawn([x, 6], "white", this);
+            this.set(x, 6, p2);
+            this.pieces.append(p2);
+
+            // Black back row
+            var p3 = pieceType([x, 0], "black", this);
+            if(pieceType == King) this.bKing = p3;
+            this.set(x, 0, p3);
+            this.pieces.append(p3);
+
+            // Black pawn
+            var p4 = Pawn([x, 1], "black", this);
+            this.set(x, 1, p4);
+            this.pieces.append(p4);
+
+            x = x + 1;
+        }
+    }
+}

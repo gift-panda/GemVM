@@ -1,0 +1,18 @@
+class Error{
+    init(msg){
+        this.msg = msg;
+        this.stackTrace = nil;
+    }
+    toString(){
+        return this.msg + "\n" + this.stackTrace;
+    }
+}
+
+class IndexOutOfBoundsError :: Error{}
+class TypeError :: Error{}
+class NameError :: Error{}
+class AccessError :: Error{}
+class IllegalArgumentError :: Error{}
+class LookUpError :: Error{}
+class FormatError :: Error{}
+
