@@ -765,7 +765,6 @@ static InterpretResult run() {
     register CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
     #define READ_BYTE() (*frame->ip++)
-       // if(frame->hasTry != -1) frame->hasTry--;
 
     #define READ_SHORT() \
     (frame->ip += 2, \
@@ -1552,12 +1551,15 @@ static InterpretResult run() {
                 break;
             }
             case OP_CONSTANT_LONG: {
-                uint32_t index = (READ_BYTE() << 16) |
-                                 (READ_BYTE() << 8) |
-                                 READ_BYTE();
-                push(frame->closure->function->chunk.constants.values[index]);
-                break;
+                    uint32_t b1 = READ_BYTE();
+                    uint32_t b2 = READ_BYTE();
+                    uint32_t b3 = READ_BYTE();
+                    uint32_t index = (b1 << 16) | (b2 << 8) | b3;
+                    push(frame->closure->function->chunk.constants.values[index]);
+
+                    break;
             }
+
             case OP_THROW: {
                 Value error = pop();
                 if (!IS_INSTANCE(error)) {

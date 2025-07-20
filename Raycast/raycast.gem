@@ -8,10 +8,10 @@ win.init(WIDTH, HEIGHT, "Raycasting Demo");
 var MAP = [
     "###########",
     "#...... ###",
-    "#..###.  ##",
-    "#..#.#.   #",
-    "#..#.#.   #",
-    "#.. ...   #",
+    "#..###...##",
+    "#..#.#....#",
+    "#..#.#....#",
+    "#.........#",
     "###########"
 ];
 var TILE_SIZE = 64;
@@ -23,21 +23,30 @@ var player_y = TILE_SIZE * 1.5;
 var player_angle = 0;
 var FOV = Math.PI / 3;
 var NUM_RAYS = WIDTH;
-var MAX_DEPTH = 800;
+var MAX_DEPTH = 200;
 var DELTA_ANGLE = FOV / NUM_RAYS;
 var DIST = (WIDTH / 2) / Math.tan(FOV / 2);
 var SCALE = 1;
 var SPEED = 2;
 var ROT_SPEED = 0.03;
 
-var BLACK = 0;
-var DARK_GRAY = 2630720;
-var GRAY = 6579300;
-
+var showEditor = false;
+var TILE_DISPLAY_SIZE = HEIGHT \ MAP.length();
+var PANEL_WIDTH = MAP_WIDTH * TILE_DISPLAY_SIZE;
+var PANEL_HEIGHT = MAP_HEIGHT * TILE_DISPLAY_SIZE;
+var EDITOR_OFFSET = MAP[0].length() * TILE_SIZE;
 func min(a, b){
     if(a > b) return b;
     return a;
 }
+
+func color(r, g, b){
+    return r * 65536 + g * 256 + b;
+}
+
+var DARK_GRAY = color(64, 64, 64);
+var GRAY = color(128, 128, 128);
+var BLACK = color(0, 0, 0);
 
 func calc(ray, start_angle){
     var angle = start_angle + ray * DELTA_ANGLE;
@@ -55,9 +64,9 @@ func calc(ray, start_angle){
                 var corrected_depth = depth * Math.cos(angle - player_angle);
                 var wall_height = Math.min(HEIGHT, (TILE_SIZE * DIST) / (corrected_depth + 0.0001));
                 var s = 255 \ (1 + corrected_depth * corrected_depth * 0.0001);
-                var color = s * 65536 + s * 256 + s;
+                var shade = color(s, s, s);
 
-                win.drawRect(ray * SCALE, HEIGHT \ 2 - wall_height \ 2, SCALE, wall_height, color);
+                win.drawRect(ray * SCALE, HEIGHT \ 2 - wall_height \ 2, SCALE, wall_height, shade);
                 break;
             }
         }
@@ -73,6 +82,21 @@ func cast_rays() {
 }
 
 
+func draw_editor() {
+    for (var y = 0; y < MAP_HEIGHT; y = y + 1) {
+        for (var x = 0; x < MAP_WIDTH; x = x + 1) {
+            var tile = MAP[y].charAt(x);
+            var color;
+            if(tile == "#") color = GRAY; else color = BLACK;
+            win.drawRect(WIDTH + x * (TILE_DISPLAY_SIZE - 30),
+                         y * TILE_DISPLAY_SIZE,
+                         TILE_DISPLAY_SIZE - 30, TILE_DISPLAY_SIZE,
+                         color);
+        }
+    }
+}
+
+
 var forward = false;
 var backward = false;
 var leftward = false;
@@ -80,89 +104,122 @@ var rightward = false;
 var left = false;
 var right = false;
 
-while (true) {
+func main(){
+    while (true) {
 
-    var event = win.pollEvent();
-    if (event != nil) {
-        if (event[0] == "quit") {
-            win.exit();
-            break;
+        var event = win.pollEvent();
+        if (event != nil) {
+            if (event[0] == "quit") {
+                win.exit();
+                break;
+            }
+
+            if (event[0] == "key_down") {
+                if (event[1] == "Left") left = true;
+                if (event[1] == "Right") right = true;
+                if (event[1] == "W") forward = true;
+                if (event[1] == "S") backward = true;
+                if (event[1] == "A") leftward = true;
+                if (event[1] == "D") rightward = true;
+                if (event[1] == "Tab") {
+                    showEditor = !showEditor;
+                    win.exit();
+                    if(showEditor)
+                        win.init(WIDTH + (TILE_DISPLAY_SIZE - 30) * MAP[0].length(), HEIGHT, "Raycasting Editor");
+                    else 
+                        win.init(WIDTH, HEIGHT, "Raycasting Editor");
+                }
+            }
+
+            if (event[0] == "key_up") {
+                if (event[1] == "Left") left = false;
+                if (event[1] == "Right") right = false;
+                if (event[1] == "W") forward = false;
+                if (event[1] == "S") backward = false;
+                if (event[1] == "A") leftward = false;
+                if (event[1] == "D") rightward = false;
+            }
+
+            if (event[0] == "mouse_down" and showEditor) {
+                var mouse = win.getMousePos();
+                var mx = mouse[0];
+                var my = mouse[1];
+                var tx = (mx - WIDTH) \ (TILE_DISPLAY_SIZE - 30);
+                var ty = my \ TILE_DISPLAY_SIZE;
+
+                if (0 <= tx and tx < MAP_WIDTH and 0 <= ty and ty < MAP_HEIGHT) {
+                    var row = MAP[ty];
+                    println(row.substring(0, tx));
+                    var ch = row.charAt(tx);
+                    var char = "#";
+                    if(ch == "#") char = ".";
+                    var newRow = row.substring(0, tx) + char + row.substring(tx + 1, row.length());
+                    println(newRow);
+                    MAP[ty] = newRow;
+                }
+            }
+
         }
 
-        if (event[0] == "key_down") {
-            if (event[1] == "Left") left = true;
-            if (event[1] == "Right") right = true;
-            if (event[1] == "W") forward = true;
-            if (event[1] == "S") backward = true;
-            if (event[1] == "A") leftward = true;
-            if (event[1] == "D") rightward = true;
+
+        if(left) player_angle = player_angle - ROT_SPEED;
+        if(right) player_angle = player_angle + ROT_SPEED;
+
+        if (forward) {
+            var dx = Math.cos(player_angle) * SPEED;
+            var dy = Math.sin(player_angle) * SPEED;
+
+            var nx = player_x + dx;
+            var ny = player_y + dy;
+            if (MAP[ny \ TILE_SIZE].charAt(nx \ TILE_SIZE) != "#") {
+                player_x = nx;
+                player_y = ny;
+            }
         }
 
-        if (event[0] == "key_up") {
-            if (event[1] == "Left") left = false;
-            if (event[1] == "Right") right = false;
-            if (event[1] == "W") forward = false;
-            if (event[1] == "S") backward = false;
-            if (event[1] == "A") leftward = false;
-            if (event[1] == "D") rightward = false;
+        if (backward) {
+            var dx = Math.cos(player_angle) * SPEED;
+            var dy = Math.sin(player_angle) * SPEED;
+
+            var nx = player_x - dx;
+            var ny = player_y - dy;
+            if (MAP[ny \ TILE_SIZE].charAt(nx \ TILE_SIZE) != "#") {
+                player_x = nx;
+                player_y = ny;
+            }
         }
+
+        if (leftward) {
+            var dx = Math.cos(player_angle + Math.PI / 2) * SPEED;
+            var dy = Math.sin(player_angle + Math.PI /2) * SPEED;
+
+            var nx = player_x - dx;
+            var ny = player_y - dy;
+            if (MAP[ny \ TILE_SIZE].charAt(nx \ TILE_SIZE) != "#") {
+                player_x = nx;
+                player_y = ny;
+            }
+        }
+
+        if (rightward) {
+            var dx = Math.cos(player_angle - Math.PI/2) * SPEED;
+            var dy = Math.sin(player_angle - Math.PI/2) * SPEED;
+
+            var nx = player_x - dx;
+            var ny = player_y - dy;
+            if (MAP[ny \ TILE_SIZE].charAt(nx \ TILE_SIZE) != "#") {
+                player_x = nx;
+                player_y = ny;
+            }
+        }
+
+        win.clear(DARK_GRAY);
+        win.drawRect(0, 0, WIDTH, HEIGHT \ 2, GRAY);
+        win.drawRect(0, HEIGHT \ 2, WIDTH, HEIGHT \ 2, BLACK);
+        cast_rays();
+        if (showEditor) draw_editor();
+        win.update();
     }
-
-
-    if(left) player_angle = player_angle - ROT_SPEED;
-    if(right) player_angle = player_angle + ROT_SPEED;
-
-    if (forward) {
-        var dx = Math.cos(player_angle) * SPEED;
-        var dy = Math.sin(player_angle) * SPEED;
-
-        var nx = player_x + dx;
-        var ny = player_y + dy;
-        if (MAP[ny \ TILE_SIZE].charAt(nx \ TILE_SIZE) != "#") {
-            player_x = nx;
-            player_y = ny;
-        }
-    }
-
-    if (backward) {
-        var dx = Math.cos(player_angle) * SPEED;
-        var dy = Math.sin(player_angle) * SPEED;
-
-        var nx = player_x - dx;
-        var ny = player_y - dy;
-        if (MAP[ny \ TILE_SIZE].charAt(nx \ TILE_SIZE) != "#") {
-            player_x = nx;
-            player_y = ny;
-        }
-    }
-
-    if (leftward) {
-        var dx = Math.cos(player_angle + Math.PI / 2) * SPEED;
-        var dy = Math.sin(player_angle + Math.PI /2) * SPEED;
-
-        var nx = player_x - dx;
-        var ny = player_y - dy;
-        if (MAP[ny \ TILE_SIZE].charAt(nx \ TILE_SIZE) != "#") {
-            player_x = nx;
-            player_y = ny;
-        }
-    }
-
-    if (rightward) {
-        var dx = Math.cos(player_angle - Math.PI/2) * SPEED;
-        var dy = Math.sin(player_angle - Math.PI/2) * SPEED;
-
-        var nx = player_x - dx;
-        var ny = player_y - dy;
-        if (MAP[ny \ TILE_SIZE].charAt(nx \ TILE_SIZE) != "#") {
-            player_x = nx;
-            player_y = ny;
-        }
-    }
-
-    win.clear(DARK_GRAY);
-    win.drawRect(0, 0, WIDTH, HEIGHT \ 2, GRAY);
-    win.drawRect(0, HEIGHT \ 2, WIDTH, HEIGHT \ 2, BLACK);
-    cast_rays();
-    win.update();
 }
+
+main();

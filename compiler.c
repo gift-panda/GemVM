@@ -193,24 +193,13 @@ static void emitReturn() {
 
 static uint8_t makeConstant(Value value) {
     int constant = addConstant(currentChunk(), value);
-    if (constant > UINT8_MAX) {
-        error("Too many constants in one chunk.");
-        return 0;
-    }
-
-    return (uint8_t)constant;
+    return constant;
 }
 
 static void emitConstant(Value value) {
     int constant = makeConstant(value);
-    if (constant <= 255) {
-        emitBytes(OP_CONSTANT, (uint8_t)constant);
-    } else {
-        emitByte(OP_CONSTANT_LONG);
-        emitByte((constant >> 16) & 0xFF);
-        emitByte((constant >> 8) & 0xFF);
-        emitByte(constant & 0xFF);
-    }
+    emitByte(OP_CONSTANT);
+    emitByte(constant);
 }
 
 static void patchJump(int offset) {
