@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <b>GemVM</b> is a lightweight, expressive scripting language and virtual machine for rapid prototyping, games, and creative coding.<br/>
-  <i>Modern syntax. Powerful features. Easy to embed. Fun to use.</i>
+  <b>Gem</b> is a lightweight, scripting language based on a Virtual Machine.<br/>
+  <i>Just a hobby :P</i>
 </p>
 
 ---
@@ -28,6 +28,7 @@
   - [Window Class](#window-class)
   - [String Methods](#string-methods)
   - [List Methods](#list-methods)
+- [Credits](#credits)
 
 ---
 
@@ -200,8 +201,13 @@ c.inc();
 class Example {
     var staticField = 123; // static variable
 
-    static staticMethod() { println("static!"); }
-    instanceMethod() { this.instanceField = 42; println("instance!"); }
+    static staticMethod() {
+        println("static!");
+    }
+    instanceMethod() {
+        this.instanceField = 42;
+        println("instance!");
+    }
 }
 Example.staticMethod();
 var e = Example();
@@ -218,8 +224,12 @@ println(e.instanceField); // 42
 class Secret {
     var #hidden = 42; // static private
     var visible = 1;  // static public
-    setHidden(val) { this.#hidden = val; }
-    getHidden() { return this.#hidden; }
+    setHidden(val) {
+          this.#hidden = val;
+    }
+    getHidden() {
+        return this.#hidden;
+    }
 }
 var s = Secret();
 println(s.visible);      // 1
@@ -231,10 +241,14 @@ println(s.getHidden());  // 99
 ### Inheritance and super
 ```gem
 class Animal {
-    speak() { println("..."); }
+    speak() {
+        println("...");
+    }
 }
 class Dog :: Animal {
-    speak() { super.speak(); println("Woof!"); }
+    speak() {
+        super.speak(); println("Woof!");
+    }
 }
 var d = Dog();
 d.speak();
@@ -245,8 +259,12 @@ d.speak();
 - Use the `operator` keyword in the class body:
 ```gem
 class Vec2 {
-    init(x, y) { this.x = x; this.y = y; }
-    operator +(other) { return Vec2(this.x + other.x, this.y + other.y); }
+    init(x, y) {
+        this.x = x; this.y = y;
+    }
+    operator +(other) {
+        return Vec2(this.x + other.x, this.y + other.y);
+    }
 }
 var a = Vec2(1, 2);
 var b = Vec2(3, 4);
@@ -266,6 +284,13 @@ try {
 }
 ```
 
+Make your own Errors:
+```
+class CustomError :: Error{
+
+}
+throw CustomError("Hey this is an Error!");
+```
 ---
 
 ## Imports and Modules
@@ -398,5 +423,16 @@ println(l.contains(42));  // false
 ```
 
 ---
+
+---
+
+## Credits
+
+- Grammer Rules: Poushali Maity
+- Language and VM: Adrito Gayen
+- Standard Library: Shuvayu Kumar Das
+
+---
+
 
 > For more examples, see the `chess/` and `Raycast/` directories.
