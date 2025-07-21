@@ -238,10 +238,10 @@ class Secret {
     var #hidden = 42; // static private
     var visible = 1;  // static public
     setHidden(val) {
-          this.#hidden = val;
+          Secret.#hidden = val;
     }
     getHidden() {
-        return this.#hidden;
+        return Secret.#hidden;
     }
 }
 var s = Secret();
