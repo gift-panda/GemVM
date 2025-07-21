@@ -68,7 +68,9 @@ println(l); // [1, 42, 3]
 ### Objects and Classes
 ```gem
 class Point {
-    init(x, y) { this.x = x; this.y = y; }
+    init(x, y) {
+        this.x = x; this.y = y;
+    }
 }
 var p = Point(1, 2);
 ```
@@ -78,7 +80,7 @@ var p = Point(1, 2);
 ## Printing
 
 ```gem
-print("Hello, ");
+print(true);
 println("world!");
 println(123);
 println([1, 2, 3]);
@@ -105,7 +107,7 @@ var y = x + 5 * 2;
 
 ---
 
-## Keywords and Control Flow
+## Keywords
 
 ### if / else
 ```gem
@@ -164,7 +166,10 @@ greet("GemVM");
 ### Closures
 ```gem
 func makeAdder(x) {
-    return func(y) { return x + y; };
+    func lambda(y) {
+        return x + y;
+    }
+    return lambda;
 }
 var add5 = makeAdder(5);
 println(add5(10)); // 15
@@ -172,8 +177,12 @@ println(add5(10)); // 15
 
 ### Function Overloading (by arity)
 ```gem
-func foo() { println("no args"); }
-func foo(x) { println("one arg: " + x); }
+func foo() {
+    println("no args");
+}
+func foo(x) {
+    println("one arg: " + x);
+}
 foo();
 foo(42);
 ```
@@ -185,8 +194,12 @@ foo(42);
 ### Basic Class
 ```gem
 class Counter {
-    init() { this.value = 0; }
-    inc() { this.value = this.value + 1; }
+    init() {
+        this.value = 0;
+    }
+    inc() {
+        this.value = this.value + 1;
+    }
 }
 var c = Counter();
 c.inc();
@@ -247,7 +260,8 @@ class Animal {
 }
 class Dog :: Animal {
     speak() {
-        super.speak(); println("Woof!");
+        super.speak();
+        println("Woof!");
     }
 }
 var d = Dog();
