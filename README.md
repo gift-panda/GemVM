@@ -421,9 +421,6 @@ l.insert(1, 42);
 l.clear();
 println(l.contains(42));  // false
 ```
-
----
-
 ---
 
 ## Credits
