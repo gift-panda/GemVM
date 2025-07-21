@@ -1,3 +1,5 @@
+//Deprecated, this file is no longer used by the vm.
+
 class Error{
     init(msg){
         this.msg = msg;
