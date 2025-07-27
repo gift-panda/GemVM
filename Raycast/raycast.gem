@@ -6,13 +6,13 @@ var HEIGHT = 600;
 win.init(WIDTH, HEIGHT, "Raycasting Demo");
 
 var MAP = [
-    "###########",
-    "#...... ###",
-    "#..###...##",
-    "#..#.#....#",
-    "#..#.#....#",
-    "#.........#",
-    "###########"
+    "##########",
+    "#...... ##",
+    "#..###...#",
+    "#..#.#...#",
+    "#..#.#...#",
+    "#........#",
+    "##########"
 ];
 var TILE_SIZE = 64;
 var MAP_WIDTH = MAP[0].length();
@@ -90,10 +90,15 @@ func draw_editor() {
             if(tile == "#") color = GRAY; else color = BLACK;
             win.drawRect(WIDTH + x * (TILE_DISPLAY_SIZE - 30),
                          y * TILE_DISPLAY_SIZE,
-                         TILE_DISPLAY_SIZE - 30, TILE_DISPLAY_SIZE,
+                         TILE_DISPLAY_SIZE, TILE_DISPLAY_SIZE,
                          color);
         }
     }
+        // draw the player in the editor (fluid)
+    var px = WIDTH + player_x * ((TILE_DISPLAY_SIZE - 30.0) / TILE_SIZE);
+    var py = player_y * (TILE_DISPLAY_SIZE / TILE_SIZE);
+    win.drawCircle(px - 2, py - 2, 10, color(0, 200, 0));
+
 }
 
 
@@ -149,12 +154,10 @@ func main(){
 
                 if (0 <= tx and tx < MAP_WIDTH and 0 <= ty and ty < MAP_HEIGHT) {
                     var row = MAP[ty];
-                    println(row.substring(0, tx));
                     var ch = row.charAt(tx);
                     var char = "#";
                     if(ch == "#") char = ".";
                     var newRow = row.substring(0, tx) + char + row.substring(tx + 1, row.length());
-                    println(newRow);
                     MAP[ty] = newRow;
                 }
             }
@@ -219,7 +222,28 @@ func main(){
         cast_rays();
         if (showEditor) draw_editor();
         win.update();
+        tick();
     }
 }
+
+var FPS = 60;
+var FRAME_TIME = 1000 / FPS;  // in milliseconds
+
+var last_tick = clock();  // like SDL_GetTicks()
+
+func tick() {
+    var now = clock();
+    var delta = (now - last_tick) * 1000;
+
+    if (delta < FRAME_TIME) {
+        sleep(FRAME_TIME - delta);
+        now = clock();
+        delta = now - last_tick;
+    }
+
+    last_tick = now;
+    return delta / 1000.0; // return seconds for framerate-independent logic
+}
+
 
 main();

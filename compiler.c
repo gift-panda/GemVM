@@ -5,9 +5,7 @@
 
 #include <stdlib.h>
 
-#ifdef DEBUG_PRINT_CODE
 #include "debug.h"
-#endif
 
 #include <string.h>
 #include <math.h>
@@ -16,6 +14,9 @@
 #include "memory.h"
 #include "scanner.h"
 #include "vm.h"
+
+#include <limits.h>
+
 
 typedef struct {
     Token current;
@@ -268,12 +269,11 @@ static void initCompiler(Compiler* compiler, FunctionType type) {
 static ObjFunction* endCompiler() {
     emitReturn();
     ObjFunction* function = current->function;
-#ifdef DEBUG_PRINT_CODE
-    if (!parser.hadError) {
-        disassembleChunk(&function->chunk, function->name != NULL ?
-            function->name->chars : "<script>");
-    }
-#endif
+    if (vm.showBytecode)
+        if (!parser.hadError) {
+            disassembleChunk(&function->chunk, function->name != NULL ?
+                function->name->chars : "<script>");
+        }
 
     current = current->enclosing;
     return function;

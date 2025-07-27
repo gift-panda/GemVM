@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "chunk.h"
+#include "compiler.h"
 #include "GemError.h"
 #include "GemMath.h"
 #include "vm.h"
@@ -78,19 +79,67 @@ char* getMathText() {
 }
 
 int main(int argc, const char* argv[]) {
+    int runRepl = 1;
+    const char* scriptPath = NULL;
+
+    // Runtime flags
+    int showBytecode = 0;
+    int enableGC = 1;
+    int run = 1;
+
     initVM();
+
+    // Parse flags
+    for (int i = 1; i < argc; i++) {
+        const char* arg = argv[i];
+        if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
+            printf("Usage: clox [options] [script]\n");
+            printf("Options:\n");
+            printf("  -h, --help       Show this help message.\n");
+            printf("  -v, --version    Show version info.\n");
+            printf("  -s, --show           Show the bytecode generated.\n");
+            printf("  -r, --raw            Turns off the garbage collector.\n");
+            printf("  -c, --compile        Does not run the code, only checks for valid compilation.\n");
+            return 0;
+        } else if (strcmp(arg, "--version") == 0 || strcmp(arg, "-v") == 0) {
+            printf("gem version 1.6.7\n");
+            return 0;
+        } else if (strcmp(arg, "--show") == 0 || strcmp(arg, "-s") == 0) {
+            showBytecode = 1;
+        } else if (strcmp(arg, "--raw") == 0 || strcmp(arg, "-r") == 0) {
+            enableGC = 0;
+        } else if (strcmp(arg, "--compile") == 0 || strcmp(arg, "-c") == 0) {
+            run = 0;
+        } else if (arg[0] == '-') {
+            fprintf(stderr, "Unknown option: %s\n", arg);
+            return 64;
+        } else {
+            scriptPath = arg;
+            runRepl = 0;
+        }
+    }
+
     interpret(getErrorText());
     interpret(getMathText());
 
-    if (argc == 1) {
-        repl();
-    } else if (argc == 2) {
-        runFile(argv[1]);
-    } else {
-        fprintf(stderr, "Usage: clox [path]\n");
-        exit(64);
+    if (enableGC) {
+        vm.gcEnabled = true;
     }
 
-    //freeVM();
+    if (runRepl) {
+        repl();
+    } else {
+        char* source = readFile(scriptPath);
+        if (!run) {
+            vm.noRun = true;
+        }
+        if (showBytecode) {
+           vm.showBytecode = true; // Set a VM flag, then respect it in your compiler
+        }
+        runFile(scriptPath);
+        free(source);
+    }
+
     return 0;
 }
+

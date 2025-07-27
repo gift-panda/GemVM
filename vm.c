@@ -30,6 +30,16 @@ VM vm;
 void printStack();
 ObjClass* errorClass;
 
+static Value sleepNative(int argCount, Value* args){
+    int ms = AS_NUMBER(args[0]);
+#ifdef _WIN32
+    Sleep(ms);
+#else
+    usleep(ms * 1000);
+#endif
+}
+
+
 static Value clockNative(int argCount, Value* args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
@@ -353,6 +363,7 @@ void initVM() {
 
     defineNative("clock", clockNative);
     defineNative("input", inputNative);
+    defineNative("sleep", sleepNative);
     defineStringMethods();
     defineListMethods();
 }
@@ -1595,6 +1606,9 @@ InterpretResult interpret(const char* source) {
     pop();
     push(OBJ_VAL(closure));
     call(closure, 0);
+
+    if (vm.noRun)
+        return 0;
 
     return run();
 }

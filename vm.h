@@ -65,6 +65,9 @@ typedef struct {
     ObjClass* formatErrorClass;
 
     bool isInvokingNative;
+    bool gcEnabled;
+    bool showBytecode;
+    bool noRun;
 } VM;
 
 typedef enum {
