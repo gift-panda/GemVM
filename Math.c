@@ -1,6 +1,7 @@
 #include <math.h>
 
 #include "value.h"
+#include <stdbool.h>
 
 #define CHECK_NUM_ARGS(fn, n)
 

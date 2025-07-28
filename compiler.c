@@ -1191,7 +1191,7 @@ char* loadModuleFile(const char* fileName) {
 
     fprintf(stderr, "Module not found: %s\n", fileName);
     free(relativePath);
-    return nullptr;
+    return NULL;
 }
 
 static void breakStatement() {

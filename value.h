@@ -1,6 +1,8 @@
 #ifndef clox_value_h
 #define clox_value_h
 
+#include <stdbool.h>
+
 typedef struct Obj Obj;
 typedef struct ObjString ObjString;
 typedef enum {

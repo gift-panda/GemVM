@@ -5,6 +5,7 @@
 #include "object.h"
 #include "table.h"
 #include "value.h"
+#include <stdbool.h>
 
 
 #define FRAMES_MAX 64

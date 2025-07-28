@@ -663,6 +663,7 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
         return false;
     }
 
+
     if (IS_IMAGE(receiver)) {
         Value value;
         if (tableGet(&vm.imageClassMethods, name, &value)) {
@@ -1269,6 +1270,9 @@ static InterpretResult run() {
                 push(OBJ_VAL(klass));
                 break;
             case OP_GET_PROPERTY: {
+                if (IS_STRING(peek(0)) || IS_LIST(peek(0))){
+                    frame = runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                }
                 if (IS_INSTANCE(peek(0))) {
                     ObjInstance* instance = AS_INSTANCE(peek(0));
                     ObjString* name = READ_STRING();
@@ -1329,6 +1333,10 @@ static InterpretResult run() {
                 break;
             }
             case OP_SET_PROPERTY: {
+                if (IS_STRING(peek(1)) || IS_LIST(peek(1))){
+                    frame = runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                }
+
                 if (IS_CLASS(peek(1))) {
                     ObjClass* klass = AS_CLASS(peek(1));
                     ObjString* name = READ_STRING();
