@@ -93,6 +93,12 @@ static void skipWhitespace() {
                     return;
                 }
                 break;
+            case '#':
+                if (peekNext() == '!')
+                    while (peek() != '\n' && !isAtEnd()) advance();
+                else
+                    return;
+                break;
             default:
                 return;
         }
@@ -215,20 +221,58 @@ static Token identifier() {
     return makeToken(identifierType());
 }
 
+bool isHexDigit(char c) {
+    return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
+bool isOctDigit(char c) {
+    return c >= '0' && c <= '7';
+}
+
+bool isBinDigit(char c) {
+    return c == '0' || c == '1';
+}
+
 
 static Token number() {
+    // Handle radix prefixes: 0x (hex), 0o (octal), 0b (binary) //fflush(stdout);
+    if (peek() == '0') {
+        switch (peekNext()) {
+        case 'x': case 'X':
+            advance(); // consume '0'
+            advance(); // consume 'x'
+            while (isHexDigit(peek())) advance();
+            return makeToken(TOKEN_HEX_NUMBER);
+        case 'o': case 'O':
+            advance(); // consume '0'
+            advance(); // consume 'o'
+            while (isOctDigit(peek())) advance();
+            return makeToken(TOKEN_OCTAL_NUMBER);
+        case 'b': case 'B':
+            advance(); // consume '0'
+            advance(); // consume 'b'
+            while (isBinDigit(peek())) advance();
+            return makeToken(TOKEN_BINARY_NUMBER);
+        }
+    }
+
     while (isDigit(peek())) advance();
 
-    // Look for a fractional part.
     if (peek() == '.' && isDigit(peekNext())) {
-        // Consume the ".".
         advance();
+        while (isDigit(peek())) advance();
+    }
 
+    if (peek() == 'e' || peek() == 'E') {
+        advance(); // consume 'e'
+        if (peek() == '+' || peek() == '-') advance(); // optional +/-
+        if (!isDigit(peek())) return errorToken("Invalid exponent format");
         while (isDigit(peek())) advance();
     }
 
     return makeToken(TOKEN_NUMBER);
 }
+
 
 static Token string() {
     while (peek() != '"' && !isAtEnd()) {
@@ -238,7 +282,6 @@ static Token string() {
 
     if (isAtEnd()) return errorToken("Unterminated string.");
 
-    // The closing quote.
     advance();
     return makeToken(TOKEN_STRING);
 }
@@ -283,6 +326,6 @@ Token scanToken() {
 
     }
 
-    fprintf(stderr, "Unexpected character: %c\n", c);
+    fprintf(stderr, "Unexpected character: %c lol\n", c);
     return errorToken("Unexpected character.");
 }

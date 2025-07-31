@@ -1,3 +1,5 @@
+#!/usr/bin/env GemVM
+
 import Window;
 var win = Window;
 
@@ -131,7 +133,7 @@ func main(){
                     win.exit();
                     if(showEditor)
                         win.init(WIDTH + (TILE_DISPLAY_SIZE - 30) * MAP[0].length(), HEIGHT, "Raycasting Editor");
-                    else 
+                    else
                         win.init(WIDTH, HEIGHT, "Raycasting Editor");
                 }
             }
@@ -227,9 +229,9 @@ func main(){
 }
 
 var FPS = 60;
-var FRAME_TIME = 1000 / FPS;  // in milliseconds
+var FRAME_TIME = 1000 / FPS;
 
-var last_tick = clock();  // like SDL_GetTicks()
+var last_tick = clock();
 
 func tick() {
     var now = clock();
@@ -242,7 +244,7 @@ func tick() {
     }
 
     last_tick = now;
-    return delta / 1000.0; // return seconds for framerate-independent logic
+    return delta / 1000.0;
 }
 
 

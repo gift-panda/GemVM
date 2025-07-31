@@ -334,6 +334,21 @@ static void number(bool canAssign) {
     emitConstant(NUMBER_VAL(value));
 }
 
+static void hex_number(bool canAssign) {
+    double value = (double)strtoll(parser.previous.start + 2, NULL, 16);
+    emitConstant(NUMBER_VAL(value));
+}
+
+static void oct_number(bool canAssign) {
+    double value = (double)strtoll(parser.previous.start + 2, NULL, 8);
+    emitConstant(NUMBER_VAL(value));
+}
+
+static void bin_number(bool canAssign) {
+    double value = (double)strtoll(parser.previous.start + 2, NULL, 2);
+    emitConstant(NUMBER_VAL(value));
+}
+
 static void string(bool canAssign) {
     emitConstant(OBJ_VAL(copyString(parser.previous.start + 1,
                                     parser.previous.length - 2)));
@@ -547,7 +562,7 @@ ParseRule rules[] = {
     [TOKEN_SLASH]         = {NULL,     binary, PREC_FACTOR},
     [TOKEN_STAR]          = {NULL,     binary, PREC_FACTOR},
     [TOKEN_PERCENT]       = {NULL,     binary, PREC_FACTOR},
-    [TOKEN_INS]       = {NULL,     binary, PREC_FACTOR},
+    [TOKEN_INS]           = {NULL,     binary, PREC_FACTOR},
     [TOKEN_BANG]          = {unary,    NULL,   PREC_NONE},
     [TOKEN_BANG_EQUAL]    = {NULL,     binary, PREC_EQUALITY},
     [TOKEN_EQUAL]         = {NULL,     NULL,   PREC_NONE},
@@ -556,9 +571,12 @@ ParseRule rules[] = {
     [TOKEN_GREATER_EQUAL] = {NULL,     binary, PREC_COMPARISON},
     [TOKEN_LESS]          = {NULL,     binary, PREC_COMPARISON},
     [TOKEN_LESS_EQUAL]    = {NULL,     binary, PREC_COMPARISON},
-    [TOKEN_IDENTIFIER]    = {variable,     NULL,   PREC_NONE},
+    [TOKEN_IDENTIFIER]    = {variable, NULL,   PREC_NONE},
     [TOKEN_STRING]        = {string,   NULL,   PREC_NONE},
     [TOKEN_NUMBER]        = {number,   NULL,   PREC_NONE},
+    [TOKEN_BINARY_NUMBER] = {bin_number,NULL,   PREC_NONE},
+    [TOKEN_OCTAL_NUMBER]  = {oct_number,NULL,   PREC_NONE},
+    [TOKEN_HEX_NUMBER]    = {hex_number,NULL,   PREC_NONE},
     [TOKEN_AND]           = {NULL,     and_,   PREC_AND},
     [TOKEN_CLASS]         = {NULL,     NULL,   PREC_NONE},
     [TOKEN_ELSE]          = {NULL,     NULL,   PREC_NONE},

@@ -1,1 +1,3 @@
+#!/usr/bin/env GemVM
+
 println(input("Nigga do smth").asNum() + 100);
