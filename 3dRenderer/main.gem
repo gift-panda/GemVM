@@ -1,0 +1,38 @@
+#!/usr/bin/env GemVM
+
+import Window;
+var win = Window;
+import utils;
+import Math;
+
+win.init(1280, 720, "3d Renderer");
+var run = true;
+
+func color(a, b, c){
+    return a * 65536 + b * 256 + c;
+}
+
+//var obj = Custom("heli.obj", [0, -120, 900]);
+var obj = Custom("car.obj", [0, -30, 150]);
+//var obj = Custom("digi.obj", [0, 0, 35]);
+//var obj = Custom("ship.obj", [0, -450, 1100]);
+//var obj = Custom("Tree.obj", [0, -100, 150]);
+//var obj = Custom("tree.obj", [0, -400, 1500]);
+
+
+
+while(run){
+    win.clear(color(0,0,0));
+    obj.rotation[1] = obj.rotation[1] + 0.003; // Rotate around Y
+    //obj.rotation[0] = obj.rotation[0] + 0.003; // Rotate around Y
+
+    obj.draw();
+    var event = win.pollEvent();
+    if(event != nil){
+        if(event[0] == "quit")
+            run = false;
+    }
+
+    win.update();
+}
+win.exit();

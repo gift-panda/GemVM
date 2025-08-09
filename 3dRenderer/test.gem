@@ -1,0 +1,11 @@
+#!/usr/bin/env GemVM
+
+func fib(n) {
+  if (n < 2) return n;
+  return fib(n - 1) + fib(n - 2); 
+}
+
+var before = clock();
+println(fib(40));
+var after = clock();
+println(after - before);

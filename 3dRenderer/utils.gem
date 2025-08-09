@@ -1,0 +1,287 @@
+class Object3d{
+    init(vertices, edges, faces, position){
+        this.vertices = vertices;
+        this.edges = edges;
+        this.faces = faces;
+        this.position = position;
+        this.rotation = [0, 0, 0];
+    }
+
+    draw(){
+        var halfWidth = 1280/2;
+        var halfHeight = 720/2;
+
+        var verts = [];
+
+        for (var i = 0; i < this.vertices.length(); i = i + 1) {
+            var o = this.vertices[i];
+            var inner = [];
+
+            var scaled = [
+                o[0] * 50,
+                o[1] * 50,
+                o[2] * 50
+            ];
+
+            var rotated = rotate3D(scaled[0], scaled[1], scaled[2],
+                                this.rotation[0],
+                                this.rotation[1],
+                                this.rotation[2]);
+
+            var translated = [
+                rotated[0] + this.position[0],
+                rotated[1] + this.position[1],
+                rotated[2] + this.position[2]
+            ];
+
+            verts.append(translated);
+        }
+
+        for(var i = 0; i < this.edges.length(); i=i+1){
+            var edge = this.edges[i];
+
+            var point1Div = verts[edge[0]][2] / 400;            
+            var point2Div = verts[edge[1]][2] / 400;
+            
+            if(point1Div != 0 and point2Div != 0){
+            
+                var point1 = [
+                    verts[edge[0]][0] / point1Div + halfWidth,
+                    -verts[edge[0]][1] / point1Div + halfHeight
+                ];
+
+                var point2 = [
+                    verts[edge[1]][0] / point2Div + halfWidth,
+                    -verts[edge[1]][1] / point2Div + halfHeight
+                ];
+                win.drawLine(point1[0], point1[1], point2[0], point2[1], color(255,255,255), 2);
+            }
+        }
+
+        // Fill triangles using face data
+        if(false)
+for (var i = 0; i < this.faces.length(); i = i + 1) {
+    var face = this.faces[i];
+
+    if (face.length() >= 3) {
+        // Triangulate face (assumes convex polygon)
+        var a = verts[face[0]];
+        for (var j = 1; j < face.length() - 1; j = j + 1) {
+            var b = verts[face[j]];
+            var c = verts[face[j + 1]];
+
+            var aDiv = a[2] / 400;
+            var bDiv = b[2] / 400;
+            var cDiv = c[2] / 400;
+
+            if (aDiv != 0 and bDiv != 0 and cDiv != 0) {
+                var x1 = a[0] / aDiv + halfWidth;
+                var y1 = -a[1] / aDiv + halfHeight;
+
+                var x2 = b[0] / bDiv + halfWidth;
+                var y2 = -b[1] / bDiv + halfHeight;
+
+                var x3 = c[0] / cDiv + halfWidth;
+                var y3 = -c[1] / cDiv + halfHeight;
+
+                win.drawTrig(x1, y1, x2, y2, x3, y3, color(255, 255, 255));
+            }
+        }
+    }
+}
+
+    }
+}
+
+func rotate3D(x, y, z, rx, ry, rz) {
+    // Rotate around X
+    var cosx = Math.cos(rx);
+    var sinx = Math.sin(rx);
+    var y1 = y * cosx - z * sinx;
+    var z1 = y * sinx + z * cosx;
+
+    // Rotate around Y
+    var cosy = Math.cos(ry);
+    var siny = Math.sin(ry);
+    var x2 = x * cosy + z1 * siny;
+    var z2 = -x * siny + z1 * cosy;
+
+    // Rotate around Z
+    var cosz = Math.cos(rz);
+    var sinz = Math.sin(rz);
+    var x3 = x2 * cosz - y1 * sinz;
+    var y3 = x2 * sinz + y1 * cosz;
+
+    return [x3, y3, z2];
+}
+
+
+class Cube :: Object3d{
+    var vertices = [
+        [-1, -1, -1],
+        [1, -1, -1],
+        [1, 1, -1],
+        [-1, 1, -1],
+        [-1, -1, 1],
+        [1, -1, 1],
+        [1, 1, 1],
+        [-1, 1, 1]
+    ];
+    var edges = [
+        [0, 1],
+        [1, 2],
+        [2, 3],
+        [3, 0],
+        [4, 5],
+        [5, 6],
+        [6, 7],
+        [7, 4],
+        [0, 4],
+        [1, 5],
+        [2, 6],
+        [3, 7]
+    ];
+    var faces = [
+        [0, 1, 2, 3],
+        [4, 5, 6, 7],
+        [0, 1, 5, 4],
+        [1, 2, 6, 5],
+        [2, 3, 7, 6],
+        [3, 0, 4, 7]
+    ];
+    init(position){
+        super.init(Cube.vertices, Cube.edges, Cube.faces, position);
+    }
+}
+
+class LowPolyTree :: Object3d {
+    var vertices = [
+        // Trunk (rectangular prism)
+        [-0.2, 0, -0.2],  // 0
+        [0.2, 0, -0.2],   // 1
+        [0.2, 0, 0.2],    // 2
+        [-0.2, 0, 0.2],   // 3
+        [-0.2, 1, -0.2],  // 4
+        [0.2, 1, -0.2],   // 5
+        [0.2, 1, 0.2],    // 6
+        [-0.2, 1, 0.2],   // 7
+
+        // Leaves (pyramid pointing up)
+        [0, 2.5, 0],      // 8 tip
+        [-1, 1, -1],      // 9 base
+        [1, 1, -1],       // 10
+        [1, 1, 1],        // 11
+        [-1, 1, 1]        // 12
+    ];
+
+    var edges = [
+        // Trunk edges
+        [0,1], [1,2], [2,3], [3,0],
+        [4,5], [5,6], [6,7], [7,4],
+        [0,4], [1,5], [2,6], [3,7],
+
+        // Leaves edges
+        [8,9], [8,10], [8,11], [8,12],
+        [9,10], [10,11], [11,12], [12,9]
+    ];
+
+    var faces = [
+        // Trunk
+        [0, 1, 2, 3],
+        [4, 5, 6, 7],
+        [0, 1, 5, 4],
+        [1, 2, 6, 5],
+        [2, 3, 7, 6],
+        [3, 0, 4, 7],
+
+        // Leaves
+        [9, 10, 8],
+        [10, 11, 8],
+        [11, 12, 8],
+        [12, 9, 8],
+        [9, 10, 11, 12]  // base
+    ];
+
+    init(position) {
+        super.init(LowPolyTree.vertices, LowPolyTree.edges, LowPolyTree.faces, position);
+    }
+}
+
+class Custom :: Object3d{
+    init(path, position){
+        var all = parseObj(path);
+        super.init(all[0], all[1], all[2], position);
+    }
+}
+
+
+func parseObj(path) {
+    var content = read(path);
+    var lines = content.split("\n");
+
+    var vertices = [];
+    var faces = [];
+    var edges = [];
+
+    for (var i = 0; i < lines.length(); i = i + 1) {
+        var line = lines[i].trim();
+
+        if (line.startsWith("v ")) {
+            var parts = line.split(" ");
+            var x = parts[1].asNum();
+            var y = parts[2].asNum();
+            var z = parts[3].asNum();
+            vertices.append([x, y, z]);
+
+        } else if (line.startsWith("f ")) {
+            var parts = splitWords(line);
+            var indices = [];
+            for (var j = 1; j < parts.length(); j = j + 1) {
+                var token = parts[j];
+                var vertexIndex = token.split("/")[0].asNum() - 1;
+                indices.append(vertexIndex);
+            }
+            faces.append(indices);
+
+            // Optional: derive edges from face
+            for (var k = 0; k < indices.length(); k = k + 1) {
+                var a = indices[k];
+                var b = indices[(k + 1) % indices.length()];
+                edges.append([a, b]);
+            }
+        }
+    }
+
+    return [
+        vertices,
+        edges,
+        faces
+    ];
+}
+
+
+func splitWords(s){
+    var words = [];
+    var curr = "";
+    var inWord = false;
+
+    for (var i = 0; i < s.length(); i = i + 1) {
+        var ch = s.charAt(i);
+        if (ch == " " or ch == "\t") {
+            if (inWord) {
+                words.append(curr);
+                curr = "";
+                inWord = false;
+            }
+        } else {
+            curr = curr + ch;
+            inWord = true;
+        }
+    }
+
+    if (inWord) {
+        words.append(curr);
+    }
+
+    return words;
+}

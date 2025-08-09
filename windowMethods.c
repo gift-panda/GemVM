@@ -66,6 +66,47 @@ Value window_drawRect(int argCount, Value* args) {
     return NIL_VAL;
 }
 
+#include <SDL2_gfxPrimitives.h>
+
+Value window_drawLine(int argCount, Value* args) {
+    int x1 = AS_NUMBER(args[0]);
+    int y1 = AS_NUMBER(args[1]);
+    int x2 = AS_NUMBER(args[2]);
+    int y2 = AS_NUMBER(args[3]);
+    int color = AS_NUMBER(args[4]);
+
+    int thickness = 1;
+    if (argCount > 5)
+        thickness = AS_NUMBER(args[5]);
+
+    Uint8 r = (color >> 16) & 0xFF;
+    Uint8 g = (color >> 8) & 0xFF;
+    Uint8 b = color & 0xFF;
+
+    GFX_thickLineRGBA(gw.renderer, x1, y1, x2, y2, thickness, r, g, b, 255);
+
+    return NIL_VAL;
+}
+
+Value window_drawTriangle(int argCount, Value* args) {
+    int x1 = AS_NUMBER(args[0]);
+    int y1 = AS_NUMBER(args[1]);
+    int x2 = AS_NUMBER(args[2]);
+    int y2 = AS_NUMBER(args[3]);
+    int x3 = AS_NUMBER(args[4]);
+    int y3 = AS_NUMBER(args[5]);
+    int color = AS_NUMBER(args[6]);
+
+    Uint8 r = (color >> 16) & 0xFF;
+    Uint8 g = (color >> 8) & 0xFF;
+    Uint8 b = color & 0xFF;
+
+    GFX_filledTrigonRGBA(gw.renderer, x1, y1, x2, y2, x3, y3, r, g, b, 255);
+
+    return NIL_VAL;
+}
+
+
 Value window_update(int argCount, Value* args) {
     SDL_RenderPresent(gw.renderer);
     return NIL_VAL;

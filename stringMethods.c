@@ -24,6 +24,70 @@ static Value stringCharCodeNative(int argCount, Value* args) {
     return NUMBER_VAL((uint8_t)self->chars[0]);
 }
 
+static Value stringSplitNative(int argCount, Value* args) {
+    if (argCount != 1 || !IS_STRING(args[0])) {
+        runtimeError(vm.illegalArgumentsErrorClass, "split(delimiter) expects one string argument.");
+        return NIL_VAL;
+    }
+
+    ObjString* source = AS_STRING(args[-1]); // receiver: the original string
+    ObjString* delimiter = AS_STRING(args[0]);
+
+    const char* str = source->chars;
+    const char* delim = delimiter->chars;
+    int strLen = source->length;
+    int delimLen = delimiter->length;
+
+    ObjList* result = newList();
+    int start = 0;
+
+    for (int i = 0; i <= strLen - delimLen;) {
+        if (memcmp(str + i, delim, delimLen) == 0) {
+            int segmentLen = i - start;
+            ObjString* segment = copyString(str + start, segmentLen);
+            writeValueArray(&result->elements, OBJ_VAL(segment));
+            i += delimLen;
+            start = i;
+        } else {
+            i++;
+        }
+    }
+
+    // Add remaining part after last delimiter
+    if (start <= strLen) {
+        ObjString* segment = copyString(str + start, strLen - start);
+        writeValueArray(&result->elements, OBJ_VAL(segment));
+    }
+
+    return OBJ_VAL(result);
+}
+
+#include <ctype.h>
+
+static Value stringTrimNative(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError(vm.illegalArgumentsErrorClass, "trim() takes no arguments.");
+        return NIL_VAL;
+    }
+
+    ObjString* self = AS_STRING(args[-1]); // receiver
+    const char* start = self->chars;
+    const char* end = self->chars + self->length - 1;
+
+    // Trim leading whitespace
+    while (start <= end && isspace((unsigned char)*start)) {
+        start++;
+    }
+
+    // Trim trailing whitespace
+    while (end >= start && isspace((unsigned char)*end)) {
+        end--;
+    }
+
+    int newLength = (int)(end - start + 1);
+    return OBJ_VAL(copyString(start, newLength));
+}
+
 static Value stringLengthNative(int argCount, Value* args) {
     if (argCount != 0) {
         runtimeError(vm.illegalArgumentsErrorClass, "string.length() takes no arguments.");
@@ -38,6 +102,44 @@ static Value stringLengthNative(int argCount, Value* args) {
     ObjString* string = AS_STRING(args[-1]);
     return NUMBER_VAL(string->length);
 }
+
+static Value stringStartsWithNative(int argCount, Value* args) {
+    if (argCount != 1 || !IS_STRING(args[0])) {
+        runtimeError(vm.illegalArgumentsErrorClass, "startsWith() expects one string argument.");
+        return NIL_VAL;
+    }
+
+    ObjString* str = AS_STRING(args[-1]);
+    ObjString* prefix = AS_STRING(args[0]);
+
+    if (prefix->length > str->length) return BOOL_VAL(false);
+
+    for (int i = 0; i < prefix->length; i++) {
+        if (str->chars[i] != prefix->chars[i]) return BOOL_VAL(false);
+    }
+
+    return BOOL_VAL(true);
+}
+
+static Value stringEndsWithNative(int argCount, Value* args) {
+    if (argCount != 1 || !IS_STRING(args[0])) {
+        runtimeError(vm.illegalArgumentsErrorClass, "endsWith() expects one string argument.");
+        return NIL_VAL;
+    }
+
+    ObjString* str = AS_STRING(args[-1]);
+    ObjString* suffix = AS_STRING(args[0]);
+
+    if (suffix->length > str->length) return BOOL_VAL(false);
+
+    int offset = str->length - suffix->length;
+    for (int i = 0; i < suffix->length; i++) {
+        if (str->chars[offset + i] != suffix->chars[i]) return BOOL_VAL(false);
+    }
+
+    return BOOL_VAL(true);
+}
+
 
 static Value stringCharAtNative(int argCount, Value* args) {
     if (argCount != 1) {

@@ -1,0 +1,1017 @@
+== init ==
+0000    2 OP_GET_LOCAL        0
+0002    | OP_RETURN
+== <script> ==
+0000    1 OP_CLASS            0 'Window'
+0002    | OP_DEFINE_GLOBAL    0 'Window'
+0004    | OP_GET_GLOBAL       1 'Window'
+0006    2 OP_CLOSURE          3 <fn init>
+0008    | OP_METHOD           2 'init'
+0010    3 OP_POP
+0011    | OP_NIL
+0012    | OP_RETURN
+== init ==
+0000    3 OP_GET_LOCAL        0
+0002    | OP_GET_LOCAL        1
+0004    | OP_SET_PROPERTY     0 'vertices'
+0006    | OP_POP
+0007    4 OP_GET_LOCAL        0
+0009    | OP_GET_LOCAL        2
+0011    | OP_SET_PROPERTY     1 'edges'
+0013    | OP_POP
+0014    5 OP_GET_LOCAL        0
+0016    | OP_GET_LOCAL        3
+0018    | OP_SET_PROPERTY     2 'faces'
+0020    | OP_POP
+0021    6 OP_GET_LOCAL        0
+0023    | OP_GET_LOCAL        4
+0025    | OP_SET_PROPERTY     3 'position'
+0027    | OP_POP
+0028    7 OP_GET_LOCAL        0
+0030    | OP_CONSTANT         5 '0'
+0032    | OP_CONSTANT         6 '0'
+0034    | OP_CONSTANT         7 '0'
+0036    | OP_LIST             3 'position'
+0038    | OP_SET_PROPERTY     4 'rotation'
+0040    | OP_POP
+0041    8 OP_GET_LOCAL        0
+0043    | OP_RETURN
+== draw ==
+0000   11 OP_CONSTANT         0 '1280'
+0002    | OP_CONSTANT         1 '2'
+0004    | OP_DIVIDE
+0005   12 OP_CONSTANT         2 '720'
+0007    | OP_CONSTANT         3 '2'
+0009    | OP_DIVIDE
+0010   14 OP_LIST             0 '1280'
+0012   16 OP_CONSTANT         4 '0'
+0014    | OP_GET_LOCAL        4
+0016    | OP_GET_LOCAL        0
+0018    | OP_GET_PROPERTY     5 'vertices'
+0020    | OP_INVOKE        (0 args)    6 'length'
+0023    | OP_LESS
+0024    | OP_JUMP_IF_FALSE   24 -> 174
+0027    | OP_POP
+0028    | OP_JUMP            28 -> 42
+0031    | OP_GET_LOCAL        4
+0033    | OP_CONSTANT         7 '1'
+0035    | OP_ADD
+0036    | OP_SET_LOCAL        4
+0038    | OP_POP
+0039    | OP_LOOP            39 -> 14
+0042   17 OP_GET_LOCAL        0
+0044    | OP_GET_PROPERTY     8 'vertices'
+0046    | OP_GET_LOCAL        4
+0048    | OP_GET_INDEX    
+0049   18 OP_LIST             0 '1280'
+0051   21 OP_GET_LOCAL        5
+0053    | OP_CONSTANT         9 '0'
+0055    | OP_GET_INDEX    
+0056    | OP_CONSTANT        10 '50'
+0058    | OP_MULTIPLY
+0059   22 OP_GET_LOCAL        5
+0061    | OP_CONSTANT        11 '1'
+0063    | OP_GET_INDEX    
+0064    | OP_CONSTANT        12 '50'
+0066    | OP_MULTIPLY
+0067   23 OP_GET_LOCAL        5
+0069    | OP_CONSTANT        13 '2'
+0071    | OP_GET_INDEX    
+0072    | OP_CONSTANT        14 '50'
+0074    | OP_MULTIPLY
+0075   24 OP_LIST             3 '2'
+0077   26 OP_GET_GLOBAL      15 'rotate3D'
+0079    | OP_GET_LOCAL        7
+0081    | OP_CONSTANT        16 '0'
+0083    | OP_GET_INDEX    
+0084    | OP_GET_LOCAL        7
+0086    | OP_CONSTANT        17 '1'
+0088    | OP_GET_INDEX    
+0089    | OP_GET_LOCAL        7
+0091    | OP_CONSTANT        18 '2'
+0093    | OP_GET_INDEX    
+0094   27 OP_GET_LOCAL        0
+0096    | OP_GET_PROPERTY    19 'rotation'
+0098    | OP_CONSTANT        20 '0'
+0100    | OP_GET_INDEX    
+0101   28 OP_GET_LOCAL        0
+0103    | OP_GET_PROPERTY    21 'rotation'
+0105    | OP_CONSTANT        22 '1'
+0107    | OP_GET_INDEX    
+0108   29 OP_GET_LOCAL        0
+0110    | OP_GET_PROPERTY    23 'rotation'
+0112    | OP_CONSTANT        24 '2'
+0114    | OP_GET_INDEX    
+0115    | OP_CALL             6
+0117   32 OP_GET_LOCAL        8
+0119    | OP_CONSTANT        25 '0'
+0121    | OP_GET_INDEX    
+0122    | OP_GET_LOCAL        0
+0124    | OP_GET_PROPERTY    26 'position'
+0126    | OP_CONSTANT        27 '0'
+0128    | OP_GET_INDEX    
+0129    | OP_ADD
+0130   33 OP_GET_LOCAL        8
+0132    | OP_CONSTANT        28 '1'
+0134    | OP_GET_INDEX    
+0135    | OP_GET_LOCAL        0
+0137    | OP_GET_PROPERTY    29 'position'
+0139    | OP_CONSTANT        30 '1'
+0141    | OP_GET_INDEX    
+0142    | OP_ADD
+0143   34 OP_GET_LOCAL        8
+0145    | OP_CONSTANT        31 '2'
+0147    | OP_GET_INDEX    
+0148    | OP_GET_LOCAL        0
+0150    | OP_GET_PROPERTY    32 'position'
+0152    | OP_CONSTANT        33 '2'
+0154    | OP_GET_INDEX    
+0155    | OP_ADD
+0156   35 OP_LIST             3 '2'
+0158   37 OP_GET_LOCAL        3
+0160    | OP_GET_LOCAL        9
+0162    | OP_INVOKE        (1 args)   34 'append'
+0165    | OP_POP
+0166   38 OP_POP
+0167    | OP_POP
+0168    | OP_POP
+0169    | OP_POP
+0170    | OP_POP
+0171    | OP_LOOP           171 -> 31
+0174    | OP_POP
+0175    | OP_POP
+0176   40 OP_CONSTANT        35 '0'
+0178    | OP_GET_LOCAL        4
+0180    | OP_GET_LOCAL        0
+0182    | OP_GET_PROPERTY    36 'edges'
+0184    | OP_INVOKE        (0 args)   37 'length'
+0187    | OP_LESS
+0188    | OP_JUMP_IF_FALSE  188 -> 385
+0191    | OP_POP
+0192    | OP_JUMP           192 -> 206
+0195    | OP_GET_LOCAL        4
+0197    | OP_CONSTANT        38 '1'
+0199    | OP_ADD
+0200    | OP_SET_LOCAL        4
+0202    | OP_POP
+0203    | OP_LOOP           203 -> 178
+0206   41 OP_GET_LOCAL        0
+0208    | OP_GET_PROPERTY    39 'edges'
+0210    | OP_GET_LOCAL        4
+0212    | OP_GET_INDEX    
+0213   43 OP_GET_LOCAL        3
+0215    | OP_GET_LOCAL        5
+0217    | OP_CONSTANT        40 '0'
+0219    | OP_GET_INDEX    
+0220    | OP_GET_INDEX    
+0221    | OP_CONSTANT        41 '2'
+0223    | OP_GET_INDEX    
+0224    | OP_CONSTANT        42 '400'
+0226    | OP_DIVIDE
+0227   44 OP_GET_LOCAL        3
+0229    | OP_GET_LOCAL        5
+0231    | OP_CONSTANT        43 '1'
+0233    | OP_GET_INDEX    
+0234    | OP_GET_INDEX    
+0235    | OP_CONSTANT        44 '2'
+0237    | OP_GET_INDEX    
+0238    | OP_CONSTANT        45 '400'
+0240    | OP_DIVIDE
+0241   46 OP_GET_LOCAL        6
+0243    | OP_CONSTANT        46 '0'
+0245    | OP_EQUAL
+0246    | OP_NOT
+0247    | OP_JUMP_IF_FALSE  247 -> 257
+0250    | OP_POP
+0251    | OP_GET_LOCAL        7
+0253    | OP_CONSTANT        47 '0'
+0255    | OP_EQUAL
+0256    | OP_NOT
+0257    | OP_JUMP_IF_FALSE  257 -> 378
+0260    | OP_POP
+0261   49 OP_GET_LOCAL        3
+0263    | OP_GET_LOCAL        5
+0265    | OP_CONSTANT        48 '0'
+0267    | OP_GET_INDEX    
+0268    | OP_GET_INDEX    
+0269    | OP_CONSTANT        49 '0'
+0271    | OP_GET_INDEX    
+0272    | OP_GET_LOCAL        6
+0274    | OP_DIVIDE
+0275    | OP_GET_LOCAL        1
+0277    | OP_ADD
+0278   50 OP_GET_LOCAL        3
+0280    | OP_GET_LOCAL        5
+0282    | OP_CONSTANT        50 '0'
+0284    | OP_GET_INDEX    
+0285    | OP_GET_INDEX    
+0286    | OP_CONSTANT        51 '1'
+0288    | OP_GET_INDEX    
+0289    | OP_NEGATE
+0290    | OP_GET_LOCAL        6
+0292    | OP_DIVIDE
+0293    | OP_GET_LOCAL        2
+0295    | OP_ADD
+0296   51 OP_LIST             2 '720'
+0298   54 OP_GET_LOCAL        3
+0300    | OP_GET_LOCAL        5
+0302    | OP_CONSTANT        52 '1'
+0304    | OP_GET_INDEX    
+0305    | OP_GET_INDEX    
+0306    | OP_CONSTANT        53 '0'
+0308    | OP_GET_INDEX    
+0309    | OP_GET_LOCAL        7
+0311    | OP_DIVIDE
+0312    | OP_GET_LOCAL        1
+0314    | OP_ADD
+0315   55 OP_GET_LOCAL        3
+0317    | OP_GET_LOCAL        5
+0319    | OP_CONSTANT        54 '1'
+0321    | OP_GET_INDEX    
+0322    | OP_GET_INDEX    
+0323    | OP_CONSTANT        55 '1'
+0325    | OP_GET_INDEX    
+0326    | OP_NEGATE
+0327    | OP_GET_LOCAL        7
+0329    | OP_DIVIDE
+0330    | OP_GET_LOCAL        2
+0332    | OP_ADD
+0333   56 OP_LIST             2 '720'
+0335   57 OP_GET_GLOBAL      56 'win'
+0337    | OP_GET_LOCAL        8
+0339    | OP_CONSTANT        58 '0'
+0341    | OP_GET_INDEX    
+0342    | OP_GET_LOCAL        8
+0344    | OP_CONSTANT        59 '1'
+0346    | OP_GET_INDEX    
+0347    | OP_GET_LOCAL        9
+0349    | OP_CONSTANT        60 '0'
+0351    | OP_GET_INDEX    
+0352    | OP_GET_LOCAL        9
+0354    | OP_CONSTANT        61 '1'
+0356    | OP_GET_INDEX    
+0357    | OP_GET_GLOBAL      62 'color'
+0359    | OP_CONSTANT        63 '255'
+0361    | OP_CONSTANT        64 '255'
+0363    | OP_CONSTANT        65 '255'
+0365    | OP_CALL             3
+0367    | OP_CONSTANT        66 '2'
+0369    | OP_INVOKE        (6 args)   57 'drawLine'
+0372    | OP_POP
+0373   58 OP_POP
+0374    | OP_POP
+0375    | OP_JUMP           375 -> 379
+0378    | OP_POP
+0379   59 OP_POP
+0380    | OP_POP
+0381    | OP_POP
+0382    | OP_LOOP           382 -> 195
+0385    | OP_POP
+0386    | OP_POP
+0387   60 OP_NIL
+0388    | OP_RETURN
+== rotate3D ==
+0000   65 OP_GET_GLOBAL       0 'Math'
+0002    | OP_GET_LOCAL        4
+0004    | OP_INVOKE        (1 args)    1 'cos'
+0007   66 OP_GET_GLOBAL       2 'Math'
+0009    | OP_GET_LOCAL        4
+0011    | OP_INVOKE        (1 args)    3 'sin'
+0014   67 OP_GET_LOCAL        2
+0016    | OP_GET_LOCAL        7
+0018    | OP_MULTIPLY
+0019    | OP_GET_LOCAL        3
+0021    | OP_GET_LOCAL        8
+0023    | OP_MULTIPLY
+0024    | OP_SUBTRACT
+0025   68 OP_GET_LOCAL        2
+0027    | OP_GET_LOCAL        8
+0029    | OP_MULTIPLY
+0030    | OP_GET_LOCAL        3
+0032    | OP_GET_LOCAL        7
+0034    | OP_MULTIPLY
+0035    | OP_ADD
+0036   71 OP_GET_GLOBAL       4 'Math'
+0038    | OP_GET_LOCAL        5
+0040    | OP_INVOKE        (1 args)    5 'cos'
+0043   72 OP_GET_GLOBAL       6 'Math'
+0045    | OP_GET_LOCAL        5
+0047    | OP_INVOKE        (1 args)    7 'sin'
+0050   73 OP_GET_LOCAL        1
+0052    | OP_GET_LOCAL       11
+0054    | OP_MULTIPLY
+0055    | OP_GET_LOCAL       10
+0057    | OP_GET_LOCAL       12
+0059    | OP_MULTIPLY
+0060    | OP_ADD
+0061   74 OP_GET_LOCAL        1
+0063    | OP_NEGATE
+0064    | OP_GET_LOCAL       12
+0066    | OP_MULTIPLY
+0067    | OP_GET_LOCAL       10
+0069    | OP_GET_LOCAL       11
+0071    | OP_MULTIPLY
+0072    | OP_ADD
+0073   77 OP_GET_GLOBAL       8 'Math'
+0075    | OP_GET_LOCAL        6
+0077    | OP_INVOKE        (1 args)    9 'cos'
+0080   78 OP_GET_GLOBAL      10 'Math'
+0082    | OP_GET_LOCAL        6
+0084    | OP_INVOKE        (1 args)   11 'sin'
+0087   79 OP_GET_LOCAL       13
+0089    | OP_GET_LOCAL       15
+0091    | OP_MULTIPLY
+0092    | OP_GET_LOCAL        9
+0094    | OP_GET_LOCAL       16
+0096    | OP_MULTIPLY
+0097    | OP_SUBTRACT
+0098   80 OP_GET_LOCAL       13
+0100    | OP_GET_LOCAL       16
+0102    | OP_MULTIPLY
+0103    | OP_GET_LOCAL        9
+0105    | OP_GET_LOCAL       15
+0107    | OP_MULTIPLY
+0108    | OP_ADD
+0109   82 OP_GET_LOCAL       17
+0111    | OP_GET_LOCAL       18
+0113    | OP_GET_LOCAL       14
+0115    | OP_LIST             3 'sin'
+0117    | OP_RETURN
+0118   83 OP_NIL
+0119    | OP_RETURN
+== init ==
+0000  120 OP_GET_LOCAL        0
+0002    | OP_GET_GLOBAL       1 'Cube'
+0004    | OP_GET_PROPERTY     2 'vertices'
+0006    | OP_GET_GLOBAL       3 'Cube'
+0008    | OP_GET_PROPERTY     4 'edges'
+0010    | OP_GET_GLOBAL       5 'Cube'
+0012    | OP_GET_PROPERTY     6 'faces'
+0014    | OP_GET_LOCAL        1
+0016    | OP_GET_UPVALUE      0
+0018    | OP_SUPER_INVOKE  (4 args)    0 'init'
+0021    | OP_POP
+0022  121 OP_GET_LOCAL        0
+0024    | OP_RETURN
+== init ==
+0000  173 OP_GET_LOCAL        0
+0002    | OP_GET_GLOBAL       1 'LowPolyTree'
+0004    | OP_GET_PROPERTY     2 'vertices'
+0006    | OP_GET_GLOBAL       3 'LowPolyTree'
+0008    | OP_GET_PROPERTY     4 'edges'
+0010    | OP_GET_GLOBAL       5 'LowPolyTree'
+0012    | OP_GET_PROPERTY     6 'faces'
+0014    | OP_GET_LOCAL        1
+0016    | OP_GET_UPVALUE      0
+0018    | OP_SUPER_INVOKE  (4 args)    0 'init'
+0021    | OP_POP
+0022  174 OP_GET_LOCAL        0
+0024    | OP_RETURN
+== init ==
+0000  179 OP_GET_GLOBAL       0 'parseObj'
+0002    | OP_GET_LOCAL        1
+0004    | OP_CALL             1
+0006  180 OP_GET_LOCAL        0
+0008    | OP_GET_LOCAL        3
+0010    | OP_CONSTANT         2 '0'
+0012    | OP_GET_INDEX    
+0013    | OP_GET_LOCAL        3
+0015    | OP_CONSTANT         3 '1'
+0017    | OP_GET_INDEX    
+0018    | OP_GET_LOCAL        3
+0020    | OP_CONSTANT         4 '2'
+0022    | OP_GET_INDEX    
+0023    | OP_GET_LOCAL        2
+0025    | OP_GET_UPVALUE      0
+0027    | OP_SUPER_INVOKE  (4 args)    1 'init'
+0030    | OP_POP
+0031  181 OP_GET_LOCAL        0
+0033    | OP_RETURN
+== parseObj ==
+0000  186 OP_GET_GLOBAL       0 'read'
+0002    | OP_GET_LOCAL        1
+0004    | OP_CALL             1
+0006  187 OP_GET_LOCAL        2
+0008    | OP_CONSTANT         2 '
+'
+0010    | OP_INVOKE        (1 args)    1 'split'
+0013  189 OP_LIST             0 'read'
+0015  190 OP_LIST             0 'read'
+0017  191 OP_LIST             0 'read'
+0019  193 OP_CONSTANT         3 '0'
+0021    | OP_GET_LOCAL        7
+0023    | OP_GET_LOCAL        3
+0025    | OP_INVOKE        (0 args)    4 'length'
+0028    | OP_LESS
+0029    | OP_JUMP_IF_FALSE   29 -> 287
+0032    | OP_POP
+0033    | OP_JUMP            33 -> 47
+0036    | OP_GET_LOCAL        7
+0038    | OP_CONSTANT         5 '1'
+0040    | OP_ADD
+0041    | OP_SET_LOCAL        7
+0043    | OP_POP
+0044    | OP_LOOP            44 -> 21
+0047  194 OP_GET_LOCAL        3
+0049    | OP_GET_LOCAL        7
+0051    | OP_GET_INDEX    
+0052    | OP_INVOKE        (0 args)    6 'trim'
+0055  196 OP_GET_LOCAL        8
+0057    | OP_CONSTANT         8 'v '
+0059    | OP_INVOKE        (1 args)    7 'startsWith'
+0062    | OP_JUMP_IF_FALSE   62 -> 118
+0065    | OP_POP
+0066  197 OP_GET_LOCAL        8
+0068    | OP_CONSTANT        10 ' '
+0070    | OP_INVOKE        (1 args)    9 'split'
+0073  198 OP_GET_LOCAL        9
+0075    | OP_CONSTANT        11 '1'
+0077    | OP_GET_INDEX    
+0078    | OP_INVOKE        (0 args)   12 'asNum'
+0081  199 OP_GET_LOCAL        9
+0083    | OP_CONSTANT        13 '2'
+0085    | OP_GET_INDEX    
+0086    | OP_INVOKE        (0 args)   14 'asNum'
+0089  200 OP_GET_LOCAL        9
+0091    | OP_CONSTANT        15 '3'
+0093    | OP_GET_INDEX    
+0094    | OP_INVOKE        (0 args)   16 'asNum'
+0097  201 OP_GET_LOCAL        4
+0099    | OP_GET_LOCAL       10
+0101    | OP_GET_LOCAL       11
+0103    | OP_GET_LOCAL       12
+0105    | OP_LIST             3 '0'
+0107    | OP_INVOKE        (1 args)   17 'append'
+0110    | OP_POP
+0111  203 OP_POP
+0112    | OP_POP
+0113    | OP_POP
+0114    | OP_POP
+0115    | OP_JUMP           115 -> 283
+0118    | OP_POP
+0119    | OP_GET_LOCAL        8
+0121    | OP_CONSTANT        19 'f '
+0123    | OP_INVOKE        (1 args)   18 'startsWith'
+0126    | OP_JUMP_IF_FALSE  126 -> 282
+0129    | OP_POP
+0130  204 OP_GET_LOCAL        8
+0132    | OP_CONSTANT        21 ' '
+0134    | OP_INVOKE        (1 args)   20 'split'
+0137  205 OP_LIST             0 'read'
+0139  206 OP_CONSTANT        22 '1'
+0141    | OP_GET_LOCAL       11
+0143    | OP_GET_LOCAL        9
+0145    | OP_INVOKE        (0 args)   23 'length'
+0148    | OP_LESS
+0149    | OP_JUMP_IF_FALSE  149 -> 201
+0152    | OP_POP
+0153    | OP_JUMP           153 -> 167
+0156    | OP_GET_LOCAL       11
+0158    | OP_CONSTANT        24 '1'
+0160    | OP_ADD
+0161    | OP_SET_LOCAL       11
+0163    | OP_POP
+0164    | OP_LOOP           164 -> 141
+0167  207 OP_GET_LOCAL        9
+0169    | OP_GET_LOCAL       11
+0171    | OP_GET_INDEX    
+0172  208 OP_GET_LOCAL       12
+0174    | OP_CONSTANT        26 '/'
+0176    | OP_INVOKE        (1 args)   25 'split'
+0179    | OP_CONSTANT        27 '0'
+0181    | OP_GET_INDEX    
+0182    | OP_INVOKE        (0 args)   28 'asNum'
+0185    | OP_CONSTANT        29 '1'
+0187    | OP_SUBTRACT
+0188  209 OP_GET_LOCAL       10
+0190    | OP_GET_LOCAL       13
+0192    | OP_INVOKE        (1 args)   30 'append'
+0195    | OP_POP
+0196  210 OP_POP
+0197    | OP_POP
+0198    | OP_LOOP           198 -> 156
+0201    | OP_POP
+0202    | OP_POP
+0203  211 OP_GET_LOCAL        5
+0205    | OP_GET_LOCAL       10
+0207    | OP_INVOKE        (1 args)   31 'append'
+0210    | OP_POP
+0211  214 OP_CONSTANT        32 '0'
+0213    | OP_GET_LOCAL       11
+0215    | OP_GET_LOCAL       10
+0217    | OP_INVOKE        (0 args)   33 'length'
+0220    | OP_LESS
+0221    | OP_JUMP_IF_FALSE  221 -> 275
+0224    | OP_POP
+0225    | OP_JUMP           225 -> 239
+0228    | OP_GET_LOCAL       11
+0230    | OP_CONSTANT        34 '1'
+0232    | OP_ADD
+0233    | OP_SET_LOCAL       11
+0235    | OP_POP
+0236    | OP_LOOP           236 -> 213
+0239  215 OP_GET_LOCAL       10
+0241    | OP_GET_LOCAL       11
+0243    | OP_GET_INDEX    
+0244  216 OP_GET_LOCAL       10
+0246    | OP_GET_LOCAL       11
+0248    | OP_CONSTANT        35 '1'
+0250    | OP_ADD
+0251    | OP_GET_LOCAL       10
+0253    | OP_INVOKE        (0 args)   36 'length'
+0256    | Unknown opcode 49
+0257    | OP_GET_INDEX    
+0258  217 OP_GET_LOCAL        6
+0260    | OP_GET_LOCAL       12
+0262    | OP_GET_LOCAL       13
+0264    | OP_LIST             2 '
+'
+0266    | OP_INVOKE        (1 args)   37 'append'
+0269    | OP_POP
+0270  218 OP_POP
+0271    | OP_POP
+0272    | OP_LOOP           272 -> 228
+0275    | OP_POP
+0276    | OP_POP
+0277  219 OP_POP
+0278    | OP_POP
+0279    | OP_JUMP           279 -> 283
+0282    | OP_POP
+0283  220 OP_POP
+0284    | OP_LOOP           284 -> 36
+0287    | OP_POP
+0288    | OP_POP
+0289  223 OP_GET_LOCAL        4
+0291  224 OP_GET_LOCAL        6
+0293  225 OP_GET_LOCAL        5
+0295  226 OP_LIST             3 '0'
+0297    | OP_RETURN
+0298  227 OP_NIL
+0299    | OP_RETURN
+== <script> ==
+0000    1 OP_CLASS            0 'Object3d'
+0002    | OP_DEFINE_GLOBAL    0 'Object3d'
+0004    | OP_GET_GLOBAL       1 'Object3d'
+0006    8 OP_CLOSURE          3 <fn init>
+0008    | OP_METHOD           2 'init'
+0010   60 OP_CLOSURE          5 <fn draw>
+0012    | OP_METHOD           4 'draw'
+0014   61 OP_POP
+0015   83 OP_CLOSURE          7 <fn rotate3D>
+0017    | OP_DISPATCH
+0018    | OP_DEFINE_GLOBAL    6 'rotate3D'
+0020   86 OP_CLASS            8 'Cube'
+0022    | OP_DEFINE_GLOBAL    8 'Cube'
+0024    | OP_GET_GLOBAL       9 'Object3d'
+0026    | OP_GET_GLOBAL      10 'Cube'
+0028    | OP_INHERIT
+0029    | OP_GET_GLOBAL      11 'Cube'
+0031   88 OP_CONSTANT        13 '1'
+0033    | OP_NEGATE
+0034    | OP_CONSTANT        14 '1'
+0036    | OP_NEGATE
+0037    | OP_CONSTANT        15 '1'
+0039    | OP_NEGATE
+0040    | OP_LIST             3 '<fn init>'
+0042   89 OP_CONSTANT        16 '1'
+0044    | OP_CONSTANT        17 '1'
+0046    | OP_NEGATE
+0047    | OP_CONSTANT        18 '1'
+0049    | OP_NEGATE
+0050    | OP_LIST             3 '<fn init>'
+0052   90 OP_CONSTANT        19 '1'
+0054    | OP_CONSTANT        20 '1'
+0056    | OP_CONSTANT        21 '1'
+0058    | OP_NEGATE
+0059    | OP_LIST             3 '<fn init>'
+0061   91 OP_CONSTANT        22 '1'
+0063    | OP_NEGATE
+0064    | OP_CONSTANT        23 '1'
+0066    | OP_CONSTANT        24 '1'
+0068    | OP_NEGATE
+0069    | OP_LIST             3 '<fn init>'
+0071   92 OP_CONSTANT        25 '1'
+0073    | OP_NEGATE
+0074    | OP_CONSTANT        26 '1'
+0076    | OP_NEGATE
+0077    | OP_CONSTANT        27 '1'
+0079    | OP_LIST             3 '<fn init>'
+0081   93 OP_CONSTANT        28 '1'
+0083    | OP_CONSTANT        29 '1'
+0085    | OP_NEGATE
+0086    | OP_CONSTANT        30 '1'
+0088    | OP_LIST             3 '<fn init>'
+0090   94 OP_CONSTANT        31 '1'
+0092    | OP_CONSTANT        32 '1'
+0094    | OP_CONSTANT        33 '1'
+0096    | OP_LIST             3 '<fn init>'
+0098   95 OP_CONSTANT        34 '1'
+0100    | OP_NEGATE
+0101    | OP_CONSTANT        35 '1'
+0103    | OP_CONSTANT        36 '1'
+0105    | OP_LIST             3 '<fn init>'
+0107   96 OP_LIST             8 'Cube'
+0109    | OP_STATIC_VAR      12 'vertices'
+0111   98 OP_CONSTANT        38 '0'
+0113    | OP_CONSTANT        39 '1'
+0115    | OP_LIST             2 'init'
+0117   99 OP_CONSTANT        40 '1'
+0119    | OP_CONSTANT        41 '2'
+0121    | OP_LIST             2 'init'
+0123  100 OP_CONSTANT        42 '2'
+0125    | OP_CONSTANT        43 '3'
+0127    | OP_LIST             2 'init'
+0129  101 OP_CONSTANT        44 '3'
+0131    | OP_CONSTANT        45 '0'
+0133    | OP_LIST             2 'init'
+0135  102 OP_CONSTANT        46 '4'
+0137    | OP_CONSTANT        47 '5'
+0139    | OP_LIST             2 'init'
+0141  103 OP_CONSTANT        48 '5'
+0143    | OP_CONSTANT        49 '6'
+0145    | OP_LIST             2 'init'
+0147  104 OP_CONSTANT        50 '6'
+0149    | OP_CONSTANT        51 '7'
+0151    | OP_LIST             2 'init'
+0153  105 OP_CONSTANT        52 '7'
+0155    | OP_CONSTANT        53 '4'
+0157    | OP_LIST             2 'init'
+0159  106 OP_CONSTANT        54 '0'
+0161    | OP_CONSTANT        55 '4'
+0163    | OP_LIST             2 'init'
+0165  107 OP_CONSTANT        56 '1'
+0167    | OP_CONSTANT        57 '5'
+0169    | OP_LIST             2 'init'
+0171  108 OP_CONSTANT        58 '2'
+0173    | OP_CONSTANT        59 '6'
+0175    | OP_LIST             2 'init'
+0177  109 OP_CONSTANT        60 '3'
+0179    | OP_CONSTANT        61 '7'
+0181    | OP_LIST             2 'init'
+0183  110 OP_LIST            12 'vertices'
+0185    | OP_STATIC_VAR      37 'edges'
+0187  112 OP_CONSTANT        63 '0'
+0189    | OP_CONSTANT        64 '1'
+0191    | OP_CONSTANT        65 '2'
+0193    | OP_CONSTANT        66 '3'
+0195    | OP_LIST             4 'draw'
+0197  113 OP_CONSTANT        67 '4'
+0199    | OP_CONSTANT        68 '5'
+0201    | OP_CONSTANT        69 '6'
+0203    | OP_CONSTANT        70 '7'
+0205    | OP_LIST             4 'draw'
+0207  114 OP_CONSTANT        71 '0'
+0209    | OP_CONSTANT        72 '1'
+0211    | OP_CONSTANT        73 '5'
+0213    | OP_CONSTANT        74 '4'
+0215    | OP_LIST             4 'draw'
+0217  115 OP_CONSTANT        75 '1'
+0219    | OP_CONSTANT        76 '2'
+0221    | OP_CONSTANT        77 '6'
+0223    | OP_CONSTANT        78 '5'
+0225    | OP_LIST             4 'draw'
+0227  116 OP_CONSTANT        79 '2'
+0229    | OP_CONSTANT        80 '3'
+0231    | OP_CONSTANT        81 '7'
+0233    | OP_CONSTANT        82 '6'
+0235    | OP_LIST             4 'draw'
+0237  117 OP_CONSTANT        83 '3'
+0239    | OP_CONSTANT        84 '0'
+0241    | OP_CONSTANT        85 '4'
+0243    | OP_CONSTANT        86 '7'
+0245    | OP_LIST             4 'draw'
+0247  118 OP_LIST             6 'rotate3D'
+0249    | OP_STATIC_VAR      62 'faces'
+0251  121 OP_CLOSURE         88 <fn init>
+0253      |                     local 1
+0255    | OP_METHOD          87 'init'
+0257  122 OP_POP
+0258    | OP_CLOSE_UPVALUE
+0259  124 OP_CLASS           89 'LowPolyTree'
+0261    | OP_DEFINE_GLOBAL   89 'LowPolyTree'
+0263    | OP_GET_GLOBAL      90 'Object3d'
+0265    | OP_GET_GLOBAL      91 'LowPolyTree'
+0267    | OP_INHERIT
+0268    | OP_GET_GLOBAL      92 'LowPolyTree'
+0270  127 OP_CONSTANT        94 '0.2'
+0272    | OP_NEGATE
+0273    | OP_CONSTANT        95 '0'
+0275    | OP_CONSTANT        96 '0.2'
+0277    | OP_NEGATE
+0278    | OP_LIST             3 '<fn init>'
+0280  128 OP_CONSTANT        97 '0.2'
+0282    | OP_CONSTANT        98 '0'
+0284    | OP_CONSTANT        99 '0.2'
+0286    | OP_NEGATE
+0287    | OP_LIST             3 '<fn init>'
+0289  129 OP_CONSTANT       100 '0.2'
+0291    | OP_CONSTANT       101 '0'
+0293    | OP_CONSTANT       102 '0.2'
+0295    | OP_LIST             3 '<fn init>'
+0297  130 OP_CONSTANT       103 '0.2'
+0299    | OP_NEGATE
+0300    | OP_CONSTANT       104 '0'
+0302    | OP_CONSTANT       105 '0.2'
+0304    | OP_LIST             3 '<fn init>'
+0306  131 OP_CONSTANT       106 '0.2'
+0308    | OP_NEGATE
+0309    | OP_CONSTANT       107 '1'
+0311    | OP_CONSTANT       108 '0.2'
+0313    | OP_NEGATE
+0314    | OP_LIST             3 '<fn init>'
+0316  132 OP_CONSTANT       109 '0.2'
+0318    | OP_CONSTANT       110 '1'
+0320    | OP_CONSTANT       111 '0.2'
+0322    | OP_NEGATE
+0323    | OP_LIST             3 '<fn init>'
+0325  133 OP_CONSTANT       112 '0.2'
+0327    | OP_CONSTANT       113 '1'
+0329    | OP_CONSTANT       114 '0.2'
+0331    | OP_LIST             3 '<fn init>'
+0333  134 OP_CONSTANT       115 '0.2'
+0335    | OP_NEGATE
+0336    | OP_CONSTANT       116 '1'
+0338    | OP_CONSTANT       117 '0.2'
+0340    | OP_LIST             3 '<fn init>'
+0342  137 OP_CONSTANT       118 '0'
+0344    | OP_CONSTANT       119 '2.5'
+0346    | OP_CONSTANT       120 '0'
+0348    | OP_LIST             3 '<fn init>'
+0350  138 OP_CONSTANT       121 '1'
+0352    | OP_NEGATE
+0353    | OP_CONSTANT       122 '1'
+0355    | OP_CONSTANT       123 '1'
+0357    | OP_NEGATE
+0358    | OP_LIST             3 '<fn init>'
+0360  139 OP_CONSTANT       124 '1'
+0362    | OP_CONSTANT       125 '1'
+0364    | OP_CONSTANT       126 '1'
+0366    | OP_NEGATE
+0367    | OP_LIST             3 '<fn init>'
+0369  140 OP_CONSTANT       127 '1'
+0371    | OP_CONSTANT       128 '1'
+0373    | OP_CONSTANT       129 '1'
+0375    | OP_LIST             3 '<fn init>'
+0377  141 OP_CONSTANT       130 '1'
+0379    | OP_NEGATE
+0380    | OP_CONSTANT       131 '1'
+0382    | OP_CONSTANT       132 '1'
+0384    | OP_LIST             3 '<fn init>'
+0386  142 OP_LIST            13 '1'
+0388    | OP_STATIC_VAR      93 'vertices'
+0390  146 OP_CONSTANT       134 '0'
+0392    | OP_CONSTANT       135 '1'
+0394    | OP_LIST             2 'init'
+0396    | OP_CONSTANT       136 '1'
+0398    | OP_CONSTANT       137 '2'
+0400    | OP_LIST             2 'init'
+0402    | OP_CONSTANT       138 '2'
+0404    | OP_CONSTANT       139 '3'
+0406    | OP_LIST             2 'init'
+0408    | OP_CONSTANT       140 '3'
+0410    | OP_CONSTANT       141 '0'
+0412    | OP_LIST             2 'init'
+0414  147 OP_CONSTANT       142 '4'
+0416    | OP_CONSTANT       143 '5'
+0418    | OP_LIST             2 'init'
+0420    | OP_CONSTANT       144 '5'
+0422    | OP_CONSTANT       145 '6'
+0424    | OP_LIST             2 'init'
+0426    | OP_CONSTANT       146 '6'
+0428    | OP_CONSTANT       147 '7'
+0430    | OP_LIST             2 'init'
+0432    | OP_CONSTANT       148 '7'
+0434    | OP_CONSTANT       149 '4'
+0436    | OP_LIST             2 'init'
+0438  148 OP_CONSTANT       150 '0'
+0440    | OP_CONSTANT       151 '4'
+0442    | OP_LIST             2 'init'
+0444    | OP_CONSTANT       152 '1'
+0446    | OP_CONSTANT       153 '5'
+0448    | OP_LIST             2 'init'
+0450    | OP_CONSTANT       154 '2'
+0452    | OP_CONSTANT       155 '6'
+0454    | OP_LIST             2 'init'
+0456    | OP_CONSTANT       156 '3'
+0458    | OP_CONSTANT       157 '7'
+0460    | OP_LIST             2 'init'
+0462  151 OP_CONSTANT       158 '8'
+0464    | OP_CONSTANT       159 '9'
+0466    | OP_LIST             2 'init'
+0468    | OP_CONSTANT       160 '8'
+0470    | OP_CONSTANT       161 '10'
+0472    | OP_LIST             2 'init'
+0474    | OP_CONSTANT       162 '8'
+0476    | OP_CONSTANT       163 '11'
+0478    | OP_LIST             2 'init'
+0480    | OP_CONSTANT       164 '8'
+0482    | OP_CONSTANT       165 '12'
+0484    | OP_LIST             2 'init'
+0486  152 OP_CONSTANT       166 '9'
+0488    | OP_CONSTANT       167 '10'
+0490    | OP_LIST             2 'init'
+0492    | OP_CONSTANT       168 '10'
+0494    | OP_CONSTANT       169 '11'
+0496    | OP_LIST             2 'init'
+0498    | OP_CONSTANT       170 '11'
+0500    | OP_CONSTANT       171 '12'
+0502    | OP_LIST             2 'init'
+0504    | OP_CONSTANT       172 '12'
+0506    | OP_CONSTANT       173 '9'
+0508    | OP_LIST             2 'init'
+0510  153 OP_LIST            20 '1'
+0512    | OP_STATIC_VAR     133 'edges'
+0514  157 OP_CONSTANT       175 '0'
+0516    | OP_CONSTANT       176 '1'
+0518    | OP_CONSTANT       177 '2'
+0520    | OP_CONSTANT       178 '3'
+0522    | OP_LIST             4 'draw'
+0524  158 OP_CONSTANT       179 '4'
+0526    | OP_CONSTANT       180 '5'
+0528    | OP_CONSTANT       181 '6'
+0530    | OP_CONSTANT       182 '7'
+0532    | OP_LIST             4 'draw'
+0534  159 OP_CONSTANT       183 '0'
+0536    | OP_CONSTANT       184 '1'
+0538    | OP_CONSTANT       185 '5'
+0540    | OP_CONSTANT       186 '4'
+0542    | OP_LIST             4 'draw'
+0544  160 OP_CONSTANT       187 '1'
+0546    | OP_CONSTANT       188 '2'
+0548    | OP_CONSTANT       189 '6'
+0550    | OP_CONSTANT       190 '5'
+0552    | OP_LIST             4 'draw'
+0554  161 OP_CONSTANT       191 '2'
+0556    | OP_CONSTANT       192 '3'
+0558    | OP_CONSTANT       193 '7'
+0560    | OP_CONSTANT       194 '6'
+0562    | OP_LIST             4 'draw'
+0564  162 OP_CONSTANT       195 '3'
+0566    | OP_CONSTANT       196 '0'
+0568    | OP_CONSTANT       197 '4'
+0570    | OP_CONSTANT       198 '7'
+0572    | OP_LIST             4 'draw'
+0574  165 OP_CONSTANT       199 '9'
+0576    | OP_CONSTANT       200 '10'
+0578    | OP_CONSTANT       201 '8'
+0580    | OP_LIST             3 '<fn init>'
+0582  166 OP_CONSTANT       202 '10'
+0584    | OP_CONSTANT       203 '11'
+0586    | OP_CONSTANT       204 '8'
+0588    | OP_LIST             3 '<fn init>'
+0590  167 OP_CONSTANT       205 '11'
+0592    | OP_CONSTANT       206 '12'
+0594    | OP_CONSTANT       207 '8'
+0596    | OP_LIST             3 '<fn init>'
+0598  168 OP_CONSTANT       208 '12'
+0600    | OP_CONSTANT       209 '9'
+0602    | OP_CONSTANT       210 '8'
+0604    | OP_LIST             3 '<fn init>'
+0606  169 OP_CONSTANT       211 '9'
+0608    | OP_CONSTANT       212 '10'
+0610    | OP_CONSTANT       213 '11'
+0612    | OP_CONSTANT       214 '12'
+0614    | OP_LIST             4 'draw'
+0616  170 OP_LIST            11 'Cube'
+0618    | OP_STATIC_VAR     174 'faces'
+0620  174 OP_CLOSURE        216 <fn init>
+0622      |                     local 1
+0624    | OP_METHOD         215 'init'
+0626  175 OP_POP
+0627    | OP_CLOSE_UPVALUE
+0628  177 OP_CLASS          217 'Custom'
+0630    | OP_DEFINE_GLOBAL  217 'Custom'
+0632    | OP_GET_GLOBAL     218 'Object3d'
+0634    | OP_GET_GLOBAL     219 'Custom'
+0636    | OP_INHERIT
+0637    | OP_GET_GLOBAL     220 'Custom'
+0639  181 OP_CLOSURE        222 <fn init>
+0641      |                     local 1
+0643    | OP_METHOD         221 'init'
+0645  182 OP_POP
+0646    | OP_CLOSE_UPVALUE
+0647  227 OP_CLOSURE        224 <fn parseObj>
+0649    | OP_DISPATCH
+0650    | OP_DEFINE_GLOBAL  223 'parseObj'
+0652  229 OP_NIL
+0653    | OP_RETURN
+== <script> ==
+0000    3 OP_CLASS            0 'Math'
+0002    | OP_DEFINE_GLOBAL    0 'Math'
+0004    | OP_GET_GLOBAL       1 'Math'
+0006    4 OP_CONSTANT         3 '3.14159'
+0008    | OP_STATIC_VAR       2 'PI'
+0010    5 OP_CONSTANT         5 '2.71828'
+0012    | OP_STATIC_VAR       4 'E'
+0014    6 OP_CONSTANT         7 '6.28319'
+0016    | OP_STATIC_VAR       6 'TAU'
+0018    7 OP_CONSTANT         9 '0.0174533'
+0020    | OP_STATIC_VAR       8 'DEG2RAD'
+0022    8 OP_CONSTANT        11 '57.2958'
+0024    | OP_STATIC_VAR      10 'RAD2DEG'
+0026    9 OP_POP
+0027    | OP_NIL
+0028    | OP_RETURN
+== color ==
+0000   12 OP_GET_LOCAL        1
+0002    | OP_CONSTANT         0 '65536'
+0004    | OP_MULTIPLY
+0005    | OP_GET_LOCAL        2
+0007    | OP_CONSTANT         1 '256'
+0009    | OP_MULTIPLY
+0010    | OP_ADD
+0011    | OP_GET_LOCAL        3
+0013    | OP_ADD
+0014    | OP_RETURN
+0015   13 OP_NIL
+0016    | OP_RETURN
+== <script> ==
+0000    3 OP_CLOSURE          0 <fn Window>
+0002    | OP_CALL             0
+0004    | OP_POP
+0005    4 OP_GET_GLOBAL       2 'Window'
+0007    | OP_DEFINE_GLOBAL    1 'win'
+0009  229 OP_CLOSURE          3 <fn utils>
+0011    | OP_CALL             0
+0013    | OP_POP
+0014    9 OP_CLOSURE          4 <fn Math>
+0016    | OP_CALL             0
+0018    | OP_POP
+0019    8 OP_GET_GLOBAL       5 'win'
+0021    | OP_CONSTANT         7 '1280'
+0023    | OP_CONSTANT         8 '720'
+0025    | OP_CONSTANT         9 '3d Renderer'
+0027    | OP_INVOKE        (3 args)    6 'init'
+0030    | OP_POP
+0031    9 OP_TRUE
+0032    | OP_DEFINE_GLOBAL   10 'run'
+0034   13 OP_CLOSURE         12 <fn color>
+0036    | OP_DISPATCH
+0037    | OP_DEFINE_GLOBAL   11 'color'
+0039   18 OP_GET_GLOBAL      14 'Custom'
+0041    | OP_CONSTANT        15 'ship.obj'
+0043    | OP_CONSTANT        16 '0'
+0045    | OP_CONSTANT        17 '450'
+0047    | OP_NEGATE
+0048    | OP_CONSTANT        18 '1100'
+0050    | OP_LIST             3 '<fn utils>'
+0052    | OP_CALL             2
+0054    | OP_DEFINE_GLOBAL   13 'obj'
+0056   20 OP_GET_GLOBAL      19 'run'
+0058    | OP_JUMP_IF_FALSE   58 -> 150
+0061    | OP_POP
+0062   21 OP_GET_GLOBAL      20 'win'
+0064    | OP_GET_GLOBAL      22 'color'
+0066    | OP_CONSTANT        23 '0'
+0068    | OP_CONSTANT        24 '0'
+0070    | OP_CONSTANT        25 '0'
+0072    | OP_CALL             3
+0074    | OP_INVOKE        (1 args)   21 'clear'
+0077    | OP_POP
+0078   22 OP_GET_GLOBAL      26 'obj'
+0080    | OP_GET_PROPERTY    27 'rotation'
+0082    | OP_CONSTANT        28 '1'
+0084    | OP_GET_GLOBAL      29 'obj'
+0086    | OP_GET_PROPERTY    30 'rotation'
+0088    | OP_CONSTANT        31 '1'
+0090    | OP_GET_INDEX    
+0091    | OP_CONSTANT        32 '0.003'
+0093    | OP_ADD
+0094    | OP_SET_INDEX    
+0095    | OP_POP
+0096   26 OP_GET_GLOBAL      33 'obj'
+0098    | OP_INVOKE        (0 args)   34 'draw'
+0101    | OP_POP
+0102   27 OP_GET_GLOBAL      35 'win'
+0104    | OP_INVOKE        (0 args)   36 'pollEvent'
+0107   28 OP_GET_LOCAL        1
+0109    | OP_NIL
+0110    | OP_EQUAL
+0111    | OP_NOT
+0112    | OP_JUMP_IF_FALSE  112 -> 139
+0115    | OP_POP
+0116   29 OP_GET_LOCAL        1
+0118    | OP_CONSTANT        37 '0'
+0120    | OP_GET_INDEX    
+0121    | OP_CONSTANT        38 'quit'
+0123    | OP_EQUAL
+0124    | OP_JUMP_IF_FALSE  124 -> 135
+0127    | OP_POP
+0128   30 OP_FALSE
+0129    | OP_SET_GLOBAL      39 'run'
+0131    | OP_POP
+0132    | OP_JUMP           132 -> 136
+0135    | OP_POP
+0136   31 OP_JUMP           136 -> 140
+0139    | OP_POP
+0140   33 OP_GET_GLOBAL      40 'win'
+0142    | OP_INVOKE        (0 args)   41 'update'
+0145    | OP_POP
+0146   34 OP_POP
+0147    | OP_LOOP           147 -> 56
+0150    | OP_POP
+0151   35 OP_GET_GLOBAL      42 'win'
+0153    | OP_INVOKE        (0 args)   43 'exit'
+0156    | OP_POP
+0157   36 OP_NIL
+0158    | OP_RETURN

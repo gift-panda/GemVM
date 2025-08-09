@@ -31,6 +31,8 @@ Value window_pollEvent(int argCount, Value* args);
 
 
 Value window_drawCircle(int argCount, Value* args);
+Value window_drawLine(int argCount, Value* args);
+Value window_drawTriangle(int argCount, Value* args);
 Value window_drawImage(int argCount, Value* args);
 Value window_getMousePosition(int argCount, Value* args);
 Value window_loadImage(int argCount, Value* args);

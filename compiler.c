@@ -843,8 +843,8 @@ static void classDeclaration() {
     consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
     while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
         if (match(TOKEN_VAR)) {
-            uint8_t global = parseVariable("Expect variable name.");
-
+            consume(TOKEN_IDENTIFIER, "Expect variable name.");
+            uint8_t global = identifierConstant(&parser.previous);
             if (match(TOKEN_EQUAL)) {
                 expression();
             } else {

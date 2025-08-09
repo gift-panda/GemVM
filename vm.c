@@ -44,6 +44,39 @@ static Value clockNative(int argCount, Value* args) {
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
 
+static Value readNative(int argCount, Value* args) {
+    if (argCount < 1 || !IS_STRING(args[0])) {
+        runtimeError(vm.illegalArgumentsErrorClass, "Argument must be a string (file path).");
+        return NIL_VAL;
+    }
+
+    const char* path = AS_CSTRING(args[0]);
+
+    FILE* file = fopen(path, "rb");
+    if (file == NULL) {
+        runtimeError(vm.accessErrorClass, "Could not open file \"%s\".", path);
+        return NIL_VAL;
+    }
+
+    fseek(file, 0L, SEEK_END);
+    size_t size = ftell(file);
+    rewind(file);
+
+    char* buffer = (char*)malloc(size + 1);
+    if (buffer == NULL) {
+        fclose(file);
+        runtimeError(vm.accessErrorClass, "Not enough memory to read file.");
+        return NIL_VAL;
+    }
+
+    size_t bytesRead = fread(buffer, 1, size, file);
+    buffer[bytesRead] = '\0';
+
+    fclose(file);
+
+    return OBJ_VAL(copyString(buffer, (int)bytesRead));
+}
+
 static Value inputNative(int argCount, Value* args) {
     if (argCount > 1) {
         runtimeError(vm.illegalArgumentsErrorClass, "input() takes no or one arguments.");
@@ -82,6 +115,11 @@ void defineStringMethods() {
     tableSet(&vm.stringClassMethods, copyString("asBool", 6), OBJ_VAL(newNative(stringParseBooleanNative)));
     tableSet(&vm.stringClassMethods, copyString("charCode", 8), OBJ_VAL(newNative(stringCharCodeNative)));
     tableSet(&vm.stringClassMethods, copyString("parse", 5), OBJ_VAL(newNative(str_parse)));
+    tableSet(&vm.stringClassMethods, copyString("split", 5), OBJ_VAL(newNative(stringSplitNative)));
+    tableSet(&vm.stringClassMethods, copyString("trim", 4), OBJ_VAL(newNative(stringTrimNative)));
+    tableSet(&vm.stringClassMethods, copyString("startsWith", 10), OBJ_VAL(newNative(stringStartsWithNative)));
+    tableSet(&vm.stringClassMethods, copyString("endsWith", 8), OBJ_VAL(newNative(stringEndsWithNative)));
+
 }
 
 void defineListMethods() {
@@ -364,6 +402,7 @@ void initVM() {
     defineNative("clock", clockNative);
     defineNative("input", inputNative);
     defineNative("sleep", sleepNative);
+    defineNative("read",  readNative);
     defineStringMethods();
     defineListMethods();
 }
@@ -1231,6 +1270,8 @@ static InterpretResult run() {
                     tableSet(&klass->staticMethods, copyString("drawImage", 9),   OBJ_VAL(newNative(window_drawImage)));
                     tableSet(&klass->staticMethods, copyString("loadImage", 9),   OBJ_VAL(newNative(window_loadImage)));
                     tableSet(&klass->staticMethods, copyString("exit", 4),        OBJ_VAL(newNative(window_exit)));
+                    tableSet(&klass->staticMethods, copyString("drawLine", 8),        OBJ_VAL(newNative(window_drawLine)));
+                    tableSet(&klass->staticMethods, copyString("drawTrig", 8),        OBJ_VAL(newNative(window_drawTriangle)));
                 }
 
                 if (name == copyString("Math", 4)) {
