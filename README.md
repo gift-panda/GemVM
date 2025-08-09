@@ -444,4 +444,4 @@ println(l.contains(42));  // false
 ---
 
 
-> For more examples, see the `chess/`, `Raycast/` and '3dRenderer' directories.
+> For more examples, see the `chess/`, `Raycast/` and `3dRenderer/` directories.
