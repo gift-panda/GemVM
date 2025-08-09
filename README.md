@@ -15,6 +15,7 @@
 
 ## Table of Contents
 
+- [Usage](#usage)
 - [Value Types](#value-types)
 - [Printing](#printing)
 - [Statements and Expressions](#statements-and-expressions)
@@ -29,6 +30,18 @@
   - [String Methods](#string-methods)
   - [List Methods](#list-methods)
 - [Credits](#credits)
+
+---
+
+## Usage
+
+###Linux
+
+TBD
+
+###Windows
+
+Use the precompiled .exe in the `Windows/` directory.
 
 ---
 
