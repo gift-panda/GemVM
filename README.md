@@ -439,9 +439,7 @@ println(l.contains(42));  // false
 
 ## Credits
 
-- Grammer Rules: Poushali Maity
-- Language and VM: Adrito Gayen
-- Standard Library: Shuvayu Kumar Das
+- Book Crafting Interpreters by Robert Nystrom.
 
 ---
 
