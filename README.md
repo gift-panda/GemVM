@@ -35,11 +35,11 @@
 
 ## Usage
 
-###Linux
+### Linux
 
 TBD
 
-###Windows
+### Windows
 
 Use the precompiled .exe in the `Windows/` directory.
 
