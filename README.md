@@ -43,6 +43,10 @@ TBD
 
 Use the precompiled .exe in the `Windows/` directory.
 
+```
+.\GemVM.exe filename
+```
+
 ---
 
 ## Value Types
