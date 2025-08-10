@@ -384,6 +384,8 @@ println(Math.sin(Math.PI)); // 0
 - `Window.drawRect(x, y, w, h, color)`
 - `Window.drawCircle(x, y, radius, color)`
 - `Window.drawImage(x, y, imageOrPath[, width, height])`
+- `window.drawTrig(x1, y1, x2, y2, x3, y3, color)`
+- `window.drawLine(x1, y1, x2, y2, color, [thickness]`
 - `Window.loadImage(path[, width, height])`
 - `Window.update()`
 - `Window.pollEvent()`
@@ -434,6 +436,9 @@ println("123".asNum());     // 123
 println("true".asBool());   // true
 println("A".charCode());    // 65
 println("42".parse());      // 42
+println("a b cd".split(" ")); //["a","b","cd"]
+println("abcd".startsWtih(...));
+println("abcd".endsWith(...));
 ```
 
 ---
