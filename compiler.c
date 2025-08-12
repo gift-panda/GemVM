@@ -36,6 +36,9 @@ static LoopContext loopStack[MAX_LOOP_DEPTH];
 static int loopDepth = 0;
 static int continueJumpOffset = -1;
 
+static Token lastVariableName;
+static bool lastWasVariable;
+
 typedef enum {
     PREC_NONE,
     PREC_ASSIGNMENT,  // =
@@ -419,7 +422,10 @@ static void namedVariable(Token name, bool canAssign) {
 }
 
 static void variable(bool canAssign) {
-    namedVariable(parser.previous, canAssign);
+    Token name = parser.previous;
+    lastVariableName = name;
+    lastWasVariable = true;
+    namedVariable(name, canAssign);
 }
 
 static void unary(bool canAssign) {
@@ -546,6 +552,92 @@ static void list(bool canAssign) {
     emitBytes(OP_LIST, elementCount); // Custom OP_LIST instruction
 }
 
+static void emitIncDec(Token name, bool isIncrement, bool isPrefix) {
+  // Try local first
+  int arg = resolveLocal(current, &name);
+  if (arg != -1) {
+    if (isPrefix) {
+      emitBytes(OP_GET_LOCAL, (uint8_t)arg);
+      emitConstant(NUMBER_VAL(1));
+      emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
+      emitBytes(OP_SET_LOCAL, (uint8_t)arg);
+    } else {
+      emitBytes(OP_GET_LOCAL, (uint8_t)arg); // original value
+      emitBytes(OP_GET_LOCAL, (uint8_t)arg); // copy for update
+      emitConstant(NUMBER_VAL(1));
+      emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
+      emitBytes(OP_SET_LOCAL, (uint8_t)arg);
+      emitByte(OP_POP); // pop new value, leave original
+    }
+    return;
+  }
+
+  // Upvalue
+  int upvalue = resolveUpvalue(current, &name);
+  if (upvalue != -1) {
+    if (isPrefix) {
+      emitBytes(OP_GET_UPVALUE, (uint8_t)upvalue);
+      emitConstant(NUMBER_VAL(1));
+      emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
+      emitBytes(OP_SET_UPVALUE, (uint8_t)upvalue);
+    } else {
+      emitBytes(OP_GET_UPVALUE, (uint8_t)upvalue);
+      emitBytes(OP_GET_UPVALUE, (uint8_t)upvalue);
+      emitConstant(NUMBER_VAL(1));
+      emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
+      emitBytes(OP_SET_UPVALUE, (uint8_t)upvalue);
+      emitByte(OP_POP);
+    }
+    return;
+  }
+
+  // Global
+  uint8_t nameConst = identifierConstant(&name);
+  if (isPrefix) {
+    emitBytes(OP_GET_GLOBAL, nameConst);
+    emitConstant(NUMBER_VAL(1));
+    emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
+    emitBytes(OP_SET_GLOBAL, nameConst);
+  } else {
+    emitBytes(OP_GET_GLOBAL, nameConst);
+    emitBytes(OP_GET_GLOBAL, nameConst);
+    emitConstant(NUMBER_VAL(1));
+    emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
+    emitBytes(OP_SET_GLOBAL, nameConst);
+    emitByte(OP_POP);
+  }
+}
+
+static void prefix_increment(bool canAssign) {
+  consume(TOKEN_IDENTIFIER, "Expect variable name after '++'.");
+  Token name = parser.previous;
+  emitIncDec(name, true /* ++ */, true /* prefix */);
+}
+
+static void prefix_decrement(bool canAssign) {
+  consume(TOKEN_IDENTIFIER, "Expect variable name after '--'.");
+  Token name = parser.previous;
+  emitIncDec(name, false /* -- */, true /* prefix */);
+}
+
+static void postfix_increment(bool canAssign) {
+  if (!lastWasVariable) {
+    error("Invalid operand for postfix '++'.");
+    return;
+  }
+  emitIncDec(lastVariableName, true, false);
+  lastWasVariable = false;
+}
+
+static void postfix_decrement(bool canAssign) {
+  if (!lastWasVariable) {
+    error("Invalid operand for postfix '++'.");
+    return;
+  }
+  emitIncDec(lastVariableName, false , false);
+  lastWasVariable = false;
+}
+
 
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN]    = {grouping, call,   PREC_CALL},
@@ -571,6 +663,8 @@ ParseRule rules[] = {
     [TOKEN_GREATER_EQUAL] = {NULL,     binary, PREC_COMPARISON},
     [TOKEN_LESS]          = {NULL,     binary, PREC_COMPARISON},
     [TOKEN_LESS_EQUAL]    = {NULL,     binary, PREC_COMPARISON},
+    [TOKEN_INCRE]         = {prefix_increment, postfix_increment, PREC_UNARY},
+    [TOKEN_DECRE]         = {prefix_decrement, postfix_decrement, PREC_UNARY},
     [TOKEN_IDENTIFIER]    = {variable, NULL,   PREC_NONE},
     [TOKEN_STRING]        = {string,   NULL,   PREC_NONE},
     [TOKEN_NUMBER]        = {number,   NULL,   PREC_NONE},
@@ -599,6 +693,7 @@ ParseRule rules[] = {
 };
 
 static void parsePrecedence(Precedence precedence) {
+    lastWasVariable = false;
     advance();
     ParseFn prefixRule = getRule(parser.previous.type)->prefix;
     if (prefixRule == NULL) {

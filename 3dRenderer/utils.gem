@@ -59,12 +59,22 @@ class Object3d{
         }
 
         // Fill triangles using face data
-        if(false)
+        if(false){
+// First, find minZ and maxZ before this loop (in camera space)
+var minZ = 1000000000;
+var maxZ = -1000000000;
 for (var i = 0; i < this.faces.length(); i = i + 1) {
     var face = this.faces[i];
+    for (var j = 0; j < face.length(); j = j + 1) {
+        var v = verts[face[j]][2];
+        if (v < minZ) minZ = v;
+        if (v > maxZ) maxZ = v;
+    }
+}
 
+for (var i = 0; i < this.faces.length(); i = i + 1) {
+    var face = this.faces[i];
     if (face.length() >= 3) {
-        // Triangulate face (assumes convex polygon)
         var a = verts[face[0]];
         for (var j = 1; j < face.length() - 1; j = j + 1) {
             var b = verts[face[j]];
@@ -84,11 +94,19 @@ for (var i = 0; i < this.faces.length(); i = i + 1) {
                 var x3 = c[0] / cDiv + halfWidth;
                 var y3 = -c[1] / cDiv + halfHeight;
 
-                win.drawTrig(x1, y1, x2, y2, x3, y3, color(255, 255, 255));
+                // --- Grayscale normalized shading ---
+                var avgZ = (a[2] + b[2] + c[2]) / 3;
+                var norm = (avgZ - minZ) / (maxZ - minZ);
+                var shade = (1 - norm) * 255; // closest = white, furthest = black
+                shade = Math.max(0, Math.min(255, shade));
+
+                win.drawTrig(x1, y1, x2, y2, x3, y3, color(shade, shade, shade));
             }
         }
     }
 }
+}
+
 
     }
 }
