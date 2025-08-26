@@ -25,7 +25,7 @@ Value window_init(int argCount, Value* args) {
 
     SDL_Init(SDL_INIT_VIDEO);
     gw.window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, 0);
-    gw.renderer = SDL_CreateRenderer(gw.window, -1, SDL_RENDERER_ACCELERATED);
+    gw.renderer = SDL_CreateRenderer(gw.window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     gw.isInitialized = true;
 
     return NIL_VAL;
