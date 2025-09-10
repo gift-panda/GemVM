@@ -562,7 +562,6 @@ static void emitIncDec(Token name, bool isIncrement, bool isPrefix) {
       emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
       emitBytes(OP_SET_LOCAL, (uint8_t)arg);
     } else {
-      emitBytes(OP_GET_LOCAL, (uint8_t)arg); // original value
       emitBytes(OP_GET_LOCAL, (uint8_t)arg); // copy for update
       emitConstant(NUMBER_VAL(1));
       emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
@@ -582,7 +581,6 @@ static void emitIncDec(Token name, bool isIncrement, bool isPrefix) {
       emitBytes(OP_SET_UPVALUE, (uint8_t)upvalue);
     } else {
       emitBytes(OP_GET_UPVALUE, (uint8_t)upvalue);
-      emitBytes(OP_GET_UPVALUE, (uint8_t)upvalue);
       emitConstant(NUMBER_VAL(1));
       emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
       emitBytes(OP_SET_UPVALUE, (uint8_t)upvalue);
@@ -599,7 +597,6 @@ static void emitIncDec(Token name, bool isIncrement, bool isPrefix) {
     emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
     emitBytes(OP_SET_GLOBAL, nameConst);
   } else {
-    emitBytes(OP_GET_GLOBAL, nameConst);
     emitBytes(OP_GET_GLOBAL, nameConst);
     emitConstant(NUMBER_VAL(1));
     emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
@@ -1352,6 +1349,16 @@ char* getWindowText() {
     return buf;
 }
 
+#include "GemMath.h"
+char* getMathText() {
+    char* buf = malloc(Math_gem_len + 1);
+    if (!buf) return NULL;
+
+    memcpy(buf, Math_gem, Math_gem_len);
+    buf[Math_gem_len] = '\0';
+    return buf;
+}
+
 static void statement() {
     if (match(TOKEN_PRINT)) {
         printStatement();
@@ -1367,6 +1374,9 @@ static void statement() {
         char* source;
         if (memcmp(file, "Window", 6) == 0) {
             source = getWindowText();
+        }
+        else if (memcmp(file, "Math", 4) == 0){
+            source = getMathText();
         }
         else{
             source = loadModuleFile(file);

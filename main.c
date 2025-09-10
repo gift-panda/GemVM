@@ -5,7 +5,6 @@
 #include "chunk.h"
 #include "compiler.h"
 #include "GemError.h"
-#include "GemMath.h"
 #include "vm.h"
 
 #include <signal.h>
@@ -540,14 +539,6 @@ char* getErrorText() {
     return buf;
 }
 
-char* getMathText() {
-    char* buf = malloc(Math_gem_len + 1);
-    if (!buf) return NULL;
-
-    memcpy(buf, Math_gem, Math_gem_len);
-    buf[Math_gem_len] = '\0';
-    return buf;
-}
 
 int main(int argc, const char* argv[]) {
     int runRepl = 1;
@@ -591,25 +582,26 @@ int main(int argc, const char* argv[]) {
     }
 
     interpret(getErrorText());
-    interpret(getMathText());
 
-    if (!has_extension(scriptPath, "gem") && !has_extension(scriptPath, "gemc")){
-        printf("Source must be either .gem file or precompiled.");
-        return 1;
-    }
-
-    if (has_extension(scriptPath, "gemc") && !run){
-        printf("File already compiled.");
-        return 1;
-    }
-
-    if (enableGC) {
-        vm.gcEnabled = true;
-    }
 
     if (runRepl) {
+        vm.repl = 1;
         repl();
     } else {
+        if (!has_extension(scriptPath, "gem") && !has_extension(scriptPath, "gemc")){
+            printf("Source must be either .gem file or precompiled.");
+            return 1;
+        }
+
+        if (has_extension(scriptPath, "gemc") && !run){
+            printf("File already compiled.");
+            return 1;
+        }
+
+        if (enableGC) {
+            vm.gcEnabled = true;
+        }
+        
         if (!run) {
             vm.noRun = true;
         }

@@ -216,7 +216,8 @@ CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
     // Step 5: No try/catch found — print msg and stack trace, then exit
     fwrite(msgbuf, 1, msgOffset, stderr);
     fwrite(tracebuf, 1, traceOffset, stderr);
-    exit(1);
+    if(!vm.repl)
+        exit(1);
 }
 
 CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
@@ -277,7 +278,9 @@ CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
     }
 
     fwrite(tracebuf, 1, offset, stderr);
-    exit(1);
+
+    if(!vm.repl)
+        exit(1);
 }
 
 
@@ -389,7 +392,7 @@ void initVM() {
     // for visibility violations (private/protected)
 
     vm.illegalArgumentsErrorString = NULL;
-    vm.illegalArgumentsErrorString = copyString("IllegalArgumentsError", 21);
+    vm.illegalArgumentsErrorString = copyString("IllegalArgumentError", 20);
     // for invalid arguments (e.g. wrong type, value, or count)
 
     vm.lookUpErrorString = NULL;
@@ -405,6 +408,8 @@ void initVM() {
     defineNative("read",  readNative);
     defineStringMethods();
     defineListMethods();
+
+    vm.repl = 0;
 }
 
 void freeVM() {
@@ -503,7 +508,9 @@ static bool callValue(Value callee, int argCount) {
             case OBJ_CLASS: {
                 ObjClass* klass = AS_CLASS(callee);
                 Value initializer;
+                
                 if (tableGet(&klass->methods, vm.initString, &initializer)) {
+                    
                     vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
                     if (AS_BOUND_METHOD(initializer)->method[argCount] == NULL) {
                         runtimeError(vm.illegalArgumentsErrorClass, "No matching initializer found with %d arguments.", argCount);
@@ -511,6 +518,11 @@ static bool callValue(Value callee, int argCount) {
                     }
                     return call(AS_BOUND_METHOD(initializer)->method[argCount], argCount);
                 }
+                else if(argCount == 0){
+                    vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
+                    return true;
+                }
+                
                 return false;
             }
             case OBJ_BOUND_METHOD: {

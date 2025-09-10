@@ -69,6 +69,7 @@ typedef struct {
     bool gcEnabled;
     bool showBytecode;
     bool noRun;
+    bool repl;
 } VM;
 
 typedef enum {
