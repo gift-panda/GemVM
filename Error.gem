@@ -6,7 +6,7 @@ class Error{
         this.stackTrace = nil;
     }
     toString(){
-        return this.msg + "\n" + this.stackTrace;
+        return this.msg + this.stackTrace;
     }
 }
 

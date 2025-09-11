@@ -29,6 +29,7 @@
 VM vm;
 void printStack();
 ObjClass* errorClass;
+bool replError;
 
 static Value sleepNative(int argCount, Value* args){
     int ms = AS_NUMBER(args[0]);
@@ -41,6 +42,10 @@ static Value sleepNative(int argCount, Value* args){
 
 
 static Value clockNative(int argCount, Value* args) {
+    if(argCount != 0){
+        runtimeError(vm.illegalArgumentsErrorClass, "clock() does not accept any argument.");
+        return NIL_VAL;
+    }
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
 
@@ -178,7 +183,7 @@ CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
         }
 
         if (function->name == NULL) {
-            len = snprintf(linebuf, sizeof(linebuf), "script\n");
+            len = snprintf(linebuf, sizeof(linebuf), "script");
         } else {
             len = snprintf(linebuf, sizeof(linebuf), "%s()\n", function->name->chars);
         }
@@ -206,6 +211,7 @@ CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
             vm.stackTop = ++frame->saveStack[frame->tryTop];
             frame->ip = frame->saveIP[frame->tryTop] + frame->hasTry[frame->tryTop] - 1;
             push(OBJ_VAL(errorInstance));
+            vm.hasError = true;
             return frame;
         }
 
@@ -218,6 +224,7 @@ CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
     fwrite(tracebuf, 1, traceOffset, stderr);
     if(!vm.repl)
         exit(1);
+    replError = true;
 }
 
 CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
@@ -263,6 +270,7 @@ CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
             vm.stackTop = ++frame->saveStack[frame->tryTop];
             frame->ip = frame->saveIP[frame->tryTop] + frame->hasTry[frame->tryTop] - 1;
             push(OBJ_VAL(errorInstance));
+            vm.hasError = true;
             return frame;
         }
 
@@ -281,6 +289,7 @@ CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
 
     if(!vm.repl)
         exit(1);
+    replError = true;
 }
 
 
@@ -473,6 +482,11 @@ void printDispatcher(ObjMultiDispatch* dispatcher) {
 static bool callBoundedNative(Value callee, int argCount) {
     NativeFn native = AS_NATIVE(callee);
     Value result = native(argCount, vm.stackTop - argCount);
+    if(vm.hasError){
+        vm.hasError = false;
+        result = pop();
+        push(result);
+    }
     vm.stackTop = vm.stackTop - argCount;
     push(result);
     return true;
@@ -501,6 +515,11 @@ static bool callValue(Value callee, int argCount) {
             case OBJ_NATIVE: {
                 NativeFn native = AS_NATIVE(callee);
                 Value result = native(argCount, vm.stackTop - argCount);
+                if(vm.hasError){
+                    vm.hasError = false;
+                    result = pop();
+                    push(result);
+                }
                 vm.stackTop = vm.stackTop - argCount - 1;
                 push(result);
                 return true;
@@ -693,7 +712,7 @@ void printStack() {
 }
 
 static bool isPrivate(ObjString* name) {
-    // Make sure it’s non‑empty, then check the first char.
+    // Make sure it’s non empty, then check the first char.
     return name->length > 0 && name->chars[0] == '#';
 }
 
@@ -757,19 +776,23 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
                 push(result);
                 return res;
             }
+            
             bool res = callValue(value, argCount);
-            Value result = pop();
-            pop();
-            push(result);
+
+            //Idk why i added this? but look out ig? more bugs?
+            
+            //Value result = pop();
+            //pop();
+            //push(result);
             return res;
         }
 
         klass = klass->superclass;
         if (klass != NULL && tableGet(&klass->staticMethods, name, &value)) {
             bool res = callValue(value, argCount);
-            Value result = pop();
-            pop();
-            push(result);
+            //Value result = pop();
+            //pop();
+            //push(result);
             return res;
         }
         runtimeError(vm.nameErrorClass, "Undefined static method '%s' on class '%s'.",
@@ -853,6 +876,10 @@ static InterpretResult run() {
     #define READ_STRING() AS_STRING(READ_CONSTANT())
 
         for (;;) {
+            if(replError){
+                replError = false;
+                return INTERPRET_RUNTIME_ERROR;
+            }
     #ifdef DEBUG_TRACE_EXECUTION
             printf("          ");
             for (Value* slot = vm.stack; slot < vm.stackTop; slot++) {

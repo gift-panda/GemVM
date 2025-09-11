@@ -70,6 +70,7 @@ typedef struct {
     bool showBytecode;
     bool noRun;
     bool repl;
+    bool hasError;
 } VM;
 
 typedef enum {
