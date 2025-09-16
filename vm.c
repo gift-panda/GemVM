@@ -23,7 +23,7 @@
 #include "stringMethods.c"
 #include "listMethods.c"
 #include "windowMethods.h"
-#include  "Math.c"
+#include "Math.c"
 
 
 VM vm;

@@ -1227,6 +1227,8 @@ static void declaration() {
         funDeclaration();
     } else if (match(TOKEN_VAR)) {
         varDeclaration();
+    }
+    else if(match(TOKEN_SEMICOLON)){
     } else {
         statement();
     }
@@ -1438,7 +1440,524 @@ static void statement() {
     }
 }
 
+/* preproc_macro_multiline.c
+   Mini-preprocessor:
+   - supports #macro lines (object-like and function-like)
+   - macro bodies can span multiple lines using backslash (\) continuation
+   - preserves "string literals" and // comments
+   - expands macros (simple textual macro replacement)
+   - desugars ++/-- and +=, -=, *=, /=, %=
+   Compile: gcc -std=c11 preproc_macro_multiline.c -O2 -o preproc_macro_multiline
+*/
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+
+/* safe strdup/strndup */
+static char* my_strndup(const char* s, int n) {
+    char* p = malloc((size_t)n + 1);
+    if (!p) return NULL;
+    memcpy(p, s, (size_t)n);
+    p[n] = '\0';
+    return p;
+}
+static char* my_strdup(const char* s) { return my_strndup(s, (int)strlen(s)); }
+
+/* --- Macro table --- */
+typedef struct Macro {
+    char* name;
+    char** params;
+    int param_count;
+    char* body;
+    struct Macro* next;
+} Macro;
+
+static Macro* macros = NULL;
+
+void add_macro(const char* name, char** params, int param_count, const char* body) {
+    Macro* m = malloc(sizeof(Macro));
+    m->name = my_strdup(name);
+    m->param_count = param_count;
+    if (param_count > 0) {
+        m->params = malloc(sizeof(char*) * param_count);
+        for (int i = 0; i < param_count; ++i) m->params[i] = my_strdup(params[i]);
+    } else m->params = NULL;
+    m->body = my_strdup(body);
+    m->next = macros;
+    macros = m;
+}
+
+Macro* find_macro(const char* name) {
+    for (Macro* m = macros; m; m = m->next) if (strcmp(m->name, name) == 0) return m;
+    return NULL;
+}
+
+/* expand macro body by replacing parameter identifiers with argument strings */
+char* expand_macro_body(Macro* m, char** args, int argc) {
+    if (m->param_count == 0) return my_strdup(m->body);
+    size_t cap = strlen(m->body) * 4 + 16;
+    char* out = malloc(cap);
+    size_t pos = 0;
+    const char* s = m->body;
+    while (*s) {
+        if (isalpha((unsigned char)*s) || *s == '_') {
+            const char* p = s+1;
+            while (*p && (isalnum((unsigned char)*p) || *p == '_')) p++;
+            int len = (int)(p - s);
+            char* ident = my_strndup(s, len);
+            int repl = -1;
+            for (int k = 0; k < m->param_count; ++k) if (strcmp(ident, m->params[k]) == 0) { repl = k; break; }
+            if (repl >= 0 && repl < argc) {
+                size_t need = strlen(args[repl]);
+                if (pos + need + 1 >= cap) { cap = (cap + need) * 2; out = realloc(out, cap); }
+                memcpy(out + pos, args[repl], need); pos += need;
+            } else {
+                if (pos + len + 1 >= cap) { cap = (cap + len) * 2; out = realloc(out, cap); }
+                memcpy(out + pos, s, len); pos += len;
+            }
+            free(ident);
+            s = p;
+        } else {
+            if (pos + 2 >= cap) { cap *= 2; out = realloc(out, cap); }
+            out[pos++] = *s++;
+        }
+    }
+    out[pos] = '\0';
+    return out;
+}
+
+/* helpers for expressions */
+static int is_expr_char(char c) { return (isalnum((unsigned char)c) || c == '_' || c == '.'); }
+
+static int find_prev_nonspace(const char* s, int idx) {
+    int p = idx - 1;
+    while (p >= 0 && isspace((unsigned char)s[p])) p--;
+    return p;
+}
+static int find_next_nonspace(const char* s, int idx, int n) {
+    int p = idx + 1;
+    while (p < n && isspace((unsigned char)s[p])) p++;
+    return (p < n) ? p : -1;
+}
+
+static int find_expr_start(const char* s, int end_idx) {
+    int k = end_idx, dp=0, db=0;
+    while (k >= 0) {
+        char c = s[k];
+        if (c == ')') { dp++; k--; continue; }
+        if (c == ']') { db++; k--; continue; }
+        if (c == '(') { if (dp > 0) { dp--; k--; continue; } break; }
+        if (c == '[') { if (db > 0) { db--; k--; continue; } break; }
+        if (dp > 0 || db > 0) { k--; continue; }
+        if (is_expr_char(c)) { k--; continue; }
+        break;
+    }
+    return k + 1;
+}
+
+static int forward_find_expr_end(const char* s, int start_idx, int n) {
+    int i = start_idx, dp=0, db=0;
+    while (i < n) {
+        char c = s[i];
+        if (c == '[') { db++; i++; continue; }
+        if (c == ']') { if (db>0) { db--; i++; continue; } break; }
+        if (c == '(') { dp++; i++; continue; }
+        if (c == ')') { if (dp>0) { dp--; i++; continue; } break; }
+        if (dp>0 || db>0) { i++; continue; }
+        if (is_expr_char(c)) { i++; continue; }
+        break;
+    }
+    int end = i - 1;
+    while (end >= start_idx && isspace((unsigned char)s[end])) end--;
+    return end;
+}
+
+static int forward_find_rhs_end(const char* s, int start_idx, int n) {
+    int i = start_idx, dp=0, db=0;
+    while (i < n) {
+        char c = s[i];
+        if (c == '"') {
+            int j = i+1;
+            while (j < n) { if (s[j] == '"' && s[j-1] != '\\') { j++; break; } j++; }
+            i = j; continue;
+        }
+        if (c == '(') { dp++; i++; continue; }
+        if (c == ')') { if (dp>0) { dp--; i++; continue; } break; }
+        if (c == '[') { db++; i++; continue; }
+        if (c == ']') { if (db>0) { db--; i++; continue; } break; }
+        if (dp==0 && db==0 && (c==';' || c==',')) break;
+        i++;
+    }
+    int end = i - 1;
+    while (end >= start_idx && isspace((unsigned char) s[end])) end--;
+    if (end < start_idx) return -1;
+    return end;
+}
+
+static char* ensure_capacity(char* out, size_t *out_cap, size_t need) {
+    if (*out_cap >= need) return out;
+    size_t newcap = *out_cap;
+    while (newcap < need) newcap *= 2;
+    char* p = realloc(out, newcap);
+    if (!p) return NULL;
+    *out_cap = newcap;
+    return p;
+}
+
+/* Step 1: strip macros and store them. Supports multiline macro bodies using backslash at line end. */
+char* strip_macros_and_build_table(const char* src) {
+    int n = (int)strlen(src);
+    size_t cap = (size_t)n + 16;
+    char* out = malloc(cap);
+    size_t out_pos = 0;
+    int i = 0;
+    while (i < n) {
+        int j = i;
+        if (i == 0 || src[i-1] == '\n') {
+            while (j < n && (src[j] == ' ' || src[j] == '\t')) j++;
+            if (j < n && src[j] == '#' && strncmp(src + j, "#macro", 6) == 0) {
+                int p = j + 6;
+                while (p < n && isspace((unsigned char)src[p])) p++;
+                int name_start = p;
+                while (p < n && (isalnum((unsigned char)src[p]) || src[p] == '_')) p++;
+                if (p == name_start) { while (p < n && src[p] != '\n') p++; i = p; continue; }
+                char* name = my_strndup(src + name_start, p - name_start);
+                char** params = NULL; int param_count = 0;
+                if (p < n && src[p] == '(') {
+                    p++;
+                    while (p < n && src[p] != ')') {
+                        while (p < n && isspace((unsigned char)src[p])) p++;
+                        int ps = p;
+                        while (p < n && (isalnum((unsigned char)src[p]) || src[p] == '_')) p++;
+                        if (p > ps) {
+                            params = realloc(params, sizeof(char*) * (param_count + 1));
+                            params[param_count++] = my_strndup(src + ps, p - ps);
+                        }
+                        while (p < n && isspace((unsigned char)src[p])) p++;
+                        if (p < n && src[p] == ',') p++;
+                    }
+                    if (p < n && src[p] == ')') p++;
+                }
+                while (p < n && isspace((unsigned char)src[p])) p++;
+                /* Read body, but support backslash-continuation */
+                size_t body_cap = 256;
+                char* body = malloc(body_cap);
+                size_t body_len = 0;
+                int cont = 1;
+                while (p < n && cont) {
+                    int line_start = p;
+                    while (p < n && src[p] != '\n') p++;
+                    int line_end = p;
+                    while (line_end > line_start && isspace((unsigned char)src[line_end-1])) line_end--;
+                    cont = 0;
+                    if (line_end > line_start && src[line_end-1] == '\\') { cont = 1; line_end--; }
+                    int addlen = line_end - line_start;
+                    if (body_len + addlen + 1 >= body_cap) { body_cap = (body_cap + addlen) * 2; body = realloc(body, body_cap); }
+                    memcpy(body + body_len, src + line_start, addlen); body_len += addlen;
+                    if (cont) {
+                        if (body_len + 1 >= body_cap) { body_cap *= 2; body = realloc(body, body_cap); }
+                        body[body_len++] = ' ';
+                    }
+                    if (p < n && src[p] == '\n') p++;
+                }
+                if (body_len == 0) { free(body); body = my_strdup(""); }
+                else { body[body_len] = '\0'; body = realloc(body, body_len + 1); }
+                add_macro(name, params, param_count, body);
+                free(name); free(body);
+                if (params) { for (int q=0;q<param_count;q++) free(params[q]); free(params); }
+                i = p;
+                continue;
+            }
+        }
+        if (out_pos + 2 >= cap) { cap = cap * 2 + 16; out = realloc(out, cap); }
+        out[out_pos++] = src[i++];
+    }
+    out[out_pos] = '\0';
+    return out;
+}
+
+/* Step 2: expand macros (single pass) */
+char* expand_macros_once(const char* src) {
+    int n = (int)strlen(src);
+    size_t cap = (size_t)n * 4 + 64;
+    char* out = malloc(cap);
+    size_t out_pos = 0;
+    int i = 0;
+    while (i < n) {
+        if (src[i] == '"') {
+            int j = i+1;
+            while (j < n) { if (src[j] == '"' && src[j-1] != '\\') { j++; break; } j++; }
+            int slen = j - i;
+            if (out_pos + slen + 1 >= cap) { cap = (cap + slen) * 2; out = realloc(out, cap); }
+            memcpy(out + out_pos, src + i, slen); out_pos += slen;
+            i = j; continue;
+        }
+        if (i+1 < n && src[i] == '/' && src[i+1] == '/') {
+            int j = i + 2;
+            while (j < n && src[j] != '\n') j++;
+            int clen = j - i;
+            if (out_pos + clen + 1 >= cap) { cap = (cap + clen) * 2; out = realloc(out, cap); }
+            memcpy(out + out_pos, src + i, clen); out_pos += clen;
+            i = j; continue;
+        }
+        if (isalpha((unsigned char)src[i]) || src[i] == '_') {
+            int j = i+1;
+            while (j < n && (isalnum((unsigned char)src[j]) || src[j] == '_')) j++;
+            char* ident = my_strndup(src + i, j - i);
+            Macro* m = find_macro(ident);
+            if (m) {
+                if (m->param_count == 0) {
+                    size_t len = strlen(m->body);
+                    if (out_pos + len + 1 >= cap) { cap = (cap + len) * 2; out = realloc(out, cap); }
+                    memcpy(out + out_pos, m->body, len); out_pos += len;
+                    i = j; free(ident); continue;
+                } else {
+                    int k = j;
+                    while (k < n && isspace((unsigned char)src[k])) k++;
+                    if (k < n && src[k] == '(') {
+                        k++;
+                        int depth = 1;
+                        int arg_start = k;
+                        char** args = NULL; int argc = 0;
+                        for (; k < n; k++) {
+                            if (src[k] == '"') {
+                                int q = k+1; while (q < n) { if (src[q] == '"' && src[q-1] != '\\') { q++; break; } q++; }
+                                k = q - 1;
+                            } else if (src[k] == '(') depth++;
+                            else if (src[k] == ')') {
+                                depth--;
+                                if (depth == 0) {
+                                    if (k > arg_start) {
+                                        args = realloc(args, sizeof(char*) * (argc + 1));
+                                        args[argc++] = my_strndup(src + arg_start, k - arg_start);
+                                    } else {
+                                        args = realloc(args, sizeof(char*) * (argc + 1));
+                                        args[argc++] = my_strdup("");
+                                    }
+                                    k++;
+                                    break;
+                                }
+                            } else if (src[k] == ',' && depth == 1) {
+                                args = realloc(args, sizeof(char*) * (argc + 1));
+                                args[argc++] = my_strndup(src + arg_start, k - arg_start);
+                                arg_start = k + 1;
+                            }
+                        }
+                        char* expanded = expand_macro_body(m, args, argc);
+                        size_t elen = strlen(expanded);
+                        if (out_pos + elen + 1 >= cap) { cap = (cap + elen) * 2; out = realloc(out, cap); }
+                        memcpy(out + out_pos, expanded, elen); out_pos += elen;
+                        free(expanded);
+                        for (int a=0;a<argc;a++) free(args[a]); free(args);
+                        i = k; free(ident); continue;
+                    }
+                }
+            }
+            if (out_pos + (j - i) + 1 >= cap) { cap = (cap + (j-i)) * 2; out = realloc(out, cap); }
+            memcpy(out + out_pos, src + i, j - i); out_pos += j - i;
+            i = j; free(ident); continue;
+        }
+        if (out_pos + 2 >= cap) { cap = cap * 2 + 16; out = realloc(out, cap); }
+        out[out_pos++] = src[i++];
+    }
+    out[out_pos] = '\0';
+    return out;
+}
+
+char* expand_macros(const char* src) {
+    char* curr = my_strdup(src);
+    for (int pass = 0; pass < 8; pass++) {
+        char* next = expand_macros_once(curr);
+        if (strcmp(next, curr) == 0) { free(curr); return next; }
+        free(curr);
+        curr = next;
+    }
+    return curr;
+}
+
+/* Step 3: operator desugaring (compound assignments and ++/--) */
+char* desugar_operators(const char* src) {
+    if (!src) return NULL;
+    int n = (int)strlen(src);
+    if (n == 0) return my_strdup("");
+
+    size_t out_cap = (size_t)n * 8 + 64;
+    char* out = malloc(out_cap);
+    int i = 0;
+    int last_emit = 0;
+    size_t out_pos = 0;
+
+    while (i < n) {
+        /* string */
+        if (src[i] == '"') {
+            if (i > last_emit) {
+                int pre_len = i - last_emit;
+                out = ensure_capacity(out, &out_cap, out_pos + pre_len + 1);
+                memcpy(out + out_pos, src + last_emit, pre_len);
+                out_pos += pre_len;
+            }
+            int j = i+1;
+            while (j < n) { if (src[j] == '"' && src[j-1] != '\\') { j++; break; } j++; }
+            int slen = j - i;
+            out = ensure_capacity(out, &out_cap, out_pos + slen + 1);
+            memcpy(out + out_pos, src + i, slen); out_pos += slen;
+            i = j; last_emit = i; continue;
+        }
+        /* comment */
+        if (i+1 < n && src[i] == '/' && src[i+1] == '/') {
+            if (i > last_emit) {
+                int pre_len = i - last_emit;
+                out = ensure_capacity(out, &out_cap, out_pos + pre_len + 1);
+                memcpy(out + out_pos, src + last_emit, pre_len); out_pos += pre_len;
+            }
+            int j = i + 2; while (j < n && src[j] != '\n') j++;
+            int clen = j - i;
+            out = ensure_capacity(out, &out_cap, out_pos + clen + 1);
+            memcpy(out + out_pos, src + i, clen); out_pos += clen;
+            i = j; last_emit = i; continue;
+        }
+
+        /* compound assignment */
+        if (i+1 < n) {
+            char c = src[i], next = src[i+1];
+            if ((c=='+'||c=='-'||c=='*'||c=='/'||c=='%') && next=='=') {
+                int prev = find_prev_nonspace(src, i);
+                if (prev >= 0 && (isalnum((unsigned char)src[prev]) || src[prev]==']' || src[prev]==')' || src[prev]=='_')) {
+                    int lhs_end = prev;
+                    int lhs_start = find_expr_start(src, lhs_end);
+                    if (lhs_start < 0) { i++; continue; }
+                    int rhs_first = find_next_nonspace(src, i+1, n);
+                    if (rhs_first == -1) { i += 2; continue; }
+                    int rhs_end = forward_find_rhs_end(src, rhs_first, n);
+                    if (rhs_end < rhs_first) { i += 2; continue; }
+
+                    if (lhs_start > last_emit) {
+                        int pre_len = lhs_start - last_emit;
+                        out = ensure_capacity(out, &out_cap, out_pos + pre_len + 1);
+                        memcpy(out + out_pos, src + last_emit, pre_len); out_pos += pre_len;
+                    }
+                    char* lhs = my_strndup(src + lhs_start, lhs_end - lhs_start + 1);
+                    char* rhs = my_strndup(src + rhs_first, rhs_end - rhs_first + 1);
+                    const char* op = (c=='+')?"+":(c=='-')?"-":(c=='*')?"*":(c=='/')?"/":"%";
+                    int needed = snprintf(NULL,0,"(%s = %s %s (%s))", lhs, lhs, op, rhs);
+                    out = ensure_capacity(out, &out_cap, out_pos + needed + 1);
+                    snprintf(out + out_pos, out_cap - out_pos, "(%s = %s %s (%s))", lhs, lhs, op, rhs);
+                    out_pos += needed;
+                    free(lhs); free(rhs);
+                    i = rhs_end + 1; last_emit = i; continue;
+                }
+            }
+        }
+
+        /* ++ */
+        if (i+1 < n && src[i] == '+' && src[i+1] == '+') {
+            int prev = find_prev_nonspace(src, i);
+            int nxt = find_next_nonspace(src, i+1, n);
+            if (prev >= 0 && (isalnum((unsigned char)src[prev]) || src[prev]==']' || src[prev]==')' || src[prev]=='_')) {
+                int expr_end = prev;
+                int expr_start = find_expr_start(src, expr_end);
+                if (expr_start > last_emit) {
+                    int pre_len = expr_start - last_emit;
+                    out = ensure_capacity(out, &out_cap, out_pos + pre_len + 1);
+                    memcpy(out + out_pos, src + last_emit, pre_len); out_pos += pre_len;
+                }
+                char* expr = my_strndup(src + expr_start, expr_end - expr_start + 1);
+                int needed = snprintf(NULL,0,"((%s = %s + 1) - 1)", expr, expr);
+                out = ensure_capacity(out, &out_cap, out_pos + needed + 1);
+                snprintf(out + out_pos, out_cap - out_pos, "((%s = %s + 1) - 1)", expr, expr);
+                out_pos += needed; free(expr);
+                i += 2; last_emit = i; continue;
+            } else {
+                if (nxt != -1) {
+                    int expr_start = nxt;
+                    int expr_end = forward_find_expr_end(src, expr_start, n);
+                    if (expr_end >= expr_start) {
+                        if (i > last_emit) {
+                            int pre_len = i - last_emit;
+                            out = ensure_capacity(out, &out_cap, out_pos + pre_len + 1);
+                            memcpy(out + out_pos, src + last_emit, pre_len); out_pos += pre_len;
+                        }
+                        char* expr = my_strndup(src + expr_start, expr_end - expr_start + 1);
+                        int needed = snprintf(NULL,0,"(%s = %s + 1)", expr, expr);
+                        out = ensure_capacity(out, &out_cap, out_pos + needed + 1);
+                        snprintf(out + out_pos, out_cap - out_pos, "(%s = %s + 1)", expr, expr);
+                        out_pos += needed; free(expr);
+                        i = expr_end + 1; last_emit = i; continue;
+                    }
+                }
+                i++; continue;
+            }
+        }
+
+        /* -- */
+        if (i+1 < n && src[i] == '-' && src[i+1] == '-') {
+            int prev = find_prev_nonspace(src, i);
+            int nxt = find_next_nonspace(src, i+1, n);
+            if (prev >= 0 && (isalnum((unsigned char)src[prev]) || src[prev]==']' || src[prev]==')' || src[prev]=='_')) {
+                int expr_end = prev;
+                int expr_start = find_expr_start(src, expr_end);
+                if (expr_start > last_emit) {
+                    int pre_len = expr_start - last_emit;
+                    out = ensure_capacity(out, &out_cap, out_pos + pre_len + 1);
+                    memcpy(out + out_pos, src + last_emit, pre_len); out_pos += pre_len;
+                }
+                char* expr = my_strndup(src + expr_start, expr_end - expr_start + 1);
+                int needed = snprintf(NULL,0,"((%s = %s - 1) + 1)", expr, expr);
+                out = ensure_capacity(out, &out_cap, out_pos + needed + 1);
+                snprintf(out + out_pos, out_cap - out_pos, "((%s = %s - 1) + 1)", expr, expr);
+                out_pos += needed; free(expr);
+                i += 2; last_emit = i; continue;
+            } else {
+                if (nxt != -1) {
+                    int expr_start = nxt;
+                    int expr_end = forward_find_expr_end(src, expr_start, n);
+                    if (expr_end >= expr_start) {
+                        if (i > last_emit) {
+                            int pre_len = i - last_emit;
+                            out = ensure_capacity(out, &out_cap, out_pos + pre_len + 1);
+                            memcpy(out + out_pos, src + last_emit, pre_len); out_pos += pre_len;
+                        }
+                        char* expr = my_strndup(src + expr_start, expr_end - expr_start + 1);
+                        int needed = snprintf(NULL,0,"(%s = %s - 1)", expr, expr);
+                        out = ensure_capacity(out, &out_cap, out_pos + needed + 1);
+                        snprintf(out + out_pos, out_cap - out_pos, "(%s = %s - 1)", expr, expr);
+                        out_pos += needed; free(expr);
+                        i = expr_end + 1; last_emit = i; continue;
+                    }
+                }
+                i++; continue;
+            }
+        }
+
+        i++;
+    }
+
+    if (last_emit < n) {
+        int tail_len = n - last_emit;
+        out = ensure_capacity(out, &out_cap, out_pos + tail_len + 1);
+        memcpy(out + out_pos, src + last_emit, tail_len);
+        out_pos += tail_len;
+    }
+    out[out_pos] = '\0';
+    return out;
+}
+
+/* Top-level preprocessor */
+char* preprocessor(const char* src) {
+    char* without = strip_macros_and_build_table(src);
+    char* expanded = expand_macros(without);
+    free(without);
+    char* desugared = desugar_operators(expanded);
+    free(expanded);
+    return desugared;
+}
+
+
+
 ObjFunction* compile(const char* source) {
+    source = preprocessor(source);
+    //printf(source);
     initScanner(source);
     Compiler compiler;
     initCompiler(&compiler, TYPE_SCRIPT);

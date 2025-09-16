@@ -1,13 +1,13 @@
 import Window;
-import chess.Board;
-import chess.Piece;
-import chess.pieces.Bishop;
-import chess.pieces.King;
-import chess.pieces.Knight;
-import chess.pieces.Pawn;
-import chess.pieces.Queen;
-import chess.pieces.Rook;
-import chess.Game;
+import Board;
+import Piece;
+import pieces.Bishop;
+import pieces.King;
+import pieces.Knight;
+import pieces.Pawn;
+import pieces.Queen;
+import pieces.Rook;
+import Game;
 
 var tileSize = 100;
 var boardSize = tileSize * 8;

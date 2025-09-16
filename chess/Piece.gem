@@ -13,7 +13,7 @@ class Piece {
             prefix = "b";
         }
 
-        var path = "chess/imgs/" + prefix + "_" + pieceName + ".png";
+        var path = "imgs/" + prefix + "_" + pieceName + ".png";
         this.img = Window.loadImage(path, tileSize - 10, tileSize - 10);
     }
 
