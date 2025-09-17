@@ -77,6 +77,7 @@ typedef enum {
     TYPE_FUNCTION,
     TYPE_SCRIPT,
     TYPE_METHOD,
+    TYPE_LAMBDA,
     TYPE_INITIALIZER,
     TYPE_STATIC_METHOD,
 } FunctionType;
@@ -635,6 +636,10 @@ static void postfix_decrement(bool canAssign) {
   lastWasVariable = false;
 }
 
+static void function(FunctionType type);
+
+static void lambda(bool canAssign);
+
 
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN]    = {grouping, call,   PREC_CALL},
@@ -674,6 +679,7 @@ ParseRule rules[] = {
     [TOKEN_FALSE]         = {literal,  NULL,   PREC_NONE},
     [TOKEN_FOR]           = {NULL,     NULL,   PREC_NONE},
     [TOKEN_FUN]           = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_LAMBDA]        = {lambda,   NULL,   PREC_NONE},
     [TOKEN_IF]            = {NULL,     NULL,   PREC_NONE},
     [TOKEN_NIL]           = {literal,  NULL,   PREC_NONE},
     [TOKEN_OR]            = {NULL,     or_,    PREC_OR},
@@ -831,13 +837,56 @@ static void block() {
     consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
 }
 
+static void lambda(bool canAssign){
+    TokenType type = TYPE_LAMBDA;
+
+    Compiler compiler;
+    initCompiler(&compiler, type);
+
+    compiler.function->name = copyString("lambda", 6);
+
+    beginScope();
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after lambda.");
+
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        do {
+            current->function->arity++;
+            if (current->function->arity > 255) {
+                errorAtCurrent("Can't have more than 255 parameters.");
+            }
+            uint8_t constant = parseVariable("Expect parameter name.");
+            defineVariable(constant);
+        } while (match(TOKEN_COMMA));
+    }
+
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before lambda body.");
+    block();
+
+    ObjFunction* function = endCompiler();
+    int closureConstant = makeConstant(OBJ_VAL(function));
+
+    // Emit OP_CLOSURE (pushes the closure on stack)
+    emitBytes(OP_CLOSURE, closureConstant);
+
+    for (int i = 0; i < function->upvalueCount; i++) {
+        emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
+        emitByte(compiler.upvalues[i].index);
+    }
+}
+
 static void function(FunctionType type) {
     Compiler compiler;
     initCompiler(&compiler, type);
 
-    compiler.function->name =
-      copyString(parser.previous.start,
+    if(type != TYPE_LAMBDA){
+        compiler.function->name =
+            copyString(parser.previous.start,
                  parser.previous.length);
+    }
+    else 
+        compiler.function->name = copyString("lambda", 6);
 
     beginScope();
     consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.");
@@ -1861,7 +1910,7 @@ char* desugar_operators(const char* src) {
                     int pre_len = expr_start - last_emit;
                     out = ensure_capacity(out, &out_cap, out_pos + pre_len + 1);
                     memcpy(out + out_pos, src + last_emit, pre_len); out_pos += pre_len;
-                }
+                 }
                 char* expr = my_strndup(src + expr_start, expr_end - expr_start + 1);
                 int needed = snprintf(NULL,0,"((%s = %s + 1) - 1)", expr, expr);
                 out = ensure_capacity(out, &out_cap, out_pos + needed + 1);
