@@ -56,6 +56,7 @@ typedef enum {
     OP_THROW,
     OP_MOD,
     OP_INS,
+    OP_ERROR,
 } OpCode;
 
 typedef struct {

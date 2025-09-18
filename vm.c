@@ -219,12 +219,18 @@ CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
         vm.stackTop = frame->slots;
     }
 
+printf("hello");
+    fflush(stdout); 
     // Step 5: No try/catch found — print msg and stack trace, then exit
     fwrite(msgbuf, 1, msgOffset, stderr);
     fwrite(tracebuf, 1, traceOffset, stderr);
     if(!vm.repl)
         exit(1);
-    replError = true;
+    //CallFrame* frame = &vm.frames[vm.frameCount - 1];
+    //frame->ip--;
+    //*frame->ip = OP_ERROR;
+    printf("hello");
+    fflush(stdout); 
 }
 
 CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
@@ -289,7 +295,9 @@ CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
 
     if(!vm.repl)
         exit(1);
-    replError = true;
+    CallFrame* frame = &vm.frames[vm.frameCount - 1];
+    frame->ip--;
+    *frame->ip = OP_ERROR; 
 }
 
 
@@ -876,10 +884,6 @@ static InterpretResult run() {
     #define READ_STRING() AS_STRING(READ_CONSTANT())
 
         for (;;) {
-            if(replError){
-                replError = false;
-                return INTERPRET_RUNTIME_ERROR;
-            }
     #ifdef DEBUG_TRACE_EXECUTION
             printf("          ");
             for (Value* slot = vm.stack; slot < vm.stackTop; slot++) {
@@ -1674,6 +1678,9 @@ static InterpretResult run() {
 
                 throwRuntimeError(instance); // a function you'll define
                 break;
+            }
+            case OP_ERROR: {
+                return INTERPRET_RUNTIME_ERROR;
             }
 
         }
