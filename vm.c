@@ -19,12 +19,15 @@
 #include <unistd.h>
 #endif
 
+#include <setjmp.h>
+
 #include "debug.h"
 #include "stringMethods.c"
 #include "listMethods.c"
 #include "windowMethods.h"
 #include "Math.c"
 
+extern jmp_buf repl_env;
 
 VM vm;
 void printStack();
@@ -149,6 +152,7 @@ static void resetStack() {
 }
 
 CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
+    fflush(stdout);
     char msgbuf[512];      // message only
     char tracebuf[1024];   // stack trace
     char linebuf[256];
@@ -204,7 +208,7 @@ CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
     tableSet(&errorInstance->fields, copyString("stackTrace", 10), OBJ_VAL(traceString));
 
     // Step 4: Unwind the call stack looking for try block
-    while (vm.frameCount > 0) {
+    while (vm.frameCount > 1) {
         CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
         if (frame->hasTry[frame->tryTop] != -1) {
@@ -218,19 +222,13 @@ CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
         vm.frameCount--;
         vm.stackTop = frame->slots;
     }
-
-printf("hello");
-    fflush(stdout); 
     // Step 5: No try/catch found — print msg and stack trace, then exit
     fwrite(msgbuf, 1, msgOffset, stderr);
     fwrite(tracebuf, 1, traceOffset, stderr);
     if(!vm.repl)
         exit(1);
-    //CallFrame* frame = &vm.frames[vm.frameCount - 1];
-    //frame->ip--;
-    //*frame->ip = OP_ERROR;
-    printf("hello");
-    fflush(stdout); 
+    resetStack();
+    longjmp(repl_env, 1);
 }
 
 CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
@@ -269,7 +267,7 @@ CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
     tableSet(&errorInstance->fields, copyString("stackTrace", 10), traceValue);
 
     // Unwind the call stack looking for a try block
-    while (vm.frameCount > 0) {
+    while (vm.frameCount > 1) {
         CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
         if (frame->hasTry[frame->tryTop] != -1) {
@@ -295,9 +293,8 @@ CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
 
     if(!vm.repl)
         exit(1);
-    CallFrame* frame = &vm.frames[vm.frameCount - 1];
-    frame->ip--;
-    *frame->ip = OP_ERROR; 
+    resetStack();
+    longjmp(repl_env, 1);
 }
 
 
@@ -774,7 +771,7 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
         Value value;
         ObjClass* klass = AS_CLASS(receiver);
 
-        if (isPrivate(name) && klass != frame->klass) frame = runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
+        if (isPrivate(name) && klass != frame->klass) runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
 
         if (tableGet(&klass->staticMethods, name, &value)) {
             if (IS_NATIVE(value)) {
@@ -816,7 +813,7 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
 
     ObjInstance* instance = AS_INSTANCE(receiver);
 
-    if (isPrivate(name) && instance->klass != frame->klass) frame = runtimeError(vm.accessErrorClass, "Cannot access private field of a different class.");
+    if (isPrivate(name) && instance->klass != frame->klass) runtimeError(vm.accessErrorClass, "Cannot access private field of a different class.");
 
     Value value;
     if (tableGet(&instance->fields, name, &value)) {
@@ -871,7 +868,7 @@ static InterpretResult run() {
         bool fl = false; \
         int peeker = 1; \
         if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(peeker))) { \
-            frame = runtimeError(vm.typeErrorClass, "Operands must be numbers."); \
+            runtimeError(vm.typeErrorClass, "Operands must be numbers."); \
             fl = true; \
             break; \
         } \
@@ -935,7 +932,7 @@ static InterpretResult run() {
             }
             case OP_NEGATE:
                 if (!IS_NUMBER(peek(0))) {
-                    frame = runtimeError(vm.typeErrorClass, "Operand must be a number.");
+                    runtimeError(vm.typeErrorClass, "Operand must be a number.");
                     break;
                 }
                 push(NUMBER_VAL(-AS_NUMBER(pop())));
@@ -947,7 +944,7 @@ static InterpretResult run() {
                     ObjInstance* b = AS_INSTANCE(peek(1));
 
                     if (a->klass != b->klass) {
-                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -958,7 +955,7 @@ static InterpretResult run() {
                         frame = &vm.frames[vm.frameCount - 1];
                         break;
                     }
-                    frame = runtimeError(vm.typeErrorClass, "No overload of '+' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeError(vm.typeErrorClass, "No overload of '+' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
                 if (IS_STRING(peek(0)) && IS_STRING(peek(1))) {
@@ -1012,7 +1009,7 @@ static InterpretResult run() {
                     push(OBJ_VAL(result));
                 }
                 else {
-                    frame = runtimeError(vm.typeErrorClass,
+                    runtimeError(vm.typeErrorClass,
                         "Operands must be two numbers or two strings.");
                     break;
                 }
@@ -1024,7 +1021,7 @@ static InterpretResult run() {
                     ObjInstance* b = AS_INSTANCE(peek(1));
 
                     if (a->klass != b->klass) {
-                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -1035,7 +1032,7 @@ static InterpretResult run() {
                         frame = &vm.frames[vm.frameCount - 1];
                         break;
                     }
-                    frame = runtimeError(vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeError(vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
                 BINARY_OP(NUMBER_VAL, -); break;
@@ -1045,7 +1042,7 @@ static InterpretResult run() {
                     ObjInstance* b = AS_INSTANCE(peek(1));
 
                     if (a->klass != b->klass) {
-                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -1056,7 +1053,7 @@ static InterpretResult run() {
                         frame = &vm.frames[vm.frameCount - 1];
                         break;
                     }
-                    frame = runtimeError(vm.typeErrorClass, "No overload of '*' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeError(vm.typeErrorClass, "No overload of '*' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
                 BINARY_OP(NUMBER_VAL, *); break;
@@ -1067,7 +1064,7 @@ static InterpretResult run() {
                     ObjInstance* b = AS_INSTANCE(peek(1));
 
                     if (a->klass != b->klass) {
-                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -1078,7 +1075,7 @@ static InterpretResult run() {
                         frame = &vm.frames[vm.frameCount - 1];
                         break;
                     }
-                    frame = runtimeError(vm.typeErrorClass, "No overload of '/' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeError(vm.typeErrorClass, "No overload of '/' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
                 BINARY_OP(NUMBER_VAL, /); break;
@@ -1088,7 +1085,7 @@ static InterpretResult run() {
                     ObjInstance* b = AS_INSTANCE(peek(1));
 
                     if (a->klass != b->klass) {
-                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -1099,13 +1096,13 @@ static InterpretResult run() {
                         frame = &vm.frames[vm.frameCount - 1];
                         break;
                     }
-                    frame = runtimeError(vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeError(vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
 
                 bool fl = false;
                 if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {
-                    frame = runtimeError(vm.typeErrorClass, "Operands must be numbers.");
+                    runtimeError(vm.typeErrorClass, "Operands must be numbers.");
                     fl = true;
                     break;
                 }
@@ -1120,7 +1117,7 @@ static InterpretResult run() {
                     ObjInstance* b = AS_INSTANCE(peek(1));
 
                     if (a->klass != b->klass) {
-                        frame = runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -1131,13 +1128,13 @@ static InterpretResult run() {
                         frame = &vm.frames[vm.frameCount - 1];
                         break;
                     }
-                    frame = runtimeError(vm.typeErrorClass, "No overload of '\' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeError(vm.typeErrorClass, "No overload of '\' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
 
                 bool fl = false;
                 if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {
-                    frame = runtimeError(vm.typeErrorClass, "Operands must be numbers.");
+                    runtimeError(vm.typeErrorClass, "Operands must be numbers.");
                     fl = true;
                     break;
                 }
@@ -1208,7 +1205,7 @@ static InterpretResult run() {
                 ObjString* name = READ_STRING();
                 Value value;
                 if (!tableGet(&vm.globals, name, &value)) {
-                    frame = runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
+                    runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
                     fflush(stdout);
                     break;
                 }
@@ -1219,7 +1216,7 @@ static InterpretResult run() {
                 ObjString* name = READ_STRING();
                 if (tableSet(&vm.globals, name, peek(0))) {
                     tableDelete(&vm.globals, name);
-                    frame = runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
+                    runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
                     break;
                 }
                 break;
@@ -1355,13 +1352,13 @@ static InterpretResult run() {
                 break;
             case OP_GET_PROPERTY: {
                 if (IS_STRING(peek(0)) || IS_LIST(peek(0))){
-                    frame = runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
                 if (IS_INSTANCE(peek(0))) {
                     ObjInstance* instance = AS_INSTANCE(peek(0));
                     ObjString* name = READ_STRING();
 
-                    if (isPrivate(name) && instance->klass != frame->klass) frame = runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
+                    if (isPrivate(name) && instance->klass != frame->klass) runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
 
                     Value value;
                     if (tableGet(&instance->fields, name, &value)) {
@@ -1374,14 +1371,14 @@ static InterpretResult run() {
                         break;
                     }
 
-                    frame = runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
 
                 if (IS_CLASS(peek(0))) {
                     ObjClass* klass = AS_CLASS(peek(0));
                     ObjString* name = READ_STRING();
 
-                    if (isPrivate(name) && klass != frame->klass) frame = runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
+                    if (isPrivate(name) && klass != frame->klass) runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
 
                     Value value;
                     if (tableGet(&klass->staticVars, name, &value)) {
@@ -1409,16 +1406,16 @@ static InterpretResult run() {
                             break;
                         }
                     }
-                    frame = runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                     break;
                 }
 
-                frame = runtimeError(vm.typeErrorClass, "Only instances and classes have fields.");
+                runtimeError(vm.typeErrorClass, "Only instances and classes have fields.");
                 break;
             }
             case OP_SET_PROPERTY: {
                 if (IS_STRING(peek(1)) || IS_LIST(peek(1))){
-                    frame = runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
 
                 if (IS_CLASS(peek(1))) {
@@ -1440,7 +1437,7 @@ static InterpretResult run() {
                 }
 
                 if (!IS_INSTANCE(peek(1))) {
-                    frame = runtimeError(vm.typeErrorClass, "Only instances have fields.");
+                    runtimeError(vm.typeErrorClass, "Only instances have fields.");
                     break;
                 }
 
@@ -1466,7 +1463,7 @@ static InterpretResult run() {
             }
             case OP_INHERIT: {
                 if (!IS_CLASS(peek(1))) {
-                    frame = runtimeError(vm.typeErrorClass, "Superclass must be a class.");
+                    runtimeError(vm.typeErrorClass, "Superclass must be a class.");
                     break;
                 }
 
@@ -1518,12 +1515,12 @@ static InterpretResult run() {
                 Value list = pop();
 
                 if (!IS_LIST(list)) {
-                    frame = runtimeError(vm.typeErrorClass, "Can only index into lists.");
+                    runtimeError(vm.typeErrorClass, "Can only index into lists.");
                     break;
                 }
 
                 if (!IS_NUMBER(index)) {
-                    frame = runtimeError(vm.typeErrorClass, "List index must be a number.");
+                    runtimeError(vm.typeErrorClass, "List index must be a number.");
                     break;
                 }
 
@@ -1531,7 +1528,7 @@ static InterpretResult run() {
                 int i = (int)AS_NUMBER(index);
 
                 if (i < 0 || i >= objList->elements.count) {
-                    frame = runtimeError(vm.indexErrorClass, "List index out of bounds.");
+                    runtimeError(vm.indexErrorClass, "List index out of bounds.");
                     break;
                 }
 
@@ -1545,12 +1542,12 @@ static InterpretResult run() {
                 Value list = pop();
 
                 if (!IS_LIST(list)) {
-                    frame = runtimeError(vm.typeErrorClass, "Can only index into lists.");
+                    runtimeError(vm.typeErrorClass, "Can only index into lists.");
                     break;
                 }
 
                 if (!IS_NUMBER(index)) {
-                    frame = runtimeError(vm.typeErrorClass, "List index must be a number.");
+                    runtimeError(vm.typeErrorClass, "List index must be a number.");
                     break;
                 }
 
@@ -1558,7 +1555,7 @@ static InterpretResult run() {
                 int i = (int)AS_NUMBER(index);
 
                 if (i < 0 || i >= objList->elements.count) {
-                    frame = runtimeError(vm.indexErrorClass, "List index out of bounds.");
+                    runtimeError(vm.indexErrorClass, "List index out of bounds.");
                     break;
                 }
 
@@ -1583,7 +1580,7 @@ static InterpretResult run() {
             case OP_DISPATCH: {
                 Value closureVal = peek(0);
                 if (!IS_CLOSURE(closureVal)) {
-                    frame = runtimeError(vm.typeErrorClass, "Expected function to dispatch.");
+                    runtimeError(vm.typeErrorClass, "Expected function to dispatch.");
                     break;
                 }
 

@@ -3,8 +3,8 @@ project(GemVM)
 
 set(CMAKE_CXX_STANDARD 23)
 add_compile_definitions(TB_IMPL_V1)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")# -g -fsanitize=address -fno-omit-frame-pointer")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")# -g -fsanitize=address -fno-omit-frame-pointer")
 
 set(GEMVM_SOURCES
         main.c

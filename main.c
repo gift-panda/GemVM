@@ -10,7 +10,7 @@
 #include <signal.h>
 #include <unistd.h>
 #include <fcntl.h>
-
+#include <setjmp.h>
 #define TB_IMPL
 #include "termbox2.h"
 
@@ -34,6 +34,7 @@ int saved_stderr_fd = -1;
 int current_nesting = 0;
 bool new_prompt_line[1024] = {true};
 
+jmp_buf repl_env;
 
 void cleanup() {
     remove(tmp_filename);
@@ -136,7 +137,13 @@ void run_backend(const char *code) {
         return ;
         }
 
-    interpret(code);
+    interpret("");
+
+    if (setjmp(repl_env)){
+    }
+    else
+        interpret(code);
+
 
     fflush(stdout);
     fflush(stderr);
