@@ -23,6 +23,17 @@ typedef struct {
     ObjClass* klass;
 } CallFrame;
 
+typedef struct{
+    CallFrame frames[FRAMES_MAX];
+    int frameCount;
+
+    Value stack[STACK_MAX];
+    Value* stackTop;
+
+    ObjUpvalue* openUpvalues;
+    bool hasError;
+} Thread;
+
 typedef struct {
     CallFrame frames[FRAMES_MAX];
     int frameCount;

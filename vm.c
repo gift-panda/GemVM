@@ -151,6 +151,12 @@ static void resetStack() {
     vm.openUpvalues = NULL;
 }
 
+static void resetStackCtx(Thread *ctx) {
+    ctx->stackTop = ctx->stack;
+    ctx->frameCount = 0;
+    ctx->openUpvalues = NULL;
+}
+
 CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
     fflush(stdout);
     char msgbuf[512];      // message only
@@ -164,12 +170,8 @@ CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
 
     // Add the error type first
     msgOffset += snprintf(msgbuf + msgOffset, sizeof(msgbuf) - msgOffset, "%s: ", errorClass->name->chars);
-
-    // Then the actual error message
     msgOffset += vsnprintf(msgbuf + msgOffset, sizeof(msgbuf) - msgOffset, format, args);
     va_end(args);
-
-    // Add newline
     msgOffset += snprintf(msgbuf + msgOffset, sizeof(msgbuf) - msgOffset, "\n");
 
 
@@ -185,13 +187,11 @@ CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
             memcpy(tracebuf + traceOffset, linebuf, len);
             traceOffset += len;
         }
-
         if (function->name == NULL) {
             len = snprintf(linebuf, sizeof(linebuf), "script");
         } else {
             len = snprintf(linebuf, sizeof(linebuf), "%s()\n", function->name->chars);
         }
-
         if (traceOffset + len < sizeof(tracebuf)) {
             memcpy(tracebuf + traceOffset, linebuf, len);
             traceOffset += len;
@@ -438,13 +438,27 @@ void push(Value value) {
     vm.stackTop++;
 }
 
+void pushCtx(Thread *ctx, Value value) {
+    *ctx->stackTop = value;
+    ctx->stackTop++;
+}
+
 Value pop() {
     vm.stackTop--;
     return *vm.stackTop;
 }
 
+Value popCtx(Thread *ctx) {
+    ctx->stackTop--;
+    return *ctx->stackTop;
+}
+
 static Value peek(int distance) {
     return vm.stackTop[-1 - distance];
+}
+
+static Value peekCtx(Thread *ctx, int distance) {
+    return ctx->stackTop[-1 - distance];
 }
 
 static bool call(ObjClosure* closure, int argCount) {
@@ -460,6 +474,29 @@ static bool call(ObjClosure* closure, int argCount) {
     }
 
     CallFrame* frame = &vm.frames[vm.frameCount++];
+    frame->closure = closure;
+    frame->ip = closure->function->chunk.code;
+    frame->slots = vm.stackTop - argCount - 1;
+    frame->tryTop = 0;
+    frame->hasTry[frame->tryTop] = -1;
+    frame->klass = closure->klass;
+
+    return true;
+}
+
+static bool callCtx(Thread *ctx, ObjClosure* closure, int argCount) {
+    if (argCount != closure->function->arity) {
+        runtimeError(vm.illegalArgumentsErrorClass, "Expected %d arguments but got %d.",
+            closure->function->arity, argCount);
+        return false;
+    }
+
+    if (ctx->frameCount == FRAMES_MAX) {
+        VMError("Stack overflow.");
+        return false;
+    }
+
+    CallFrame* frame = &ctx->frames[ctx->frameCount++];
     frame->closure = closure;
     frame->ip = closure->function->chunk.code;
     frame->slots = vm.stackTop - argCount - 1;
@@ -494,6 +531,19 @@ static bool callBoundedNative(Value callee, int argCount) {
     }
     vm.stackTop = vm.stackTop - argCount;
     push(result);
+    return true;
+}
+
+static bool callBoundedNativeCtx(Thread *ctx, Value callee, int argCount) {
+    NativeFn native = AS_NATIVE(callee);
+    Value result = native(argCount, vm.stackTop - argCount);
+    if(ctx->hasError){
+        ctx->hasError = false;
+        result = popCtx(ctx);
+        pushCtx(ctx, result);
+    }
+    ctx->stackTop = ctx->stackTop - argCount;
+    pushCtx(ctx, result);
     return true;
 }
 
@@ -532,9 +582,9 @@ static bool callValue(Value callee, int argCount) {
             case OBJ_CLASS: {
                 ObjClass* klass = AS_CLASS(callee);
                 Value initializer;
-                
+
                 if (tableGet(&klass->methods, vm.initString, &initializer)) {
-                    
+
                     vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
                     if (AS_BOUND_METHOD(initializer)->method[argCount] == NULL) {
                         runtimeError(vm.illegalArgumentsErrorClass, "No matching initializer found with %d arguments.", argCount);
@@ -546,7 +596,7 @@ static bool callValue(Value callee, int argCount) {
                     vm.stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
                     return true;
                 }
-                
+
                 return false;
             }
             case OBJ_BOUND_METHOD: {
@@ -569,6 +619,72 @@ static bool callValue(Value callee, int argCount) {
                     return false;
                 }
                 return call(closure, argCount);
+            }
+            default:
+                break;
+        }
+    }
+    runtimeError(vm.typeErrorClass, "Can only call functions and classes.");
+    return false;
+}
+
+static bool callValueCtx(Thread *ctx, Value callee, int argCount) {
+    if (IS_OBJ(callee)) {
+        switch (OBJ_TYPE(callee)) {
+            case OBJ_CLOSURE:
+                return callCtx(ctx, AS_CLOSURE(callee), argCount);
+            case OBJ_NATIVE: {
+                NativeFn native = AS_NATIVE(callee);
+                Value result = native(argCount, ctx->stackTop - argCount);
+                if(ctx->hasError){
+                    ctx->hasError = false;
+                    result = popCtx(ctx);
+                    pushCtx(ctx, result);
+                }
+                ctx->stackTop = ctx->stackTop - argCount - 1;
+                pushCtx(ctx, result);
+                return true;
+            }
+            case OBJ_CLASS: {
+                ObjClass* klass = AS_CLASS(callee);
+                Value initializer;
+
+                if (tableGet(&klass->methods, vm.initString, &initializer)) {
+
+                    ctx->stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
+                    if (AS_BOUND_METHOD(initializer)->method[argCount] == NULL) {
+                        runtimeError(vm.illegalArgumentsErrorClass, "No matching initializer found with %d arguments.", argCount);
+                        return false;
+                    }
+                    return callCtx(ctx, AS_BOUND_METHOD(initializer)->method[argCount], argCount);
+                }
+                else if(argCount == 0){
+                    ctx->stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
+                    return true;
+                }
+
+                return false;
+            }
+            case OBJ_BOUND_METHOD: {
+                ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
+                ObjClosure* closure = bound->method[argCount];
+                if (closure == NULL) {
+                    runtimeError(vm.illegalArgumentsErrorClass, "No method with arity %d found.", argCount);
+                    return false;
+                }
+
+                ctx->stackTop[-argCount - 1] = bound->receiver;
+                return callCtx(ctx, bound->method[argCount], argCount);
+            }
+            case OBJ_MULTI_DISPATCH:{
+                ObjMultiDispatch* md = AS_MULTI_DISPATCH(callee);
+
+                ObjClosure* closure = md->closures[argCount];
+                if (closure == NULL) {
+                    runtimeError(vm.illegalArgumentsErrorClass, "No method for arity %d.", argCount);
+                    return false;
+                }
+                return callCtx(ctx, closure, argCount);
             }
             default:
                 break;
@@ -602,12 +718,45 @@ static ObjUpvalue* captureUpvalue(Value* local) {
     return createdUpvalue;
 }
 
+static ObjUpvalue* captureUpvalueCtx(Thread *ctx, Value* local) {
+    ObjUpvalue* prevUpvalue = NULL;
+    ObjUpvalue* upvalue = ctx->openUpvalues;
+    while (upvalue != NULL && upvalue->location > local) {
+        prevUpvalue = upvalue;
+        upvalue = upvalue->next;
+    }
+
+    if (upvalue != NULL && upvalue->location == local) {
+        return upvalue;
+    }
+
+    ObjUpvalue* createdUpvalue = newUpvalue(local);
+
+    createdUpvalue->next = upvalue;
+    if (prevUpvalue == NULL) {
+        vm.openUpvalues = createdUpvalue;
+    } else {
+        prevUpvalue->next = createdUpvalue;
+    }
+
+    return createdUpvalue;
+}
+
 static void closeUpvalues(Value* last) {
     while (vm.openUpvalues != NULL && vm.openUpvalues->location >= last) {
         ObjUpvalue* upvalue = vm.openUpvalues;
         upvalue->closed = *upvalue->location;
         upvalue->location = &upvalue->closed;
         vm.openUpvalues = upvalue->next;
+    }
+}
+
+static void closeUpvaluesCtx(Thread *ctx, Value* last) {
+    while (ctx->openUpvalues != NULL && ctx->openUpvalues->location >= last) {
+        ObjUpvalue* upvalue = ctx->openUpvalues;
+        upvalue->closed = *upvalue->location;
+        upvalue->location = &upvalue->closed;
+        ctx->openUpvalues = upvalue->next;
     }
 }
 
@@ -627,6 +776,20 @@ static void concatenate() {
 
     ObjString* result = takeString(chars, length);
     push(OBJ_VAL(result));
+}
+
+static void concatenateCtx(Thread *ctx) {
+    ObjString* b = AS_STRING(popCtx(ctx));
+    ObjString* a = AS_STRING(popCtx(ctx));
+
+    int length = a->length + b->length;
+    char* chars = ALLOCATE(char, length + 1);
+    memcpy(chars, a->chars, a->length);
+    memcpy(chars + a->length, b->chars, b->length);
+    chars[length] = '\0';
+
+    ObjString* result = takeString(chars, length);
+    pushCtx(ctx, OBJ_VAL(result));
 }
 
 void multiDispatchAdd(ObjMultiDispatch* dispatch, ObjClosure* closure) {
@@ -657,6 +820,24 @@ static void defineMethod(ObjString* name) {
     pop();
 }
 
+static void defineMethodCtx(Thread *ctx, ObjString* name) {
+    Value method = peekCtx(ctx, 0);
+    ObjClass* klass = AS_CLASS(peekCtx(ctx, 1));
+    AS_CLOSURE(method)->klass = klass;
+
+    Value dispatcher;
+    if (tableGet(&klass->methods, name, &dispatcher)) {
+        ObjBoundMethod* md = AS_BOUND_METHOD(dispatcher);
+        multiBoundAdd(md, AS_CLOSURE(method));
+    }
+    else {
+        ObjBoundMethod* md = newBoundMethod(dispatcher, AS_CLOSURE(method)->function->name);
+        multiBoundAdd(md, AS_CLOSURE(method));
+        tableSet(&klass->methods, name, OBJ_VAL(md));
+    }
+    popCtx(ctx);
+}
+
 static bool bindMethod(ObjClass* klass, ObjString* name) {
     Value method;
     if (!tableGet(&klass->methods, name, &method)) {
@@ -671,6 +852,22 @@ static bool bindMethod(ObjClass* klass, ObjString* name) {
 
     return true;
 }
+
+static bool bindMethodCtx(Thread *ctx, ObjClass* klass, ObjString* name) {
+    Value method;
+    if (!tableGet(&klass->methods, name, &method)) {
+        return false;
+    }
+
+    ObjBoundMethod* bound = AS_BOUND_METHOD(method);
+    bound->receiver = peekCtx(ctx, 0);
+
+    popCtx(ctx);
+    pushCtx(ctx, OBJ_VAL(bound));
+
+    return true;
+}
+
 
 static bool invokeFromClass(ObjClass* klass, ObjString* name,
                             int argCount) {
@@ -702,12 +899,54 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name,
     return false;
 }
 
+static bool invokeFromClassCtx(Thread *ctx, ObjClass* klass, ObjString* name, int argCount) {
+    Value method;
+
+    if (tableGet(&klass->methods, name, &method)) {
+        AS_BOUND_METHOD(method)->receiver = peekCtx(ctx, argCount);
+        bool yes = callValueCtx(ctx, OBJ_VAL(AS_BOUND_METHOD(method)), argCount);
+        return yes;
+    }
+
+    if (tableGet(&klass->staticMethods, name, &method)) {
+        if (IS_NATIVE(method)) {
+            bool res = callBoundedNativeCtx(ctx, method, argCount);
+            Value result = popCtx(ctx);
+            popCtx(ctx);
+            pushCtx(ctx, result);
+            return res;
+        }
+        bool res = callValueCtx(ctx, method, argCount);
+        Value result = popCtx(ctx);
+        popCtx(ctx);
+        pushCtx(ctx, result);
+        return res;
+    }
+
+    runtimeError(vm.nameErrorClass, "Undefined method '%s' on instance of class '%s'.",
+                 name->chars, klass->name->chars);
+    return false;
+}
+
 
 void printStack() {
     printf("          ");
     printf("Stack at %p\n", (void*)vm.stack);
     fflush(stdout);
     for (Value* slot = vm.stack; slot < vm.stackTop; slot++) {
+        printf("[ ");
+        printValue(*slot);
+        printf(" ]");
+        fflush(stdout);
+    }
+    printf("\n");
+}
+
+void printStackCtx(Thread *ctx) {
+    printf("          ");
+    printf("Stack at %p\n", (void*)ctx->stack);
+    fflush(stdout);
+    for (Value* slot = ctx->stack; slot < ctx->stackTop; slot++) {
         printf("[ ");
         printValue(*slot);
         printf(" ]");
@@ -824,10 +1063,106 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
     return invokeFromClass(instance->klass, name, argCount);
 }
 
+static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* frame) {
+    Value receiver = peekCtx(ctx, argCount);
+
+    if (IS_STRING(receiver)) {
+        Value value;
+        if (tableGet(&vm.stringClassMethods, name, &value)) {
+            bool res = callBoundedNativeCtx(ctx, value, argCount);
+            Value result = popCtx(ctx);
+            popCtx(ctx);
+            pushCtx(ctx, result);
+            return res;
+        }
+        runtimeError(vm.nameErrorClass, "Undefined method '%s' on string.", name->chars);
+        return false;
+    }
+
+
+    if (IS_IMAGE(receiver)) {
+        Value value;
+        if (tableGet(&vm.imageClassMethods, name, &value)) {
+            bool res = callBoundedNativeCtx(ctx, value, argCount);
+            Value result = popCtx(ctx);
+            popCtx(ctx);
+            pushCtx(ctx, result);
+            return res;
+        }
+        runtimeError(vm.nameErrorClass, "Undefined method '%s' on image.", name->chars);
+        return false;
+    }
+
+    if (IS_LIST(receiver)) {
+        Value value;
+        if (tableGet(&vm.listClassMethods, name, &value)) {
+            bool res = callBoundedNativeCtx(ctx, value, argCount);
+            Value result = popCtx(ctx);
+            popCtx(ctx);
+            pushCtx(ctx, result);
+            return res;
+        }
+        runtimeError(vm.nameErrorClass, "Undefined method '%s' on list.", name->chars);
+        return false;
+    }
+
+    if (IS_CLASS(receiver)) {
+        Value value;
+        ObjClass* klass = AS_CLASS(receiver);
+
+        if (isPrivate(name) && klass != frame->klass){
+            runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
+            return false;
+        }
+
+        if (tableGet(&klass->staticMethods, name, &value)) {
+            if (IS_NATIVE(value)) {
+                bool res = callBoundedNativeCtx(ctx, value, argCount);
+                Value result = popCtx(ctx);
+                popCtx(ctx);
+                pushCtx(ctx, result);
+                return res;
+            }
+
+            bool res = callValueCtx(ctx, value, argCount);
+
+            //Idk why i added this? but look out ig? more bugs?
+
+            return res;
+        }
+
+        klass = klass->superclass;
+        if (klass != NULL && tableGet(&klass->staticMethods, name, &value)) {
+            bool res = callValueCtx(ctx, value, argCount);
+            return res;
+        }
+        runtimeError(vm.nameErrorClass, "Undefined static method '%s' on class '%s'.",
+                     name->chars, klass->name->chars);
+        return false;
+    }
+
+
+    if (!IS_INSTANCE(receiver)) {
+        runtimeError(vm.typeErrorClass, "Only instances have methods.");
+        return false;
+    }
+
+    ObjInstance* instance = AS_INSTANCE(receiver);
+
+    if (isPrivate(name) && instance->klass != frame->klass) runtimeError(vm.accessErrorClass, "Cannot access private field of a different class.");
+
+    Value value;
+    if (tableGet(&instance->fields, name, &value)) {
+        ctx->stackTop[-argCount - 1] = value;
+        return callValueCtx(ctx, value, argCount);
+    }
+
+    return invokeFromClass(instance->klass, name, argCount);
+}
+
 static int resolveMultiDispatch(Value* result, ObjString* name) {
     CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
-    // Search locals from top of current frame down
     for (Value* slot = vm.stackTop - 1; slot >= frame->slots; slot--) {
         if (IS_OBJ(*slot) && IS_MULTI_DISPATCH(*slot)) {
             ObjMultiDispatch* md = AS_MULTI_DISPATCH(*slot);
@@ -839,7 +1174,23 @@ static int resolveMultiDispatch(Value* result, ObjString* name) {
         }
     }
 
-    // Then try global table
+    return tableGet(&vm.globals, name, result);
+}
+
+static int resolveMultiDispatchCtx(Thread *ctx, Value* result, ObjString* name) {
+    CallFrame* frame = &ctx->frames[ctx->frameCount - 1];
+
+    for (Value* slot = ctx->stackTop - 1; slot >= frame->slots; slot--) {
+        if (IS_OBJ(*slot) && IS_MULTI_DISPATCH(*slot)) {
+            ObjMultiDispatch* md = AS_MULTI_DISPATCH(*slot);
+
+            if (md->name == name) {
+                *result = *slot;
+                return 2;
+            }
+        }
+    }
+
     return tableGet(&vm.globals, name, result);
 }
 
@@ -1687,7 +2038,850 @@ static InterpretResult run() {
 #undef READ_BYTE
 #undef READ_STRING
 #undef READ_SHORT
+#undef BINARY_OP
 }
+
+static InterpretResult runCtx(Thread *ctx) {
+    register CallFrame* frame = &ctx->frames[ctx->frameCount - 1];
+
+    #define READ_BYTE() (*frame->ip++)
+
+    #define READ_SHORT() \
+    (frame->ip += 2, \
+    (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
+
+    #define READ_CONSTANT() \
+        (frame->closure->function->chunk.constants.values[READ_BYTE()])
+    #define BINARY_OP(valueType, op) \
+    do { \
+        bool fl = false; \
+        int peeker = 1; \
+        if (!IS_NUMBER(peekCtx(ctx, 0)) || !IS_NUMBER(peekCtx(ctx, peeker))) { \
+            runtimeError(vm.typeErrorClass, "Operands must be numbers."); \
+            fl = true; \
+            break; \
+        } \
+        double b = AS_NUMBER(popCtx(ctx)); \
+        double a = AS_NUMBER(popCtx(ctx)); \
+        pushCtx(ctx, valueType(a op b)); \
+        if (fl) break;\
+    } while (false)\
+
+    #define READ_STRING() AS_STRING(READ_CONSTANT())
+
+        for (;;) {
+    #ifdef DEBUG_TRACE_EXECUTION
+            printf("          ");
+            for (Value* slot = ctx->stack; slot < ctx->stackTop; slot++) {
+                printf("[ ");
+                printValue(*slot);
+                printf(" ]");
+            }
+            printf("\n");
+            disassembleInstruction(&frame->closure->function->chunk,
+                    (int)(frame->ip - frame->closure->function->chunk.code));
+    #endif
+        uint8_t instruction;
+        instruction = READ_BYTE();
+            //printStackCtx(ctx);
+            //printf("hola\n"); fflush(stdout);
+        switch (instruction) {
+
+            case OP_RETURN: {
+                Value result = popCtx(ctx);
+                closeUpvaluesCtx(ctx, frame->slots);
+                ctx->frameCount--;
+                if (ctx->frameCount == 0) {
+                    popCtx(ctx);
+                    return INTERPRET_OK;
+                }
+
+                ctx->stackTop = frame->slots;
+                pushCtx(ctx, result);
+                frame = &ctx->frames[ctx->frameCount - 1];
+
+                if (IS_INSTANCE(result)) {
+                    ObjInstance* instance = AS_INSTANCE(result);
+                    if (hasAncestor(instance, vm.errorClass)) {
+                        Value msgVal;
+                        if (tableGet(&instance->fields, copyString("msg", 3), &msgVal) && IS_STRING(msgVal)) {
+                            ObjString* msgStr = AS_STRING(msgVal);
+                            ObjString* className = instance->klass->name;
+
+                            char formatted[512];
+                            int len = snprintf(formatted, sizeof(formatted), "%s: %s", className->chars, msgStr->chars);
+
+                            ObjString* fullMsg = copyString(formatted, len);
+                            tableSet(&instance->fields, copyString("msg", 3), OBJ_VAL(fullMsg));
+                        }
+                    }
+                }
+                break;
+            }
+            case OP_CONSTANT: {
+                Value constant = READ_CONSTANT();
+                pushCtx(ctx, constant);
+                break;
+            }
+            case OP_NEGATE:
+                if (!IS_NUMBER(peekCtx(ctx, 0))) {
+                    runtimeError(vm.typeErrorClass, "Operand must be a number.");
+                    break;
+                }
+                pushCtx(ctx, NUMBER_VAL(-AS_NUMBER(popCtx(ctx))));
+                break;
+
+            case OP_ADD: {
+                if (IS_INSTANCE(peekCtx(ctx, 0)) && IS_INSTANCE(peekCtx(ctx, 1))) {
+                    ObjInstance* a = AS_INSTANCE(peekCtx(ctx, 0));
+                    ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
+
+                    if (a->klass != b->klass) {
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("+", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("+", 1), argCount, frame);
+                        frame = &ctx->frames[ctx->frameCount - 1];
+                        break;
+                    }
+                    runtimeError(vm.typeErrorClass, "No overload of '+' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
+                if (IS_STRING(peekCtx(ctx, 0)) && IS_STRING(peekCtx(ctx, 1))) {
+                    concatenateCtx(ctx);
+                } else if (IS_NUMBER(peekCtx(ctx, 0)) && IS_NUMBER(peekCtx(ctx, 1))) {
+                    double b = AS_NUMBER(peekCtx(ctx, 0));
+                    double a = AS_NUMBER(peekCtx(ctx, 1));
+                    popCtx(ctx);
+                    popCtx(ctx);
+                    pushCtx(ctx, NUMBER_VAL(a + b));
+                }
+                else if (IS_STRING(peekCtx(ctx, 0)) && IS_NUMBER(peekCtx(ctx, 1))) {
+                    ObjString* b = AS_STRING(peekCtx(ctx, 0));
+                    double num = AS_NUMBER(peekCtx(ctx, 1));
+
+                    char buffer[32];
+                    int len = snprintf(buffer, sizeof(buffer), "%.14g", num);
+
+                    // Allocate and intern as ObjString
+                    ObjString* a = copyString(buffer, len);
+
+                    int length = a->length + b->length;
+                    char* chars = ALLOCATE(char, length + 1);
+                    memcpy(chars, a->chars, a->length);
+                    memcpy(chars + a->length, b->chars, b->length);
+                    chars[length] = '\0';
+
+                    ObjString* result = takeString(chars, length);
+                    popCtx(ctx);
+                    popCtx(ctx);
+                    pushCtx(ctx, OBJ_VAL(result));
+                }
+                else if (IS_NUMBER(peekCtx(ctx, 0)) && IS_STRING(peekCtx(ctx, 1))) {
+                    double num = AS_NUMBER(peekCtx(ctx, 0));
+
+                    char buffer[32];
+                    int len = snprintf(buffer, sizeof(buffer), "%.14g", num);
+
+                    // Allocate and intern as ObjString
+                    ObjString* b = copyString(buffer, len);
+                    ObjString* a = AS_STRING(peekCtx(ctx, 1));
+
+                    int length = a->length + b->length;
+                    char* chars = ALLOCATE(char, length + 1);
+                    memcpy(chars, a->chars, a->length);
+                    memcpy(chars + a->length, b->chars, b->length);
+                    chars[length] = '\0';
+
+                    ObjString* result = takeString(chars, length);
+                    popCtx(ctx);popCtx(ctx);
+                    pushCtx(ctx, OBJ_VAL(result));
+                }
+                else {
+                    runtimeError(vm.typeErrorClass,
+                        "Operands must be two numbers or two strings.");
+                    break;
+                }
+                break;
+            }
+            case OP_SUBTRACT:
+                if (IS_INSTANCE(peekCtx(ctx, 0)) && IS_INSTANCE(peekCtx(ctx, 1))) {
+                    ObjInstance* a = AS_INSTANCE(peekCtx(ctx, 0));
+                    ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
+
+                    if (a->klass != b->klass) {
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("-", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("-", 1), argCount, frame);
+                        frame = &ctx->frames[ctx->frameCount - 1];
+                        break;
+                    }
+                    runtimeError(vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
+                BINARY_OP(NUMBER_VAL, -); break;
+            case OP_MULTIPLY: {
+                if (IS_INSTANCE(peekCtx(ctx, 0)) && IS_INSTANCE(peekCtx(ctx, 1))) {
+                    ObjInstance* a = AS_INSTANCE(peekCtx(ctx, 0));
+                    ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
+
+                    if (a->klass != b->klass) {
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("*", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("*", 1), argCount, frame);
+                        frame = &ctx->frames[ctx->frameCount - 1];
+                        break;
+                    }
+                    runtimeError(vm.typeErrorClass, "No overload of '*' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
+                BINARY_OP(NUMBER_VAL, *); break;
+            }
+            case OP_DIVIDE:
+                if (IS_INSTANCE(peekCtx(ctx, 0)) && IS_INSTANCE(peekCtx(ctx, 1))) {
+                    ObjInstance* a = AS_INSTANCE(peekCtx(ctx, 0));
+                    ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
+
+                    if (a->klass != b->klass) {
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("/", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("/", 1), argCount, frame);
+                        frame = &ctx->frames[ctx->frameCount - 1];
+                        break;
+                    }
+                    runtimeError(vm.typeErrorClass, "No overload of '/' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
+                BINARY_OP(NUMBER_VAL, /); break;
+            case OP_MOD: {
+                if (IS_INSTANCE(peekCtx(ctx, 0)) && IS_INSTANCE(peekCtx(ctx, 1))) {
+                    ObjInstance* a = AS_INSTANCE(peekCtx(ctx, 0));
+                    ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
+
+                    if (a->klass != b->klass) {
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("-", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("-", 1), argCount, frame);
+                        frame = &ctx->frames[ctx->frameCount - 1];
+                        break;
+                    }
+                    runtimeError(vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
+
+                bool fl = false;
+                if (!IS_NUMBER(peekCtx(ctx, 0)) || !IS_NUMBER(peekCtx(ctx, 1))) {
+                    runtimeError(vm.typeErrorClass, "Operands must be numbers.");
+                    fl = true;
+                    break;
+                }
+                double b = AS_NUMBER(popCtx(ctx));
+                double a = AS_NUMBER(popCtx(ctx));
+                pushCtx(ctx, NUMBER_VAL(fmod(a, b)));
+                break;
+            }
+            case OP_INS: {
+                if (IS_INSTANCE(peekCtx(ctx, 0)) && IS_INSTANCE(peekCtx(ctx, 1))) {
+                    ObjInstance* a = AS_INSTANCE(peekCtx(ctx, 0));
+                    ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
+
+                    if (a->klass != b->klass) {
+                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        break;
+                    }
+
+                    Value method;
+                    if (tableGet(&a->klass->methods, copyString("-", 1), &method)) {
+                        int argCount = 1;
+                        invoke(copyString("-", 1), argCount, frame);
+                        frame = &ctx->frames[ctx->frameCount - 1];
+                        break;
+                    }
+                    runtimeError(vm.typeErrorClass, "No overload of '\' for instances of class '%s'.", a->klass->name->chars);
+                    break;
+                }
+
+                bool fl = false;
+                if (!IS_NUMBER(peekCtx(ctx, 0)) || !IS_NUMBER(peekCtx(ctx, 1))) {
+                    runtimeError(vm.typeErrorClass, "Operands must be numbers.");
+                    fl = true;
+                    break;
+                }
+                double b = AS_NUMBER(popCtx(ctx));
+                double a = AS_NUMBER(popCtx(ctx));
+                pushCtx(ctx, NUMBER_VAL((int)(a / b)));
+                break;
+            }
+            case OP_NIL: pushCtx(ctx, NIL_VAL); break;
+            case OP_TRUE: pushCtx(ctx, BOOL_VAL(true)); break;
+            case OP_FALSE: pushCtx(ctx, BOOL_VAL(false)); break;
+            case OP_NOT:
+                pushCtx(ctx, BOOL_VAL(isFalsey(popCtx(ctx))));
+                break;
+            case OP_EQUAL: {
+                Value b = popCtx(ctx);
+                Value a = popCtx(ctx);
+                pushCtx(ctx, BOOL_VAL(valuesEqual(a, b)));
+                break;
+            }
+            case OP_GREATER:  BINARY_OP(BOOL_VAL, >); break;
+            case OP_LESS:     BINARY_OP(BOOL_VAL, <); break;
+            case OP_PRINT: {
+                Value printVal = peekCtx(ctx, 0);
+                if (IS_INSTANCE(printVal)) {
+                    ObjInstance* instance = AS_INSTANCE(printVal);
+                    Value method;
+                    if (tableGet(&instance->klass->methods, vm.toString, &method)) {
+                        frame->ip--;
+                        invoke(vm.toString, 0, frame);
+                        frame = &ctx->frames[ctx->frameCount - 1];
+                        break;
+                    }
+                }
+                popCtx(ctx);
+                printValue(printVal);
+                break;
+            }
+            case OP_PRINTLN: {
+                Value printVal = peekCtx(ctx, 0);
+                if (IS_INSTANCE(printVal)) {
+                    ObjInstance* instance = AS_INSTANCE(printVal);
+                    Value method;
+                    if (tableGet(&instance->klass->methods, vm.toString, &method)) {
+                        frame->ip--;
+                        invoke(vm.toString, 0, frame);
+                        frame = &ctx->frames[ctx->frameCount - 1];
+                        break;
+                    }
+                }
+                popCtx(ctx);
+                printValue(printVal);
+                printf("\n");
+                break;
+            }
+            case OP_PRINTLN_BLANK: {
+                printf("\n");
+                break;
+            }
+            case OP_POP: popCtx(ctx); break;
+            case OP_DEFINE_GLOBAL: {
+                ObjString* name = READ_STRING();
+                tableSet(&vm.globals, name, peekCtx(ctx, 0));
+                popCtx(ctx);
+                break;
+            }
+            case OP_GET_GLOBAL: {
+                ObjString* name = READ_STRING();
+                Value value;
+                if (!tableGet(&vm.globals, name, &value)) {
+                    runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
+                    fflush(stdout);
+                    break;
+                }
+                pushCtx(ctx, value);
+                break;
+            }
+            case OP_SET_GLOBAL: {
+                ObjString* name = READ_STRING();
+                if (tableSet(&vm.globals, name, peekCtx(ctx, 0))) {
+                    tableDelete(&vm.globals, name);
+                    runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
+                    break;
+                }
+                break;
+            }
+            case OP_GET_LOCAL: {
+                uint8_t slot = READ_BYTE();
+                pushCtx(ctx, frame->slots[slot]);
+                break;
+            }
+            case OP_SET_LOCAL: {
+                uint8_t slot = READ_BYTE();
+                frame->slots[slot] = peekCtx(ctx, 0);
+                break;
+            }
+            case OP_JUMP_IF_FALSE: {
+                uint16_t offset = READ_SHORT();
+                if (isFalsey(peekCtx(ctx, 0))) frame->ip += offset;
+                break;
+            }
+            case OP_JUMP: {
+                uint16_t offset = READ_SHORT();
+                frame->ip += offset;
+                break;
+            }
+            case OP_LOOP: {
+                uint16_t offset = READ_SHORT();
+                frame->ip -= offset;
+                break;
+            }
+            case OP_CALL: {
+                int argCount = READ_BYTE();
+
+                if (!callValue(peekCtx(ctx, argCount), argCount)) {
+                    break;
+                }
+                frame = &ctx->frames[ctx->frameCount - 1];
+                break;
+            }
+            case OP_CLOSURE: {
+                ObjFunction* function = AS_FUNCTION(READ_CONSTANT());
+                ObjClosure* closure = newClosure(function);
+                pushCtx(ctx, OBJ_VAL(closure));
+
+                for (int i = 0; i < closure->upvalueCount; i++) {
+                    uint8_t isLocal = READ_BYTE();
+                    uint8_t index = READ_BYTE();
+                    if (isLocal) {
+                        closure->upvalues[i] =
+                            captureUpvalue(frame->slots + index);
+                    } else {
+                        closure->upvalues[i] = frame->closure->upvalues[index];
+                    }
+                }
+                break;
+            }
+            case OP_GET_UPVALUE: {
+                uint8_t slot = READ_BYTE();
+                pushCtx(ctx, *frame->closure->upvalues[slot]->location);
+                break;
+            }
+            case OP_SET_UPVALUE: {
+                uint8_t slot = READ_BYTE();
+                *frame->closure->upvalues[slot]->location = peekCtx(ctx, 0);
+                break;
+            }
+            case OP_CLOSE_UPVALUE:
+                closeUpvalues(ctx->stackTop - 1);
+                popCtx(ctx);
+                break;
+            case OP_CLASS:
+                ObjString* name = READ_STRING();
+                ObjClass* klass = newClass(name);
+                if (name == vm.errorString) vm.errorClass = klass;
+                if (name == vm.errorString) vm.errorClass = klass;
+                if (name == vm.indexErrorString) vm.indexErrorClass = klass;
+                if (name == vm.typeErrorString) vm.typeErrorClass = klass;
+                if (name == vm.nameErrorString) vm.nameErrorClass = klass;
+                if (name == vm.accessErrorString) vm.accessErrorClass = klass;
+                if (name == vm.illegalArgumentsErrorString) vm.illegalArgumentsErrorClass = klass;
+                if (name == vm.lookUpErrorString) vm.lookUpErrorClass = klass;
+                if (name == vm.formatErrorString) vm.formatErrorClass = klass;
+
+                if (name == copyString("Window", 6)) {
+                    tableSet(&klass->staticMethods, copyString("init", 4),       OBJ_VAL(newNative(window_init)));
+                    tableSet(&klass->staticMethods, copyString("clear", 5),      OBJ_VAL(newNative(window_clear)));
+                    tableSet(&klass->staticMethods, copyString("drawRect", 8),   OBJ_VAL(newNative(window_drawRect)));
+                    tableSet(&klass->staticMethods, copyString("update", 6),     OBJ_VAL(newNative(window_update)));
+                    tableSet(&klass->staticMethods, copyString("pollEvent", 9),  OBJ_VAL(newNative(window_pollEvent)));
+                    tableSet(&klass->staticMethods, copyString("getMousePos", 11),   OBJ_VAL(newNative(window_getMousePosition)));
+                    tableSet(&klass->staticMethods, copyString("drawCircle", 10),OBJ_VAL(newNative(window_drawCircle)));
+                    tableSet(&klass->staticMethods, copyString("drawImage", 9),   OBJ_VAL(newNative(window_drawImage)));
+                    tableSet(&klass->staticMethods, copyString("loadImage", 9),   OBJ_VAL(newNative(window_loadImage)));
+                    tableSet(&klass->staticMethods, copyString("exit", 4),        OBJ_VAL(newNative(window_exit)));
+                    tableSet(&klass->staticMethods, copyString("drawLine", 8),        OBJ_VAL(newNative(window_drawLine)));
+                    tableSet(&klass->staticMethods, copyString("drawTrig", 8),        OBJ_VAL(newNative(window_drawTriangle)));
+                }
+
+                if (name == copyString("Math", 4)) {
+                    Table* staticMethods = &klass->staticMethods;
+                    tableSet(staticMethods, copyString("abs", 3), OBJ_VAL(newNative(math_abs)));
+                    tableSet(staticMethods, copyString("min", 3), OBJ_VAL(newNative(math_min)));
+                    tableSet(staticMethods, copyString("max", 3), OBJ_VAL(newNative(math_max)));
+                    tableSet(staticMethods, copyString("clamp", 5), OBJ_VAL(newNative(math_clamp)));
+                    tableSet(staticMethods, copyString("sign", 4), OBJ_VAL(newNative(math_sign)));
+
+                    tableSet(staticMethods, copyString("pow", 3), OBJ_VAL(newNative(math_pow)));
+                    tableSet(staticMethods, copyString("sqrt", 4), OBJ_VAL(newNative(math_sqrt)));
+                    tableSet(staticMethods, copyString("cbrt", 4), OBJ_VAL(newNative(math_cbrt)));
+
+                    tableSet(staticMethods, copyString("exp", 3), OBJ_VAL(newNative(math_exp)));
+                    tableSet(staticMethods, copyString("log", 3), OBJ_VAL(newNative(math_log)));
+                    tableSet(staticMethods, copyString("log10", 5), OBJ_VAL(newNative(math_log10)));
+
+                    tableSet(staticMethods, copyString("sin", 3), OBJ_VAL(newNative(math_sin)));
+                    tableSet(staticMethods, copyString("cos", 3), OBJ_VAL(newNative(math_cos)));
+                    tableSet(staticMethods, copyString("tan", 3), OBJ_VAL(newNative(math_tan)));
+                    tableSet(staticMethods, copyString("asin", 4), OBJ_VAL(newNative(math_asin)));
+                    tableSet(staticMethods, copyString("acos", 4), OBJ_VAL(newNative(math_acos)));
+                    tableSet(staticMethods, copyString("atan", 4), OBJ_VAL(newNative(math_atan)));
+                    tableSet(staticMethods, copyString("atan2", 5), OBJ_VAL(newNative(math_atan2)));
+
+                    tableSet(staticMethods, copyString("floor", 5), OBJ_VAL(newNative(math_floor)));
+                    tableSet(staticMethods, copyString("ceil", 4), OBJ_VAL(newNative(math_ceil)));
+                    tableSet(staticMethods, copyString("round", 5), OBJ_VAL(newNative(math_round)));
+                    tableSet(staticMethods, copyString("trunc", 5), OBJ_VAL(newNative(math_trunc)));
+
+                    tableSet(staticMethods, copyString("mod", 3), OBJ_VAL(newNative(math_mod)));
+                    tableSet(staticMethods, copyString("lerp", 4), OBJ_VAL(newNative(math_lerp)));
+                }
+
+
+                pushCtx(ctx, OBJ_VAL(klass));
+                break;
+            case OP_GET_PROPERTY: {
+                if (IS_STRING(peekCtx(ctx, 0)) || IS_LIST(peekCtx(ctx, 0))){
+                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                }
+                if (IS_INSTANCE(peekCtx(ctx, 0))) {
+                    ObjInstance* instance = AS_INSTANCE(peekCtx(ctx, 0));
+                    ObjString* name = READ_STRING();
+
+                    if (isPrivate(name) && instance->klass != frame->klass) runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
+
+                    Value value;
+                    if (tableGet(&instance->fields, name, &value)) {
+                        popCtx(ctx);
+                        pushCtx(ctx, value);
+                        break;
+                    }
+
+                    if (bindMethod(instance->klass, name)) {
+                        break;
+                    }
+
+                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                }
+
+                if (IS_CLASS(peekCtx(ctx, 0))) {
+                    ObjClass* klass = AS_CLASS(peekCtx(ctx, 0));
+                    ObjString* name = READ_STRING();
+
+                    if (isPrivate(name) && klass != frame->klass) runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
+
+                    Value value;
+                    if (tableGet(&klass->staticVars, name, &value)) {
+                        popCtx(ctx);
+                        pushCtx(ctx, value);
+                        break;
+                    }
+                    if (tableGet(&klass->staticMethods, name, &value)) {
+                        popCtx(ctx);
+                        pushCtx(ctx, value);
+                        break;
+                    }
+
+                    klass = klass->superclass;
+                    if (klass != NULL) {
+                        Value value;
+                        if (tableGet(&klass->staticVars, name, &value)) {
+                            popCtx(ctx);
+                            pushCtx(ctx, value);
+                            break;
+                        }
+                        if (tableGet(&klass->staticMethods, name, &value)) {
+                            popCtx(ctx);
+                            pushCtx(ctx, value);
+                            break;
+                        }
+                    }
+                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                    break;
+                }
+
+                runtimeError(vm.typeErrorClass, "Only instances and classes have fields.");
+                break;
+            }
+            case OP_SET_PROPERTY: {
+                if (IS_STRING(peekCtx(ctx, 1)) || IS_LIST(peekCtx(ctx, 1))){
+                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                }
+
+                if (IS_CLASS(peekCtx(ctx, 1))) {
+                    ObjClass* klass = AS_CLASS(peekCtx(ctx, 1));
+                    ObjString* name = READ_STRING();
+
+                    if (klass->superclass != NULL && tableGet(&klass->superclass->staticVars, name, NULL)) {
+                        tableSet(&klass->superclass->staticVars, name, peekCtx(ctx, 0));
+                        Value value = popCtx(ctx);
+                        popCtx(ctx);
+                        pushCtx(ctx, value);
+                        break;
+                    }
+                    tableSet(&klass->staticVars, name, peekCtx(ctx, 0));
+                    Value value = popCtx(ctx);
+                    popCtx(ctx);
+                    pushCtx(ctx, value);
+                    break;
+                }
+
+                if (!IS_INSTANCE(peekCtx(ctx, 1))) {
+                    runtimeError(vm.typeErrorClass, "Only instances have fields.");
+                    break;
+                }
+
+                ObjInstance* instance = AS_INSTANCE(peekCtx(ctx, 1));
+                tableSet(&instance->fields, READ_STRING(), peekCtx(ctx, 0));
+                Value value = popCtx(ctx);
+                popCtx(ctx);
+                pushCtx(ctx, value);
+                break;
+            }
+            case OP_METHOD:
+                defineMethodCtx(ctx, READ_STRING());
+                break;
+            case OP_INVOKE: {
+                ObjString* method = READ_STRING();
+                int argCount = READ_BYTE();
+                if (!invoke(method, argCount, frame)) {
+                    break;
+                }
+                //popCtx(ctx);
+                frame = &ctx->frames[ctx->frameCount - 1];
+                break;
+            }
+            case OP_INHERIT: {
+                if (!IS_CLASS(peekCtx(ctx, 1))) {
+                    runtimeError(vm.typeErrorClass, "Superclass must be a class.");
+                    break;
+                }
+
+                ObjClass* superclass = AS_CLASS(peekCtx(ctx, 1));
+                ObjClass* subclass = AS_CLASS(peekCtx(ctx, 0));
+                //tableAddAll(&AS_CLASS(superclass)->methods,
+                //            &subclass->methods);
+
+                subclass->superclass = superclass;
+                for (int i = 0; i < superclass->methods.capacity; i++) {
+                    Entry* entry = &superclass->methods.entries[i];
+                    if (entry == NULL) continue;
+                    if (entry->key == NULL) continue;
+
+                    Value temp = OBJ_VAL(subclass);
+                    ObjBoundMethod* md = newBoundMethod(temp, entry->key);
+
+                    for (int j = 0; j < 10; j++) {
+                        md->method[j] = AS_BOUND_METHOD(entry->value)->method[j];
+                    }
+
+                    tableSet(&subclass->methods, entry->key, OBJ_VAL(md));
+                }
+
+                popCtx(ctx); // Subclass.
+                break;
+            }
+            case OP_GET_SUPER: {
+                ObjString* name = READ_STRING();
+                ObjClass* superclass = AS_CLASS(popCtx(ctx));
+
+                if (!bindMethod(superclass, name)) {
+                    break;
+                }
+                break;
+            }
+            case OP_SUPER_INVOKE: {
+                ObjString* method = READ_STRING();
+                int argCount = READ_BYTE();
+                ObjClass* superclass = AS_CLASS(popCtx(ctx));
+                if (!invokeFromClass(superclass, method, argCount)) {
+                    break;
+                }
+                frame = &ctx->frames[ctx->frameCount - 1];
+                break;
+            }
+            case OP_GET_INDEX: {
+                Value index = popCtx(ctx);
+                Value list = popCtx(ctx);
+
+                if (!IS_LIST(list)) {
+                    runtimeError(vm.typeErrorClass, "Can only index into lists.");
+                    break;
+                }
+
+                if (!IS_NUMBER(index)) {
+                    runtimeError(vm.typeErrorClass, "List index must be a number.");
+                    break;
+                }
+
+                ObjList* objList = AS_LIST(list);
+                int i = (int)AS_NUMBER(index);
+
+                if (i < 0 || i >= objList->elements.count) {
+                    runtimeError(vm.indexErrorClass, "List index out of bounds.");
+                    break;
+                }
+
+                pushCtx(ctx, objList->elements.values[i]);
+                break;
+            }
+
+            case OP_SET_INDEX: {
+                Value value = popCtx(ctx);
+                Value index = popCtx(ctx);
+                Value list = popCtx(ctx);
+
+                if (!IS_LIST(list)) {
+                    runtimeError(vm.typeErrorClass, "Can only index into lists.");
+                    break;
+                }
+
+                if (!IS_NUMBER(index)) {
+                    runtimeError(vm.typeErrorClass, "List index must be a number.");
+                    break;
+                }
+
+                ObjList* objList = AS_LIST(list);
+                int i = (int)AS_NUMBER(index);
+
+                if (i < 0 || i >= objList->elements.count) {
+                    runtimeError(vm.indexErrorClass, "List index out of bounds.");
+                    break;
+                }
+
+                objList->elements.values[i] = value;
+                pushCtx(ctx, value);
+                break;
+            }
+            case OP_LIST: {
+                int count = READ_BYTE();
+                ObjList* list = newList();
+                pushCtx(ctx, OBJ_VAL(list));
+
+                for (int i = count; i >= 1; i--) {
+                    writeValueArray(&list->elements, peekCtx(ctx, i));
+                }
+                Value listValue = popCtx(ctx);
+                for (int i = 0; i < count; i++) popCtx(ctx);
+
+                pushCtx(ctx, listValue);
+                break;
+            }
+            case OP_DISPATCH: {
+                Value closureVal = peekCtx(ctx, 0);
+                if (!IS_CLOSURE(closureVal)) {
+                    runtimeError(vm.typeErrorClass, "Expected function to dispatch.");
+                    break;
+                }
+
+                ObjClosure* closure = AS_CLOSURE(closureVal);
+                ObjString* name = closure->function->name;
+
+                Value dispatchVal;
+                int scope = resolveMultiDispatch(&dispatchVal, name);
+                if (scope) {
+                    // Reuse existing MultiDispatch
+                    ObjMultiDispatch* dispatch = AS_MULTI_DISPATCH(dispatchVal);
+                    multiDispatchAdd(dispatch, closure);
+                    popCtx(ctx); // remove closure
+                    //if (scope == 1)
+                        pushCtx(ctx, OBJ_VAL(dispatch)); // push dispatch instead
+                } else {
+                        // Create new one
+                    ObjMultiDispatch* dispatch = newMultiDispatch(name);
+                    multiDispatchAdd(dispatch, closure);
+                    popCtx(ctx); // remove closure
+                    pushCtx(ctx, OBJ_VAL(dispatch)); // push new dispatch
+                }
+
+                break;
+            }
+            case OP_TRY: {
+                if (frame->tryTop == 10) VMError("Max try depth reached");
+                frame->tryTop++;
+                frame->saveStack[frame->tryTop] = ctx->stackTop;
+                frame->saveIP[frame->tryTop] = frame->ip;
+                frame->hasTry[frame->tryTop] = READ_BYTE();
+
+                break;
+            }
+            case OP_END_TRY: {
+                if (frame->tryTop == 0) VMError("No try block to end");
+                frame->hasTry[frame->tryTop] = -1;
+                if (frame->tryTop >= 0) {
+                    frame->tryTop--;
+                }
+                break;
+            }
+            case OP_STATIC_VAR: {
+                ObjString* name = READ_STRING();
+                Value value = popCtx(ctx);
+                ObjClass* klass = AS_CLASS(peekCtx(ctx, 0));
+                tableSet(&klass->staticVars, name, value);
+                break;
+            }
+            case OP_STATIC_METHOD: {
+                Value method = peekCtx(ctx, 0);
+                ObjClass* klass = AS_CLASS(peekCtx(ctx, 1));
+                ObjString* name = READ_STRING();
+
+                AS_CLOSURE(method)->klass = klass;
+
+                Value dispatcher;
+                if (tableGet(&klass->staticMethods, name, &dispatcher)) {
+                    ObjMultiDispatch* md = AS_MULTI_DISPATCH(dispatcher);
+                    multiDispatchAdd(md, AS_CLOSURE(method));
+                }
+                else {
+                    ObjMultiDispatch* md = newMultiDispatch(name);
+                    multiDispatchAdd(md, AS_CLOSURE(method));
+                    tableSet(&klass->staticMethods, name, OBJ_VAL(md));
+                }
+                popCtx(ctx);
+                break;
+            }
+            case OP_CONSTANT_LONG: {
+                    uint32_t b1 = READ_BYTE();
+                    uint32_t b2 = READ_BYTE();
+                    uint32_t b3 = READ_BYTE();
+                    uint32_t index = (b1 << 16) | (b2 << 8) | b3;
+                    pushCtx(ctx, frame->closure->function->chunk.constants.values[index]);
+
+                    break;
+            }
+
+            case OP_THROW: {
+                Value error = popCtx(ctx);
+                if (!IS_INSTANCE(error)) {
+                    runtimeError(vm.typeErrorClass, "Can only throw instances of error classes.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                ObjInstance* instance = AS_INSTANCE(error);
+                if (!hasAncestor(instance, vm.errorClass)) {
+                    runtimeError(vm.typeErrorClass, "Can only throw instances of error.");
+                    return INTERPRET_RUNTIME_ERROR;
+                }
+
+                throwRuntimeError(instance); // a function you'll define
+                break;
+            }
+            case OP_ERROR: {
+                return INTERPRET_RUNTIME_ERROR;
+            }
+
+        }
+    }
+
+#undef READ_CONSTANT
+#undef READ_BYTE
+#undef READ_STRING
+#undef READ_SHORT
+}
+
 
 InterpretResult interpret(const char* source) {
     ObjFunction* function = compile(source);
@@ -1703,5 +2897,24 @@ InterpretResult interpret(const char* source) {
         return 0;
 
     return run();
+
+    /*
+    Thread *ctx = malloc(sizeof(Thread));
+
+    resetStackCtx(ctx);
+
+    pushCtx(ctx, OBJ_VAL(function));
+    ObjClosure* closure = newClosure(function);
+    popCtx(ctx);
+    pushCtx(ctx, OBJ_VAL(closure));
+
+    callCtx(ctx, closure, 0);
+
+    if (vm.noRun)
+        return 0;
+
+
+    return runCtx(ctx);
+    */
 }
 
