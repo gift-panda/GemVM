@@ -208,7 +208,7 @@ CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
     tableSet(&errorInstance->fields, copyString("stackTrace", 10), OBJ_VAL(traceString));
 
     // Step 4: Unwind the call stack looking for try block
-    while (vm.frameCount > 1) {
+    while (vm.frameCount > 0) {
         CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
         if (frame->hasTry[frame->tryTop] != -1) {
@@ -267,7 +267,7 @@ CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
     tableSet(&errorInstance->fields, copyString("stackTrace", 10), traceValue);
 
     // Unwind the call stack looking for a try block
-    while (vm.frameCount > 1) {
+    while (vm.frameCount > 0) {
         CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
         if (frame->hasTry[frame->tryTop] != -1) {

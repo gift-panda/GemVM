@@ -1410,6 +1410,8 @@ char* getMathText() {
     return buf;
 }
 
+void compileImport(const char* source);
+
 static void statement() {
     if (match(TOKEN_PRINT)) {
         printStatement();
@@ -1443,20 +1445,29 @@ static void statement() {
         const char* prevStart = sc->start;
         const char* prevCurrent = sc->current;
 
-        ObjFunction* function = compile(source);
+        if(0){
+            ObjFunction* function = compile(source);
+            int constant = makeConstant(OBJ_VAL(function));
+            emitBytes(OP_CLOSURE, constant);
+            emitBytes(OP_CALL, 0);
+        }
+        else{
+            compileImport(source);
+        }
 
         //Restoring state
         sc->current = prevCurrent;
         sc->start = prevStart;
         sc->line = prevLine;
 
-        function->name = fileName;
+        /*function->name = fileName;
         int constant = makeConstant(OBJ_VAL(function));
         emitBytes(OP_CLOSURE, constant);
         emitBytes(OP_CALL, 0);
 
+        */
         advance();
-        emitByte(OP_POP);
+        //emitByte(OP_POP);
 
         free(source);
     }
@@ -2003,6 +2014,20 @@ char* preprocessor(const char* src) {
 }
 
 
+void compileImport(const char* source) {
+    source = preprocessor(source);
+    //printf(source);
+    initScanner(source);
+
+    parser.hadError = false;
+    parser.panicMode = false;
+
+    advance();
+
+    while (!match(TOKEN_EOF)) {
+        declaration();
+    }
+}
 
 ObjFunction* compile(const char* source) {
     source = preprocessor(source);
