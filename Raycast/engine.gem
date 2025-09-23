@@ -113,7 +113,6 @@ var faces = [
     [1, 2, 6, 5]   // right
 ];
 
-println("hi");
 Window.init(800, 600, "Rotating Cube - Mouse Controlled");
 
 func visibleFaces(verts, faces) {
@@ -153,9 +152,6 @@ func sortFaces(faceData) {
     }
 }
 
-func update(){
-    Window.update();
-}
 while (true) {
     Window.clear(0);
     if (isClicked) update();
@@ -195,7 +191,7 @@ while (true) {
 
     sortFaces(faceData);
 
-    lambda(){
+    
     for (var i = 0; i < faceData.length(); i = i + 1) {
         var f = faceData[i][1];
 
@@ -215,8 +211,8 @@ while (true) {
         Window.drawLine(p2[0], p2[1], p3[0], p3[1], 0);
         Window.drawLine(p3[0], p3[1], p0[0], p0[1], 0);
     }
-    }();
-    update();
+    
+    Window.update();
 }
 
 Window.exit();

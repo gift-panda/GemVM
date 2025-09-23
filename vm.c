@@ -26,13 +26,17 @@
 #include "listMethods.c"
 #include "windowMethods.h"
 #include "Math.c"
+#include <pthread.h>
 
 extern jmp_buf repl_env;
 
 VM vm;
-void printStack();
+void printStackCtx(Thread *ctx);
+
 ObjClass* errorClass;
 bool replError;
+pthread_t *threads;
+int threadCount = 0;
 
 static Value sleepNative(int argCount, Value* args){
     int ms = AS_NUMBER(args[0]);
@@ -41,8 +45,42 @@ static Value sleepNative(int argCount, Value* args){
 #else
     usleep(ms * 1000);
 #endif
+    return NIL_VAL;
 }
 
+static void resetStackCtx(Thread *ctx);
+void pushCtx(Thread *ctx, Value);
+Value popCtx(Thread *ctx);
+static bool callCtx(Thread *ctx, ObjClosure* closure, int argCount);
+static void* runCtx(void*);
+
+void* createThreadCtx(void* cl){
+    auto closure = (ObjClosure*)cl;
+    Thread *ctx = calloc(1, sizeof(Thread));
+    pushCtx(ctx, OBJ_VAL(closure));
+    callCtx(ctx, closure, 0);
+
+    runCtx(ctx);
+}
+
+static Value spawnNative(int argCount, Value* args){
+    pthread_t *tid = malloc(sizeof(Thread));;
+    auto closure = AS_CLOSURE(args[0]);
+    Thread *ctx = malloc(sizeof(Thread));
+    resetStackCtx(ctx);
+    pushCtx(ctx, OBJ_VAL(closure));
+    callCtx(ctx, closure, 0);
+
+    //runCtx(ctx);
+    pthread_create(tid, NULL, runCtx, ctx);
+
+    return OBJ_VAL(newThread(tid));
+}
+
+static Value joinNative(int argCount, Value* args){
+    pthread_join(*AS_THREAD(args[0])->thread, NULL);
+    return NIL_VAL;
+}
 
 static Value clockNative(int argCount, Value* args) {
     if(argCount != 0){
@@ -158,7 +196,7 @@ static void resetStackCtx(Thread *ctx) {
 }
 
 CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
-    fflush(stdout);
+    //flush(stdout);
     char msgbuf[512];      // message only
     char tracebuf[1024];   // stack trace
     char linebuf[256];
@@ -420,6 +458,8 @@ void initVM() {
     defineNative("input", inputNative);
     defineNative("sleep", sleepNative);
     defineNative("read",  readNative);
+    defineNative("spawn", spawnNative);
+    defineNative("join", joinNative);
     defineStringMethods();
     defineListMethods();
 
@@ -499,7 +539,7 @@ static bool callCtx(Thread *ctx, ObjClosure* closure, int argCount) {
     CallFrame* frame = &ctx->frames[ctx->frameCount++];
     frame->closure = closure;
     frame->ip = closure->function->chunk.code;
-    frame->slots = vm.stackTop - argCount - 1;
+    frame->slots = ctx->stackTop - argCount - 1;
     frame->tryTop = 0;
     frame->hasTry[frame->tryTop] = -1;
     frame->klass = closure->klass;
@@ -517,7 +557,7 @@ void printDispatcher(ObjMultiDispatch* dispatcher) {
 
         printf("  Arity %d -> <closure at %p>\n", i, (void*)closure);
     }
-    fflush(stdout);
+    //flush(stdout);
 }
 
 
@@ -932,12 +972,12 @@ static bool invokeFromClassCtx(Thread *ctx, ObjClass* klass, ObjString* name, in
 void printStack() {
     printf("          ");
     printf("Stack at %p\n", (void*)vm.stack);
-    fflush(stdout);
+    //flush(stdout);
     for (Value* slot = vm.stack; slot < vm.stackTop; slot++) {
         printf("[ ");
         printValue(*slot);
         printf(" ]");
-        fflush(stdout);
+        //flush(stdout);
     }
     printf("\n");
 }
@@ -945,12 +985,12 @@ void printStack() {
 void printStackCtx(Thread *ctx) {
     printf("          ");
     printf("Stack at %p\n", (void*)ctx->stack);
-    fflush(stdout);
+    //flush(stdout);
     for (Value* slot = ctx->stack; slot < ctx->stackTop; slot++) {
         printf("[ ");
         printValue(*slot);
         printf(" ]");
-        fflush(stdout);
+        //flush(stdout);
     }
     printf("\n");
 }
@@ -1157,7 +1197,7 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
         return callValueCtx(ctx, value, argCount);
     }
 
-    return invokeFromClass(instance->klass, name, argCount);
+    return invokeFromClassCtx(ctx, instance->klass, name, argCount);
 }
 
 static int resolveMultiDispatch(Value* result, ObjString* name) {
@@ -1557,7 +1597,7 @@ static InterpretResult run() {
                 Value value;
                 if (!tableGet(&vm.globals, name, &value)) {
                     runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
-                    fflush(stdout);
+                    //flush(stdout);
                     break;
                 }
                 push(value);
@@ -2041,7 +2081,9 @@ static InterpretResult run() {
 #undef BINARY_OP
 }
 
-static InterpretResult runCtx(Thread *ctx) {
+static void* runCtx(void *context) {
+    auto ctx = (Thread*)context;
+    ctx->finished = false;
     register CallFrame* frame = &ctx->frames[ctx->frameCount - 1];
 
     #define READ_BYTE() (*frame->ip++)
@@ -2053,23 +2095,25 @@ static InterpretResult runCtx(Thread *ctx) {
     #define READ_CONSTANT() \
         (frame->closure->function->chunk.constants.values[READ_BYTE()])
     #define BINARY_OP(valueType, op) \
-    do { \
-        bool fl = false; \
-        int peeker = 1; \
-        if (!IS_NUMBER(peekCtx(ctx, 0)) || !IS_NUMBER(peekCtx(ctx, peeker))) { \
-            runtimeError(vm.typeErrorClass, "Operands must be numbers."); \
-            fl = true; \
-            break; \
-        } \
-        double b = AS_NUMBER(popCtx(ctx)); \
-        double a = AS_NUMBER(popCtx(ctx)); \
-        pushCtx(ctx, valueType(a op b)); \
-        if (fl) break;\
-    } while (false)\
+        do { \
+            bool fl = false; \
+            int peeker = 1; \
+            if (!IS_NUMBER(peekCtx(ctx, 0)) || !IS_NUMBER(peekCtx(ctx, peeker))) { \
+                runtimeError(vm.typeErrorClass, "Operands must be numbers."); \
+                fl = true; \
+                break; \
+            } \
+            double b = AS_NUMBER(popCtx(ctx)); \
+            double a = AS_NUMBER(popCtx(ctx)); \
+            pushCtx(ctx, valueType(a op b)); \
+            if (fl) break;\
+        } while (false)\
 
     #define READ_STRING() AS_STRING(READ_CONSTANT())
 
         for (;;) {
+
+
     #ifdef DEBUG_TRACE_EXECUTION
             printf("          ");
             for (Value* slot = ctx->stack; slot < ctx->stackTop; slot++) {
@@ -2083,9 +2127,9 @@ static InterpretResult runCtx(Thread *ctx) {
     #endif
         uint8_t instruction;
         instruction = READ_BYTE();
-            //printStackCtx(ctx);
-            //printf("hola\n"); fflush(stdout);
+        //printf("hola\n"); //flush(stdout);
         switch (instruction) {
+
 
             case OP_RETURN: {
                 Value result = popCtx(ctx);
@@ -2093,7 +2137,7 @@ static InterpretResult runCtx(Thread *ctx) {
                 ctx->frameCount--;
                 if (ctx->frameCount == 0) {
                     popCtx(ctx);
-                    return INTERPRET_OK;
+                    return nullptr;
                 }
 
                 ctx->stackTop = frame->slots;
@@ -2144,7 +2188,7 @@ static InterpretResult runCtx(Thread *ctx) {
                     Value method;
                     if (tableGet(&a->klass->methods, copyString("+", 1), &method)) {
                         int argCount = 1;
-                        invoke(copyString("+", 1), argCount, frame);
+                        invokeCtx(ctx, copyString("+", 1), argCount, frame);
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
@@ -2221,7 +2265,7 @@ static InterpretResult runCtx(Thread *ctx) {
                     Value method;
                     if (tableGet(&a->klass->methods, copyString("-", 1), &method)) {
                         int argCount = 1;
-                        invoke(copyString("-", 1), argCount, frame);
+                        invokeCtx(ctx, copyString("-", 1), argCount, frame);
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
@@ -2242,7 +2286,7 @@ static InterpretResult runCtx(Thread *ctx) {
                     Value method;
                     if (tableGet(&a->klass->methods, copyString("*", 1), &method)) {
                         int argCount = 1;
-                        invoke(copyString("*", 1), argCount, frame);
+                        invokeCtx(ctx, copyString("*", 1), argCount, frame);
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
@@ -2264,7 +2308,7 @@ static InterpretResult runCtx(Thread *ctx) {
                     Value method;
                     if (tableGet(&a->klass->methods, copyString("/", 1), &method)) {
                         int argCount = 1;
-                        invoke(copyString("/", 1), argCount, frame);
+                        invokeCtx(ctx, copyString("/", 1), argCount, frame);
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
@@ -2285,7 +2329,7 @@ static InterpretResult runCtx(Thread *ctx) {
                     Value method;
                     if (tableGet(&a->klass->methods, copyString("-", 1), &method)) {
                         int argCount = 1;
-                        invoke(copyString("-", 1), argCount, frame);
+                        invokeCtx(ctx, copyString("-", 1), argCount, frame);
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
@@ -2317,7 +2361,7 @@ static InterpretResult runCtx(Thread *ctx) {
                     Value method;
                     if (tableGet(&a->klass->methods, copyString("-", 1), &method)) {
                         int argCount = 1;
-                        invoke(copyString("-", 1), argCount, frame);
+                        invokeCtx(ctx, copyString("-", 1), argCount, frame);
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
@@ -2357,7 +2401,7 @@ static InterpretResult runCtx(Thread *ctx) {
                     Value method;
                     if (tableGet(&instance->klass->methods, vm.toString, &method)) {
                         frame->ip--;
-                        invoke(vm.toString, 0, frame);
+                        invokeCtx(ctx, vm.toString, 0, frame);
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
@@ -2399,7 +2443,7 @@ static InterpretResult runCtx(Thread *ctx) {
                 Value value;
                 if (!tableGet(&vm.globals, name, &value)) {
                     runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
-                    fflush(stdout);
+                    //flush(stdout);
                     break;
                 }
                 pushCtx(ctx, value);
@@ -2442,7 +2486,7 @@ static InterpretResult runCtx(Thread *ctx) {
             case OP_CALL: {
                 int argCount = READ_BYTE();
 
-                if (!callValue(peekCtx(ctx, argCount), argCount)) {
+                if (!callValueCtx(ctx, peekCtx(ctx, argCount), argCount)) {
                     break;
                 }
                 frame = &ctx->frames[ctx->frameCount - 1];
@@ -2458,7 +2502,7 @@ static InterpretResult runCtx(Thread *ctx) {
                     uint8_t index = READ_BYTE();
                     if (isLocal) {
                         closure->upvalues[i] =
-                            captureUpvalue(frame->slots + index);
+                            captureUpvalueCtx(ctx, frame->slots + index);
                     } else {
                         closure->upvalues[i] = frame->closure->upvalues[index];
                     }
@@ -2476,7 +2520,7 @@ static InterpretResult runCtx(Thread *ctx) {
                 break;
             }
             case OP_CLOSE_UPVALUE:
-                closeUpvalues(ctx->stackTop - 1);
+                closeUpvaluesCtx(ctx, ctx->stackTop - 1);
                 popCtx(ctx);
                 break;
             case OP_CLASS:
@@ -2560,7 +2604,7 @@ static InterpretResult runCtx(Thread *ctx) {
                         break;
                     }
 
-                    if (bindMethod(instance->klass, name)) {
+                    if (bindMethodCtx(ctx, instance->klass, name)) {
                         break;
                     }
 
@@ -2647,7 +2691,7 @@ static InterpretResult runCtx(Thread *ctx) {
             case OP_INVOKE: {
                 ObjString* method = READ_STRING();
                 int argCount = READ_BYTE();
-                if (!invoke(method, argCount, frame)) {
+                if (!invokeCtx(ctx, method, argCount, frame)) {
                     break;
                 }
                 //popCtx(ctx);
@@ -2688,7 +2732,7 @@ static InterpretResult runCtx(Thread *ctx) {
                 ObjString* name = READ_STRING();
                 ObjClass* superclass = AS_CLASS(popCtx(ctx));
 
-                if (!bindMethod(superclass, name)) {
+                if (!bindMethodCtx(ctx, superclass, name)) {
                     break;
                 }
                 break;
@@ -2697,7 +2741,7 @@ static InterpretResult runCtx(Thread *ctx) {
                 ObjString* method = READ_STRING();
                 int argCount = READ_BYTE();
                 ObjClass* superclass = AS_CLASS(popCtx(ctx));
-                if (!invokeFromClass(superclass, method, argCount)) {
+                if (!invokeFromClassCtx(ctx, superclass, method, argCount)) {
                     break;
                 }
                 frame = &ctx->frames[ctx->frameCount - 1];
@@ -2780,8 +2824,9 @@ static InterpretResult runCtx(Thread *ctx) {
                 ObjClosure* closure = AS_CLOSURE(closureVal);
                 ObjString* name = closure->function->name;
 
+
                 Value dispatchVal;
-                int scope = resolveMultiDispatch(&dispatchVal, name);
+                int scope = resolveMultiDispatchCtx(ctx, &dispatchVal, name);
                 if (scope) {
                     // Reuse existing MultiDispatch
                     ObjMultiDispatch* dispatch = AS_MULTI_DISPATCH(dispatchVal);
@@ -2857,24 +2902,25 @@ static InterpretResult runCtx(Thread *ctx) {
                 Value error = popCtx(ctx);
                 if (!IS_INSTANCE(error)) {
                     runtimeError(vm.typeErrorClass, "Can only throw instances of error classes.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    return nullptr;
                 }
 
                 ObjInstance* instance = AS_INSTANCE(error);
                 if (!hasAncestor(instance, vm.errorClass)) {
                     runtimeError(vm.typeErrorClass, "Can only throw instances of error.");
-                    return INTERPRET_RUNTIME_ERROR;
+                    return nullptr;
                 }
 
                 throwRuntimeError(instance); // a function you'll define
                 break;
             }
             case OP_ERROR: {
-                return INTERPRET_RUNTIME_ERROR;
+                return nullptr;
             }
 
         }
     }
+    ctx->finished = true;
 
 #undef READ_CONSTANT
 #undef READ_BYTE
@@ -2882,23 +2928,28 @@ static InterpretResult runCtx(Thread *ctx) {
 #undef READ_SHORT
 }
 
-
 InterpretResult interpret(const char* source) {
     ObjFunction* function = compile(source);
     if (function == NULL) return INTERPRET_COMPILE_ERROR;
 
-    push(OBJ_VAL(function));
-    ObjClosure* closure = newClosure(function);
-    pop();
-    push(OBJ_VAL(closure));
-    call(closure, 0);
+    if (1)
+    {
+        push(OBJ_VAL(function));
+        ObjClosure* closure = newClosure(function);
+        pop();
+        push(OBJ_VAL(closure));
+        call(closure, 0);
 
-    if (vm.noRun)
-        return 0;
+        if (vm.noRun)
+            return 0;
 
-    return run();
+        InterpretResult res = run();
+        for (int i = 0; i < threadCount; i++) {
+            pthread_join(threads[i], NULL);
+        }
+        return res;
+    }
 
-    /*
     Thread *ctx = malloc(sizeof(Thread));
 
     resetStackCtx(ctx);
@@ -2914,7 +2965,17 @@ InterpretResult interpret(const char* source) {
         return 0;
 
 
-    return runCtx(ctx);
-    */
+    pthread_t tid;
+    pthread_create(&tid, NULL, runCtx, ctx);
+
+    //threads[threadCount++] = tid;
+
+    //for (int i = 0; i < threadCount; i++) {
+        pthread_join(tid, NULL);
+    //}
+
+    //runCtx(ctx);
+    //free(ctx);
+    return INTERPRET_OK;
 }
 

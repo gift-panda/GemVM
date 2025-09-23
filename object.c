@@ -121,6 +121,12 @@ ObjNative* newNative(NativeFn function) {
     return native;
 }
 
+ObjThread* newThread(pthread_t *thread){
+    ObjThread* threadObj = ALLOCATE_OBJ(ObjThread, OBJ_THREAD);
+    threadObj->thread = thread;
+    return threadObj;
+}
+
 static uint32_t hashString(const char* key, int length) {
     uint32_t hash = 0x811C9DC5u; // same offset as FNV-1a for compatibility
     const uint32_t prime = 0x01000193u;

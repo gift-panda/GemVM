@@ -3,8 +3,9 @@ project(GemVM)
 
 set(CMAKE_CXX_STANDARD 23)
 add_compile_definitions(TB_IMPL_V1)
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3")# -g -fsanitize=address -fno-omit-frame-pointer")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3")# -g -fsanitize=address -fno-omit-frame-pointer")
+set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_C_FLAGS_DEBUG "-g -O0")
+set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
 
 set(GEMVM_SOURCES
         main.c
@@ -24,6 +25,11 @@ set(GEMVM_SOURCES
         Math.c Math.h
         linenoise.c linenoise.h
 )
+
+message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C flags (debug): ${CMAKE_C_FLAGS_DEBUG}")
+message(STATUS "CXX flags (debug): ${CMAKE_CXX_FLAGS_DEBUG}")
+
 
 set(STATIC_LINKAGE TRUE)
 

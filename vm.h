@@ -32,6 +32,7 @@ typedef struct{
 
     ObjUpvalue* openUpvalues;
     bool hasError;
+    bool finished;
 } Thread;
 
 typedef struct {

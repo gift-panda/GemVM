@@ -43,6 +43,9 @@
 #define IS_IMAGE(value)    isObjType(value, OBJ_IMAGE)
 #define AS_IMAGE(value)    ((ObjImage*)AS_OBJ(value))
 
+#define IS_THREAD(value)    isObjType(value, OBJ_THREAD)
+#define AS_THREAD(value)    ((ObjThread*)AS_OBJ(value))
+
 typedef enum {
     OBJ_STRING,
     OBJ_FUNCTION,
@@ -56,6 +59,7 @@ typedef enum {
     OBJ_MULTI_DISPATCH,
     OBJ_ERROR,
     OBJ_IMAGE,
+    OBJ_THREAD,
 } ObjType;
 
 struct Obj {
@@ -142,6 +146,11 @@ typedef struct {
     int height;
 } ObjImage;
 
+typedef struct
+{
+    Obj obj;
+    pthread_t *thread;
+} ObjThread;
 
 ObjBoundMethod* newBoundMethod(Value receiver, ObjString*);
 ObjClass* newClass(ObjString* name);
@@ -155,6 +164,7 @@ ObjUpvalue* newUpvalue(Value* slot);
 ObjList* newList();
 ObjMultiDispatch* newMultiDispatch(ObjString*);
 ObjImage* newImage(SDL_Texture* texture, int width, int height);
+ObjThread* newThread(pthread_t *thread);
 void printObject(Value value);
 
 static inline bool isObjType(Value value, ObjType type) {

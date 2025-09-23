@@ -1445,11 +1445,13 @@ static void statement() {
         const char* prevStart = sc->start;
         const char* prevCurrent = sc->current;
 
-        if(0){
+        if(1){
             ObjFunction* function = compile(source);
+            function->name = fileName;
             int constant = makeConstant(OBJ_VAL(function));
             emitBytes(OP_CLOSURE, constant);
             emitBytes(OP_CALL, 0);
+            emitByte(OP_POP);
         }
         else{
             compileImport(source);
