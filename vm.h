@@ -1,13 +1,18 @@
-#ifndef clox_vm_h
-#define clox_vm_h
+#ifndef CLOX_VM_H
+#define CLOX_VM_H
 
-#include "chunk.h"
-#include "object.h"
-#include "table.h"
-#include "value.h"
 #include <stdbool.h>
+#include <stdint.h>
+#include "value.h"
+#include "table.h"
 
+// Forward declarations to break cyclic dependency
+typedef struct ObjClosure ObjClosure;
+typedef struct ObjClass ObjClass;
 
+// ---------------------
+// Call frames and threads
+// ---------------------
 #define FRAMES_MAX 64
 #define STACK_MAX (FRAMES_MAX * UINT8_COUNT)
 
@@ -23,18 +28,21 @@ typedef struct {
     ObjClass* klass;
 } CallFrame;
 
-typedef struct{
+typedef struct Thread {
     CallFrame frames[FRAMES_MAX];
     int frameCount;
 
     Value stack[STACK_MAX];
     Value* stackTop;
 
-    ObjUpvalue* openUpvalues;
+    struct ObjUpvalue* openUpvalues; // forward-declared elsewhere
     bool hasError;
     bool finished;
 } Thread;
 
+// ---------------------
+// VM
+// ---------------------
 typedef struct {
     CallFrame frames[FRAMES_MAX];
     int frameCount;
@@ -43,12 +51,13 @@ typedef struct {
     Value* stackTop;
     Table globals;
     Table strings;
-    ObjUpvalue* openUpvalues;
-    Obj* objects;
+
+    struct ObjUpvalue* openUpvalues;
+    struct Obj* objects;
 
     int grayCount;
     int grayCapacity;
-    Obj** grayStack;
+    struct Obj** grayStack;
 
     size_t bytesAllocated;
     size_t nextGC;
@@ -85,6 +94,9 @@ typedef struct {
     bool hasError;
 } VM;
 
+// ---------------------
+// Interpret result
+// ---------------------
 typedef enum {
     INTERPRET_OK,
     INTERPRET_COMPILE_ERROR,

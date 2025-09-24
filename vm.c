@@ -48,38 +48,34 @@ static Value sleepNative(int argCount, Value* args){
     return NIL_VAL;
 }
 
+#include <stdatomic.h>
+static Value syncNative(int argCount, Value* args){
+    __atomic_thread_fence(memory_order_seq_cst);
+    return NIL_VAL;
+}
+
 static void resetStackCtx(Thread *ctx);
 void pushCtx(Thread *ctx, Value);
 Value popCtx(Thread *ctx);
 static bool callCtx(Thread *ctx, ObjClosure* closure, int argCount);
+static bool callValueCtx(Thread *ctx, Value callee, int argCount);
 static void* runCtx(void*);
-
-void* createThreadCtx(void* cl){
-    auto closure = (ObjClosure*)cl;
-    Thread *ctx = calloc(1, sizeof(Thread));
-    pushCtx(ctx, OBJ_VAL(closure));
-    callCtx(ctx, closure, 0);
-
-    runCtx(ctx);
-}
 
 static Value spawnNative(int argCount, Value* args){
     pthread_t *tid = malloc(sizeof(Thread));;
-    auto closure = AS_CLOSURE(args[0]);
     Thread *ctx = malloc(sizeof(Thread));
     resetStackCtx(ctx);
-    pushCtx(ctx, OBJ_VAL(closure));
-    callCtx(ctx, closure, 0);
-
-    //runCtx(ctx);
+    for (int i = 0; i < argCount; i++)
+        pushCtx(ctx, args[i]);
+    callValueCtx(ctx, args[0], argCount - 1);
     pthread_create(tid, NULL, runCtx, ctx);
 
-    return OBJ_VAL(newThread(tid));
+    return OBJ_VAL(newThread(tid, ctx));
 }
 
 static Value joinNative(int argCount, Value* args){
     pthread_join(*AS_THREAD(args[0])->thread, NULL);
-    return NIL_VAL;
+    return popCtx(AS_THREAD(args[0])->ctx);
 }
 
 static Value clockNative(int argCount, Value* args) {
@@ -460,6 +456,7 @@ void initVM() {
     defineNative("read",  readNative);
     defineNative("spawn", spawnNative);
     defineNative("join", joinNative);
+    defineNative("sync", syncNative);
     defineStringMethods();
     defineListMethods();
 
@@ -576,7 +573,7 @@ static bool callBoundedNative(Value callee, int argCount) {
 
 static bool callBoundedNativeCtx(Thread *ctx, Value callee, int argCount) {
     NativeFn native = AS_NATIVE(callee);
-    Value result = native(argCount, vm.stackTop - argCount);
+    Value result = native(argCount, ctx->stackTop - argCount);
     if(ctx->hasError){
         ctx->hasError = false;
         result = popCtx(ctx);
@@ -2137,6 +2134,7 @@ static void* runCtx(void *context) {
                 ctx->frameCount--;
                 if (ctx->frameCount == 0) {
                     popCtx(ctx);
+                    pushCtx(ctx, result);
                     return nullptr;
                 }
 
@@ -2417,7 +2415,7 @@ static void* runCtx(void *context) {
                     Value method;
                     if (tableGet(&instance->klass->methods, vm.toString, &method)) {
                         frame->ip--;
-                        invoke(vm.toString, 0, frame);
+                        invokeCtx(ctx, vm.toString, 0, frame);
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }

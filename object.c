@@ -121,9 +121,10 @@ ObjNative* newNative(NativeFn function) {
     return native;
 }
 
-ObjThread* newThread(pthread_t *thread){
+ObjThread* newThread(pthread_t *thread, Thread *ctx){
     ObjThread* threadObj = ALLOCATE_OBJ(ObjThread, OBJ_THREAD);
     threadObj->thread = thread;
+    threadObj->ctx = ctx;
     return threadObj;
 }
 
