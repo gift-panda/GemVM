@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "value.h"
 #include "table.h"
+#include "pthread.h"
 
 // Forward declarations to break cyclic dependency
 typedef struct ObjClosure ObjClosure;
@@ -85,6 +86,8 @@ typedef struct {
     ObjClass* lookUpErrorClass;
     ObjString* formatErrorString;
     ObjClass* formatErrorClass;
+
+    pthread_t main;
 
     bool isInvokingNative;
     bool gcEnabled;

@@ -23,7 +23,7 @@ void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
 #ifdef DEBUG_STRESS_GC
         collectGarbage();
 #endif
-        if (vm.gcEnabled)
+        if (pthread_self() == vm.main && vm.gcEnabled)
             if (vm.bytesAllocated > vm.nextGC) {
                 collectGarbage();
             }

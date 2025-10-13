@@ -391,6 +391,7 @@ void initVM() {
     initTable(&vm.listClassMethods);
     initTable(&vm.imageClassMethods);
 
+    vm.main = pthread_self();
     vm.grayCount = 0;
     vm.grayCapacity = 0;
     vm.grayStack = NULL;
