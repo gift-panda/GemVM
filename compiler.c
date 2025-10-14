@@ -1388,6 +1388,7 @@ static void continueStatement() {
 
     consume(TOKEN_SEMICOLON, "Expect ';' after 'continue'.");
     printf("continue statement to: %d\n", continueJumpOffset);
+    endScope();
     emitLoop(continueJumpOffset);
 }
 

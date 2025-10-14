@@ -130,7 +130,7 @@ static Value inputNative(int argCount, Value* args) {
             runtimeError(vm.illegalArgumentsErrorClass, "input() prompt must be a string.");
             return NIL_VAL;
         }
-        printf("%s\n", AS_CSTRING(args[0]));
+        printf("%s", AS_CSTRING(args[0]));
     }
 
     char buffer[1024];
@@ -161,7 +161,7 @@ void defineStringMethods() {
     tableSet(&vm.stringClassMethods, copyString("trim", 4), OBJ_VAL(newNative(stringTrimNative)));
     tableSet(&vm.stringClassMethods, copyString("startsWith", 10), OBJ_VAL(newNative(stringStartsWithNative)));
     tableSet(&vm.stringClassMethods, copyString("endsWith", 8), OBJ_VAL(newNative(stringEndsWithNative)));
-
+    tableSet(&vm.stringClassMethods, copyString("isDigit", 7), OBJ_VAL(newNative(str_isDigit)));
 }
 
 void defineListMethods() {

@@ -1,0 +1,188 @@
+import Math;
+import Window;
+
+
+func loadMatrix(filename){
+    var matrix = [];
+    var content = read(filename);
+
+    var lines = content.split("\n");
+    for(var i = 0; i < lines.length() - 1; i++){
+        var numbers = lines[i].trim().split(" ");
+        var row = [];
+        for(var j = 0; j < numbers.length(); j++){
+            row.append(numbers[j].asNum());
+        }
+        matrix.append(row);
+    }
+    return matrix;
+}
+
+func loadVector(filename){
+    var vector = [];
+    var content = read(filename);
+
+    var lines = content.split("\n");
+    for(var i = 0; i < lines.length() - 1; i++){
+        var line = lines[i];
+        vector.append(line.trim().asNum());
+    }
+    return vector;
+}
+
+func relu(x){
+    return Math.max(0.0, x);
+}
+
+func softmax(z){
+    var exp_z = [];
+    var sum_exp = 0.0;
+    for(var i = 0; i < z.length(); i++){
+        var val = z[i];
+        var e = Math.exp(val);
+        exp_z.append(e);
+        sum_exp = sum_exp + e;
+    }
+    for(var i = 0; i < exp_z.length(); i++){
+        exp_z[i] = exp_z[i] / sum_exp;
+    }
+    return exp_z;
+}
+
+var W1 = loadMatrix("W1.txt");
+var b1 = loadVector("b1.txt");
+var W2 = loadMatrix("W2.txt");
+var b2 = loadVector("b2.txt");
+
+func flatten(input_2d){
+    var x_flat = [];
+    for(var i = 0; i < 28; i++)
+        for(var j = 0; j < 28; j++){
+            x_flat.append(input_2d[i][j]);
+        }
+    return x_flat;
+}
+
+func predict(input_2d){
+    var x_flat = flatten(input_2d);
+
+    var h = [];
+    for(var j = 0; j < W1.length(); j++){
+        var sum_h = b1[j];
+        var arr = W1[j];
+        for(var i = 0; i < arr.length(); i++)
+            sum_h = sum_h + W1[j][i] * x_flat[i];
+        h.append(relu(sum_h));
+    }
+
+    var z = [];
+    for(var k = 0; k < W2.length(); k++){
+        var sum_z = b2[k];
+        var arr = W2[k];
+        for(var j = 0; j < arr.length(); j++)
+            sum_z = sum_z + W2[k][j] * h[j];
+        z.append(sum_z);
+    }
+
+    var y = softmax(z);
+
+    var max_val = y[0];
+    var pred = 0;
+
+    for(var i = 1; i < y.length(); i++)
+        if(y[i] > max_val){
+            max_val = y[i];
+            pred = i;
+        }
+
+    return pred;
+}
+
+var grid = [];
+func main(){
+
+    var CELL = 20;
+    var GRID_W = 28;
+    var GRID_H = 28;
+    var WIN_W = GRID_W * CELL;
+    var WIN_H = GRID_H * CELL;
+
+    for (var y = 0; y < GRID_H; y = y + 1) {
+        var row = [];
+        for (var x = 0; x < GRID_W; x = x + 1) {
+            row.append(0);
+        }
+        grid.append(row);
+    }
+
+    Window.init(WIN_W, WIN_H, "28x28 Drawing Grid");
+
+    var lastMouseX = 0;
+    var lastMouseY = 0;
+    var isLeft = false;
+    var isRight = false;
+
+    func handleDrawing() {
+        var pos = Window.getMousePos();
+        var mx = pos[0];
+        var my = pos[1];
+
+        var gx = mx \ CELL; 
+        var gy = my \ CELL;
+
+        if (gx >= 0 and gx < GRID_W and gy >= 0 and gy < GRID_H) {
+            if (isLeft) {
+                grid[gy][gx] = 1;
+            } else if (isRight) {
+                grid[gy][gx] = 0;
+            }
+        }
+    }
+
+    while (true) {
+        Window.clear(0);
+
+        var event = Window.pollEvent();
+        if (event != nil) {
+            if (event[0] == "quit") break;
+
+            if (event[0] == "mouse_down") {
+                if (event[1] == "mouse_left") {
+                    isLeft = true;
+                    isRight = false;
+                    handleDrawing();
+                } else if (event[1] == "mouse_right") {
+                    isRight = true;
+                    isLeft = false;
+                    handleDrawing();
+                }
+            } else if (event[0] == "mouse_up") {
+                if (event[1] == "mouse_left") {
+                    isLeft = false;
+                } else if (event[1] == "mouse_right") {
+                    isRight = false;
+                }
+            }
+        }
+
+        if (isLeft or isRight) {
+            handleDrawing();
+        }
+
+        for (var y = 0; y < GRID_H; y = y + 1) {
+            for (var x = 0; x < GRID_W; x = x + 1) {
+                if (grid[y][x] == 1) {
+                    Window.drawRect(x * CELL, y * CELL, CELL, CELL, "0xFFFFFF".asNum());
+                }
+            }
+        }
+
+        Window.update();
+    }
+
+    Window.exit();
+}
+
+main();
+var predicted_digit = predict(grid);
+println("Predicted digit: " + predicted_digit);

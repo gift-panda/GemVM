@@ -39,8 +39,19 @@ static Value stringSplitNative(int argCount, Value* args) {
     int delimLen = delimiter->length;
 
     ObjList* result = newList();
+
+    // ✅ SPECIAL CASE: empty delimiter → split into characters
+    if (delimLen == 0) {
+        for (int i = 0; i < strLen; i++) {
+            ObjString* ch = copyString(str + i, 1);
+            writeValueArray(&result->elements, OBJ_VAL(ch));
+        }
+        return OBJ_VAL(result);
+    }
+
     int start = 0;
 
+    // ✅ Normal splitting
     for (int i = 0; i <= strLen - delimLen;) {
         if (memcmp(str + i, delim, delimLen) == 0) {
             int segmentLen = i - start;
@@ -53,7 +64,6 @@ static Value stringSplitNative(int argCount, Value* args) {
         }
     }
 
-    // Add remaining part after last delimiter
     if (start <= strLen) {
         ObjString* segment = copyString(str + start, strLen - start);
         writeValueArray(&result->elements, OBJ_VAL(segment));
@@ -285,6 +295,18 @@ static Value stringParseBooleanNative(int argCount, Value* args) {
         runtimeError(vm.formatErrorClass, "Invalid boolean value %s", str->chars );
         return NIL_VAL;
     }
+}
+
+static Value str_isDigit(int argCount, Value* args) {
+    if (argCount != 0) runtimeError(vm.illegalArgumentsErrorClass, "str.parse() takes no aruments.");
+    ObjString* str = AS_STRING(args[-1]);
+
+    char* end;
+    double num = strtod(str->chars, &end);
+    if (end != str->chars && *end == '\0') {
+        return BOOL_VAL(true);
+    }
+    return BOOL_VAL(false);
 }
 
 static Value str_parse(int argCount, Value* args) {
