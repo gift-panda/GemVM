@@ -122,9 +122,18 @@ static Value math_ceil(int argCount, Value* args) {
 }
 
 static Value math_round(int argCount, Value* args) {
-  CHECK_NUM_ARGS("round", 1);
-  return NUMBER_VAL(round(AS_NUMBER(args[0])));
+    double x = AS_NUMBER(args[0]);
+    int decimals = (int)AS_NUMBER(args[1]);
+
+    if (decimals <= 0) {
+        double factor = pow(10.0, -decimals);
+        return NUMBER_VAL(round(x / factor) * factor);
+    }
+
+    double factor = pow(10.0, decimals);
+    return NUMBER_VAL(round(x * factor) / factor);
 }
+
 
 static Value math_trunc(int argCount, Value* args) {
   CHECK_NUM_ARGS("trunc", 1);

@@ -3,9 +3,9 @@ project(GemVM)
 
 set(CMAKE_CXX_STANDARD 23)
 add_compile_definitions(TB_IMPL_V1)
-set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_C_FLAGS_DEBUG "-g -O0")
-set(CMAKE_CXX_FLAGS_DEBUG "-g -O0")
+set(CMAKE_BUILD_TYPE Release)
+#set(CMAKE_C_FLAGS_DEBUG "-O3")
+#set(CMAKE_CXX_FLAGS_DEBUG "-O3")
 
 set(GEMVM_SOURCES
         main.c
@@ -41,7 +41,12 @@ if(STATIC_LINKAGE)
                 /home/meow/CLionProjects/GemVM/termbox2
         )
 
-        set(SDL2_STATIC_LIB         "/usr/local/lib/libSDL2.a")
+        find_library(SDL2_TTF_LIBRARY
+                NAMES SDL2_ttf SDL_ttf
+                PATHS /usr/lib /usr/local/lib /usr/lib64
+        )
+
+        set(SDL2_STATIC_LIB        "/usr/local/lib/libSDL2.a")
         set(SDL2_IMAGE_STATIC_LIB  "/usr/local/lib/libSDL2_image.a")
         set(SDL2_GFX_STATIC_LIB    "/usr/local/lib/libSDL2_gfx.a")   # ← Add this
         set(TERMBOX_LIB            "/home/meow/CLionProjects/GemVM/termbox2/libtermbox2.a")
@@ -49,6 +54,7 @@ if(STATIC_LINKAGE)
         add_executable(GemVM ${GEMVM_SOURCES})
 
         target_link_libraries(GemVM
+                ${SDL2_TTF_LIBRARY}
                 ${SDL2_STATIC_LIB}
                 ${SDL2_IMAGE_STATIC_LIB}
                 ${SDL2_GFX_STATIC_LIB}    # ← Add this
@@ -58,6 +64,7 @@ if(STATIC_LINKAGE)
                 jpeg
                 z
                 pthread
+                freetype
         )
 
 else()

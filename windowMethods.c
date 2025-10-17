@@ -106,6 +106,70 @@ Value window_drawTriangle(int argCount, Value* args) {
     return NIL_VAL;
 }
 
+#include <SDL2/SDL_ttf.h>
+
+Value window_drawText(int argCount, Value* args) {
+
+    if (argCount != 5) {
+        runtimeError(vm.illegalArgumentsErrorClass, 
+                     "drawText(x, y, text, size, color) expects 5 arguments.");
+        return NIL_VAL;
+    }
+
+    if (!IS_NUMBER(args[0]) || !IS_NUMBER(args[1]) || !IS_STRING(args[2]) ||
+        !IS_NUMBER(args[3]) || !IS_NUMBER(args[4])) {
+        runtimeError(vm.illegalArgumentsErrorClass, 
+                     "drawText: argument types must be (number, number, string, number, number).");
+        return NIL_VAL;
+    }
+
+    int x = (int)AS_NUMBER(args[0]);
+    int y = (int)AS_NUMBER(args[1]);
+    ObjString* textObj = AS_STRING(args[2]);
+    int fontSize = (int)AS_NUMBER(args[3]);
+    int sizeColor = (int)AS_NUMBER(args[4]); // last argument is color
+
+    Uint8 r = (sizeColor >> 16) & 0xFF;
+    Uint8 g = (sizeColor >> 8) & 0xFF;
+    Uint8 b = sizeColor & 0xFF;
+
+    // Initialize TTF if needed
+    if (TTF_WasInit() == 0) {
+        if (TTF_Init() == -1) {
+            fprintf(stderr, "TTF_Init failed: %s\n", TTF_GetError());
+            return NIL_VAL;
+        }
+    }
+
+    // Default font path
+    const char* defaultFontPath = "/usr/share/fonts/TTF/ZedMonoNerdFont-Regular.ttf";
+
+    // Load font with user-specified size
+    TTF_Font* font = TTF_OpenFont(defaultFontPath, fontSize);
+    if (!font) {
+        fprintf(stderr, "TTF_OpenFont failed: %s\n", TTF_GetError());
+        return NIL_VAL;
+    }
+
+    SDL_Color color = { r, g, b, 255 };
+    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, textObj->chars, color);
+    if (!surface) {
+        TTF_CloseFont(font);
+        fprintf(stderr, "TTF_RenderUTF8_Blended failed: %s\n", TTF_GetError());
+        return NIL_VAL;
+    }
+
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(gw.renderer, surface);
+    SDL_Rect dst = { x, y, surface->w, surface->h };
+
+    SDL_FreeSurface(surface);
+    SDL_RenderCopy(gw.renderer, texture, NULL, &dst);
+    SDL_DestroyTexture(texture);
+    TTF_CloseFont(font);
+
+    return NIL_VAL;
+}
+
 
 Value window_update(int argCount, Value* args) {
     SDL_RenderPresent(gw.renderer);

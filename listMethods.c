@@ -205,3 +205,55 @@ static Value listRemoveNative(int argCount, Value* args) {
     list->elements.count--;
     return removed;
 }
+
+static void quickSort(Value* arr, int left, int right) {
+    if (left >= right) return;
+
+    Value pivot = arr[right];
+    int i = left - 1;
+
+    for (int j = left; j < right; j++) {
+        // Assuming the values are numbers; extend later for other types
+        if (AS_NUMBER(arr[j]) <= AS_NUMBER(pivot)) {
+            i++;
+            Value temp = arr[i];
+            arr[i] = arr[j];
+            arr[j] = temp;
+        }
+    }
+
+    Value temp = arr[i + 1];
+    arr[i + 1] = arr[right];
+    arr[right] = temp;
+
+    int pi = i + 1;
+    quickSort(arr, left, pi - 1);
+    quickSort(arr, pi + 1, right);
+}
+
+static Value listSortNative(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError(vm.illegalArgumentsErrorClass, "list.sort() takes no arguments.");
+        return NIL_VAL;
+    }
+
+    if (!IS_LIST(args[-1])) {
+        runtimeError(vm.typeErrorClass, "list.sort() must be called on a list.");
+        return NIL_VAL;
+    }
+
+    ObjList* list = AS_LIST(args[-1]);
+    if (list->elements.count <= 1) return OBJ_VAL(list);
+
+    // Optional: validate all elements are numbers
+    for (int i = 0; i < list->elements.count; i++) {
+        if (!IS_NUMBER(list->elements.values[i])) {
+            runtimeError(vm.typeErrorClass, "list.sort() supports only lists of numbers.");
+            return NIL_VAL;
+        }
+    }
+
+    quickSort(list->elements.values, 0, list->elements.count - 1);
+    return OBJ_VAL(list);
+}
+

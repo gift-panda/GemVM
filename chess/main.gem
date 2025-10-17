@@ -1,3 +1,4 @@
+#!/usr/bin/env GemVM
 import Window;
 import Board;
 import Piece;

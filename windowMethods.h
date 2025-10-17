@@ -39,4 +39,5 @@ Value window_loadImage(int argCount, Value* args);
 Value Image_getHeight(int argCount, Value* args);
 Value Image_getWidth(int argCount, Value* args);
 Value window_exit(int argCount, Value* args);
+Value window_drawText(int argCount, Value* args);
 #endif // GEM_WINDOW_METHODS_H

@@ -201,10 +201,17 @@ static uint8_t makeConstant(Value value) {
     return constant;
 }
 
+static void emitShortConstant(int constant){
+    emitByte(constant >> 16);
+    emitByte(constant >> 8);
+    emitByte(constant);
+}
+
 static void emitConstant(Value value) {
     int constant = makeConstant(value);
+    
     emitByte(OP_CONSTANT);
-    emitByte(constant);
+    emitShortConstant(constant);
 }
 
 static void patchJump(int offset) {
@@ -412,6 +419,16 @@ static void namedVariable(Token name, bool canAssign) {
         arg = identifierConstant(&name);
         getOp = OP_GET_GLOBAL;
         setOp = OP_SET_GLOBAL;
+
+        if (canAssign && match(TOKEN_EQUAL)) {
+            expression();
+            emitByte(setOp);
+            emitShortConstant(arg);
+        } else {
+            emitByte(getOp);
+            emitShortConstant(arg);
+        }
+        return;
     }
 
     if (canAssign && match(TOKEN_EQUAL)) {
@@ -483,13 +500,17 @@ static void dot(bool canAssign) {
 
     if (canAssign && match(TOKEN_EQUAL)) {
         expression();
-        emitBytes(OP_SET_PROPERTY, name);
+        emitByte(OP_SET_PROPERTY);
+        emitShortConstant(name);
+        
     } else if (match(TOKEN_LEFT_PAREN)) {
         uint8_t argCount = argumentList();
-        emitBytes(OP_INVOKE, name);
+        emitByte(OP_INVOKE);
+        emitShortConstant(name);
         emitByte(argCount);
     } else {
-        emitBytes(OP_GET_PROPERTY, name);
+        emitByte(OP_GET_PROPERTY);
+        emitShortConstant(name);
     }
 }
 
@@ -519,11 +540,13 @@ static void super_(bool canAssign) {
     if (match(TOKEN_LEFT_PAREN)) {
         uint8_t argCount = argumentList();
         namedVariable(syntheticToken("super"), false);
-        emitBytes(OP_SUPER_INVOKE, name);
+        emitByte(OP_SUPER_INVOKE);
+        emitShortConstant(name);
         emitByte(argCount);
     } else {
         namedVariable(syntheticToken("super"), false);
-        emitBytes(OP_GET_SUPER, name);
+        emitByte(OP_GET_SUPER);
+        emitShortConstant(name);
     }
 }
 
@@ -593,15 +616,19 @@ static void emitIncDec(Token name, bool isIncrement, bool isPrefix) {
   // Global
   uint8_t nameConst = identifierConstant(&name);
   if (isPrefix) {
-    emitBytes(OP_GET_GLOBAL, nameConst);
+    emitByte(OP_GET_GLOBAL);
+    emitShortConstant(nameConst);
     emitConstant(NUMBER_VAL(1));
     emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
-    emitBytes(OP_SET_GLOBAL, nameConst);
+    emitByte(OP_SET_GLOBAL);
+    emitShortConstant(nameConst);
   } else {
-    emitBytes(OP_GET_GLOBAL, nameConst);
+    emitByte(OP_GET_GLOBAL);
+    emitShortConstant(nameConst);
     emitConstant(NUMBER_VAL(1));
     emitByte(isIncrement ? OP_ADD : OP_SUBTRACT);
-    emitBytes(OP_SET_GLOBAL, nameConst);
+    emitByte(OP_SET_GLOBAL);
+    emitShortConstant(nameConst);
     emitByte(OP_POP);
   }
 }
@@ -800,7 +827,8 @@ static void defineVariable(uint8_t global) {
         return;
     }
 
-    emitBytes(OP_DEFINE_GLOBAL, global);
+    emitByte(OP_DEFINE_GLOBAL);
+    emitShortConstant(global);
 }
 
 static uint8_t argumentList() {
@@ -868,7 +896,8 @@ static void lambda(bool canAssign){
     int closureConstant = makeConstant(OBJ_VAL(function));
 
     // Emit OP_CLOSURE (pushes the closure on stack)
-    emitBytes(OP_CLOSURE, closureConstant);
+    emitByte(OP_CLOSURE);
+    emitShortConstant(closureConstant);
 
     for (int i = 0; i < function->upvalueCount; i++) {
         emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
@@ -911,7 +940,8 @@ static void function(FunctionType type) {
     int closureConstant = makeConstant(OBJ_VAL(function));
 
     // Emit OP_CLOSURE (pushes the closure on stack)
-    emitBytes(OP_CLOSURE, closureConstant);
+    emitByte(OP_CLOSURE);
+    emitShortConstant(closureConstant);
 
     for (int i = 0; i < function->upvalueCount; i++) {
         emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
@@ -936,10 +966,14 @@ static void method() {
         error("Initializer cannot be static..");
     }
     function(type);
-    if (makeStatic)
-        emitBytes(OP_STATIC_METHOD, constant);
-    else
-        emitBytes(OP_METHOD, constant);
+    if (makeStatic){
+        emitByte(OP_STATIC_METHOD);
+        emitShortConstant(constant);
+    }
+    else{
+        emitByte(OP_METHOD);
+        emitShortConstant(constant);
+    }
 }
 
 static Token syntheticToken(const char* text) {
@@ -955,7 +989,8 @@ static void classDeclaration() {
     uint8_t nameConstant = identifierConstant(&parser.previous);
     declareVariable();
 
-    emitBytes(OP_CLASS, nameConstant);
+    emitByte(OP_CLASS);
+    emitShortConstant(nameConstant);
     defineVariable(nameConstant);
 
     ClassCompiler classCompiler;
@@ -994,7 +1029,8 @@ static void classDeclaration() {
             consume(TOKEN_SEMICOLON,
                     "Expect ';' after variable declaration.");
 
-            emitBytes(OP_STATIC_VAR, global);
+            emitByte(OP_STATIC_VAR);
+            emitShortConstant(global);
         }
         else {
             match(TOKEN_OPERATOR);
@@ -1450,7 +1486,9 @@ static void statement() {
             ObjFunction* function = compile(source);
             function->name = fileName;
             int constant = makeConstant(OBJ_VAL(function));
-            emitBytes(OP_CLOSURE, constant);
+            emitByte(OP_CLOSURE);
+            emitShortConstant(constant);
+            
             emitBytes(OP_CALL, 0);
             emitByte(OP_POP);
         }

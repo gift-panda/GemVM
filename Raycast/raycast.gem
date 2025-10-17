@@ -114,7 +114,6 @@ var right = false;
 
 func main(){
     while (true) {
-
         var event = win.pollEvent();
         if (event != nil) {
             if (event[0] == "quit") {

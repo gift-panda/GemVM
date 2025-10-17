@@ -174,9 +174,11 @@ void defineListMethods() {
     tableSet(&vm.listClassMethods, copyString("clear", 5), OBJ_VAL(newNative(listClearNative)));
     tableSet(&vm.listClassMethods, copyString("contains", 8), OBJ_VAL(newNative(listContainsNative)));
     tableSet(&vm.listClassMethods, copyString("remove", 6), OBJ_VAL(newNative(listRemoveNative)));
+    tableSet(&vm.listClassMethods, copyString("sort", 4), OBJ_VAL(newNative(listSortNative)));
 
     tableSet(&vm.imageClassMethods, copyString("getWidth", 8), OBJ_VAL(newNative(Image_getWidth)));
     tableSet(&vm.imageClassMethods, copyString("getHeight", 9), OBJ_VAL(newNative(Image_getHeight)));
+    
 }
 
 static void resetStack() {
@@ -1241,6 +1243,11 @@ bool hasAncestor(ObjInstance* instance, ObjClass* ancestor) {
     return false;
 }
 
+Value readConst(CallFrame* frame){
+    frame->ip += 3;
+    return frame->closure->function->chunk.constants.values[(uint8_t)(frame->ip[-3] << 16 | frame->ip[-2] << 8 | frame->ip[-1])];
+}
+
 static InterpretResult run() {
     register CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
@@ -1251,7 +1258,7 @@ static InterpretResult run() {
     (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
 
     #define READ_CONSTANT() \
-        (frame->closure->function->chunk.constants.values[READ_BYTE()])
+        readConst(frame)
     #define BINARY_OP(valueType, op) \
     do { \
         bool fl = false; \
@@ -1701,6 +1708,7 @@ static InterpretResult run() {
                     tableSet(&klass->staticMethods, copyString("exit", 4),        OBJ_VAL(newNative(window_exit)));
                     tableSet(&klass->staticMethods, copyString("drawLine", 8),        OBJ_VAL(newNative(window_drawLine)));
                     tableSet(&klass->staticMethods, copyString("drawTrig", 8),        OBJ_VAL(newNative(window_drawTriangle)));
+                    tableSet(&klass->staticMethods, copyString("drawText", 8),    OBJ_VAL(newNative(window_drawText)));
                 }
 
                 if (name == copyString("Math", 4)) {
@@ -2091,7 +2099,7 @@ static void* runCtx(void *context) {
     (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]))
 
     #define READ_CONSTANT() \
-        (frame->closure->function->chunk.constants.values[READ_BYTE()])
+        readConst(frame)
     #define BINARY_OP(valueType, op) \
         do { \
             bool fl = false; \

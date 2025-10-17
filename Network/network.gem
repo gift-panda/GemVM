@@ -1,11 +1,10 @@
 import Math;
 import Window;
 
-
+// --- Neural network loading functions (unchanged) ---
 func loadMatrix(filename){
     var matrix = [];
     var content = read(filename);
-
     var lines = content.split("\n");
     for(var i = 0; i < lines.length() - 1; i++){
         var numbers = lines[i].trim().split(" ");
@@ -21,7 +20,6 @@ func loadMatrix(filename){
 func loadVector(filename){
     var vector = [];
     var content = read(filename);
-
     var lines = content.split("\n");
     for(var i = 0; i < lines.length() - 1; i++){
         var line = lines[i];
@@ -38,8 +36,7 @@ func softmax(z){
     var exp_z = [];
     var sum_exp = 0.0;
     for(var i = 0; i < z.length(); i++){
-        var val = z[i];
-        var e = Math.exp(val);
+        var e = Math.exp(z[i]);
         exp_z.append(e);
         sum_exp = sum_exp + e;
     }
@@ -53,136 +50,166 @@ var W1 = loadMatrix("W1.txt");
 var b1 = loadVector("b1.txt");
 var W2 = loadMatrix("W2.txt");
 var b2 = loadVector("b2.txt");
+var W3 = loadMatrix("W3.txt");
+var b3 = loadVector("b3.txt");
 
 func flatten(input_2d){
     var x_flat = [];
     for(var i = 0; i < 28; i++)
-        for(var j = 0; j < 28; j++){
+        for(var j = 0; j < 28; j++)
             x_flat.append(input_2d[i][j]);
-        }
     return x_flat;
 }
 
+// --- Modified predict to return sorted (digit, probability) pairs ---
 func predict(input_2d){
     var x_flat = flatten(input_2d);
 
-    var h = [];
+    var h1 = [];
     for(var j = 0; j < W1.length(); j++){
         var sum_h = b1[j];
-        var arr = W1[j];
-        for(var i = 0; i < arr.length(); i++)
+        for(var i = 0; i < W1[j].length(); i++)
             sum_h = sum_h + W1[j][i] * x_flat[i];
-        h.append(relu(sum_h));
+        h1.append(relu(sum_h));
+    }
+
+    var h2 = [];
+    for(var j = 0; j < W2.length(); j++){
+        var sum_h = b2[j];
+        for(var i = 0; i < W2[j].length(); i++)
+            sum_h = sum_h + W2[j][i] * h1[i];
+        h2.append(relu(sum_h));
     }
 
     var z = [];
-    for(var k = 0; k < W2.length(); k++){
-        var sum_z = b2[k];
-        var arr = W2[k];
-        for(var j = 0; j < arr.length(); j++)
-            sum_z = sum_z + W2[k][j] * h[j];
+    for(var k = 0; k < W3.length(); k++){
+        var sum_z = b3[k];
+        for(var j = 0; j < W3[k].length(); j++)
+            sum_z = sum_z + W3[k][j] * h2[j];
         z.append(sum_z);
     }
 
-    var y = softmax(z);
+    var y = softmax(z); 
 
-    var max_val = y[0];
-    var pred = 0;
+    var sorted = [];
+    for (var i = 0; i < y.length(); i++)
+        sorted.append(y[i]);
 
-    for(var i = 1; i < y.length(); i++)
-        if(y[i] > max_val){
-            max_val = y[i];
-            pred = i;
+    sorted.sort();
+
+    var pairs = [];
+    for (var i = sorted.length() - 1; i >= 0; i = i - 1) {
+        var prob = sorted[i];
+
+        var digit = -1;
+        for (var d = 0; d < y.length(); d++) {
+            if (y[d] == prob) {
+                digit = d;
+                y[d] = -1;   // mark as used
+                break;
+            }
         }
 
-    return pred;
+        pairs.append([digit, prob]);
+    }
+
+    return pairs;
 }
+
+// --- Panel Setup ---
+var CELL = 20;
+var GRID_W = 28;
+var GRID_H = 28;
+
+var LEFT_W = GRID_W * CELL;
+var LEFT_H = GRID_H * CELL;
+
+var RIGHT_W = LEFT_W / 2;
+var WIN_W = LEFT_W + RIGHT_W;
+var WIN_H = LEFT_H;
 
 var grid = [];
-func main(){
-
-    var CELL = 20;
-    var GRID_W = 28;
-    var GRID_H = 28;
-    var WIN_W = GRID_W * CELL;
-    var WIN_H = GRID_H * CELL;
-
-    for (var y = 0; y < GRID_H; y = y + 1) {
-        var row = [];
-        for (var x = 0; x < GRID_W; x = x + 1) {
-            row.append(0);
-        }
-        grid.append(row);
+for(var y = 0; y < GRID_H; y++){
+    var row = [];
+    for(var x = 0; x < GRID_W; x++){
+        row.append(0);
     }
-
-    Window.init(WIN_W, WIN_H, "28x28 Drawing Grid");
-
-    var lastMouseX = 0;
-    var lastMouseY = 0;
-    var isLeft = false;
-    var isRight = false;
-
-    func handleDrawing() {
-        var pos = Window.getMousePos();
-        var mx = pos[0];
-        var my = pos[1];
-
-        var gx = mx \ CELL; 
-        var gy = my \ CELL;
-
-        if (gx >= 0 and gx < GRID_W and gy >= 0 and gy < GRID_H) {
-            if (isLeft) {
-                grid[gy][gx] = 1;
-            } else if (isRight) {
-                grid[gy][gx] = 0;
-            }
-        }
-    }
-
-    while (true) {
-        Window.clear(0);
-
-        var event = Window.pollEvent();
-        if (event != nil) {
-            if (event[0] == "quit") break;
-
-            if (event[0] == "mouse_down") {
-                if (event[1] == "mouse_left") {
-                    isLeft = true;
-                    isRight = false;
-                    handleDrawing();
-                } else if (event[1] == "mouse_right") {
-                    isRight = true;
-                    isLeft = false;
-                    handleDrawing();
-                }
-            } else if (event[0] == "mouse_up") {
-                if (event[1] == "mouse_left") {
-                    isLeft = false;
-                } else if (event[1] == "mouse_right") {
-                    isRight = false;
-                }
-            }
-        }
-
-        if (isLeft or isRight) {
-            handleDrawing();
-        }
-
-        for (var y = 0; y < GRID_H; y = y + 1) {
-            for (var x = 0; x < GRID_W; x = x + 1) {
-                if (grid[y][x] == 1) {
-                    Window.drawRect(x * CELL, y * CELL, CELL, CELL, "0xFFFFFF".asNum());
-                }
-            }
-        }
-
-        Window.update();
-    }
-
-    Window.exit();
+    grid.append(row);
 }
 
-main();
-var predicted_digit = predict(grid);
-println("Predicted digit: " + predicted_digit);
+Window.init(WIN_W, WIN_H, "Digit Drawer + Results");
+
+var isLeft = false;
+var isRight = false;
+var results = nil;   // holds last prediction results or nil
+
+func handleDrawing() {
+    var pos = Window.getMousePos();
+    var mx = pos[0];
+    var my = pos[1];
+
+    if (mx >= 0 and mx < LEFT_W and my >= 0 and my < LEFT_H) {
+        var gx = mx \ CELL;
+        var gy = my \ CELL;
+        if (gx >= 0 and gx < GRID_W and gy >= 0 and gy < GRID_H) {
+            if (isLeft) grid[gy][gx] = 1;
+            else if (isRight) grid[gy][gx] = 0;
+        }
+    }
+}
+
+// --- Main Loop ---
+while (true) {
+    Window.clear(0);
+
+    var event = Window.pollEvent();
+    if (event != nil) {
+        if (event[0] == "quit") break;
+
+        if (event[0] == "mouse_down") {
+            if (event[1] == "mouse_left") { isLeft = true; isRight = false; handleDrawing(); }
+            else if (event[1] == "mouse_right") { isRight = true; isLeft = false; handleDrawing(); }
+        } else if (event[0] == "mouse_up") {
+            if (event[1] == "mouse_left") isLeft = false;
+            else if (event[1] == "mouse_right") isRight = false;
+        } else if (event[0] == "key_down" and event[1] == "Return") {
+            results = predict(grid);
+
+            for(var y = 0; y < GRID_H; y++)
+                for(var x = 0; x < GRID_W; x++)
+                    grid[y][x] = 0;
+        }
+    }
+
+    if (isLeft or isRight) handleDrawing();
+
+    // Draw left grid
+    for(var y = 0; y < GRID_H; y++)
+        for(var x = 0; x < GRID_W; x++)
+            if(grid[y][x] == 1)
+                Window.drawRect(x * CELL, y * CELL, CELL, CELL, "0xFFFFFF".asNum());
+
+    // Draw right panel background
+    Window.drawRect(LEFT_W, 0, RIGHT_W, WIN_H, "0x222222".asNum());
+
+    // If we have results, display them
+    if (results != nil) {
+        var textX = LEFT_W + 10;
+        var textY = 20;
+        for (var i = 0; i < results.length(); i++) {
+            var digit = results[i][0];
+            var prob = results[i][1];
+            var line = "Digit: " + digit + "  Confidence: " + (Math.round(prob, 2) * 100) + "%";
+            Window.drawText(textX, textY, line, 20, "0xFFFFFF".asNum());
+            textY = textY + 25;
+        }
+    }
+
+    if(clock() % 1 < 0.1){
+        results = predict(grid);
+    }
+    Window.update();
+}
+
+Window.exit();
+
