@@ -141,7 +141,7 @@ Window.init(WIN_W, WIN_H, "Digit Drawer + Results");
 
 var isLeft = false;
 var isRight = false;
-var results = nil;   // holds last prediction results or nil
+var results = nil;  
 
 func handleDrawing() {
     var pos = Window.getMousePos();
@@ -172,6 +172,7 @@ while (true) {
         } else if (event[0] == "mouse_up") {
             if (event[1] == "mouse_left") isLeft = false;
             else if (event[1] == "mouse_right") isRight = false;
+            results = predict(grid);
         } else if (event[0] == "key_down" and event[1] == "Return") {
             results = predict(grid);
 
@@ -183,31 +184,42 @@ while (true) {
 
     if (isLeft or isRight) handleDrawing();
 
-    // Draw left grid
     for(var y = 0; y < GRID_H; y++)
         for(var x = 0; x < GRID_W; x++)
             if(grid[y][x] == 1)
                 Window.drawRect(x * CELL, y * CELL, CELL, CELL, "0xFFFFFF".asNum());
 
-    // Draw right panel background
     Window.drawRect(LEFT_W, 0, RIGHT_W, WIN_H, "0x222222".asNum());
 
-    // If we have results, display them
     if (results != nil) {
         var textX = LEFT_W + 10;
         var textY = 20;
+        var maxProb = 0;
+        var predictedDigit = -1;
+        
         for (var i = 0; i < results.length(); i++) {
             var digit = results[i][0];
             var prob = results[i][1];
-            var line = "Digit: " + digit + "  Confidence: " + (Math.round(prob, 2) * 100) + "%";
+            var line = "Digit: " + digit + " Confidence: " + (Math.round(prob * 100, 0)) + "%";
             Window.drawText(textX, textY, line, 20, "0xFFFFFF".asNum());
-            textY = textY + 25;
+            textY = textY + 40;
+            
+            if (prob > maxProb) {
+                maxProb = prob;
+                predictedDigit = digit;
+            }
         }
+        
+        var predictionLine;
+        if (maxProb > 0.5) {
+            predictionLine = "Prediction: " + predictedDigit;
+        } else {
+            predictionLine = "Prediction: Invalid";
+        }
+        
+        Window.drawText(textX, textY, predictionLine, 20, "0xFFFFFF".asNum());
     }
 
-    if(clock() % 1 < 0.1){
-        results = predict(grid);
-    }
     Window.update();
 }
 
