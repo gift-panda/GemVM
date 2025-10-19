@@ -32,6 +32,7 @@ extern jmp_buf repl_env;
 
 VM vm;
 void printStackCtx(Thread *ctx);
+void printStack();
 
 ObjClass* errorClass;
 bool replError;
@@ -51,6 +52,11 @@ static Value sleepNative(int argCount, Value* args){
 #include <stdatomic.h>
 static Value syncNative(int argCount, Value* args){
     __atomic_thread_fence(memory_order_seq_cst);
+    return NIL_VAL;
+}
+
+static Value printStackNative(int argCount, Value* args){
+    printStack();
     return NIL_VAL;
 }
 
@@ -113,9 +119,7 @@ static Value readNative(int argCount, Value* args) {
 
     size_t bytesRead = fread(buffer, 1, size, file);
     buffer[bytesRead] = '\0';
-
     fclose(file);
-
     return OBJ_VAL(copyString(buffer, (int)bytesRead));
 }
 
@@ -142,7 +146,6 @@ static Value inputNative(int argCount, Value* args) {
         }
         return OBJ_VAL(copyString(buffer, len));
     }
-
     return NIL_VAL;
 }
 
@@ -194,7 +197,6 @@ static void resetStackCtx(Thread *ctx) {
 }
 
 CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
-    //flush(stdout);
     char msgbuf[512];      // message only
     char tracebuf[1024];   // stack trace
     char linebuf[256];
@@ -376,6 +378,8 @@ CallFrame* VMError(const char* format, ...) {
     exit(1);
 }
 
+
+
 static void defineNative(const char* name, NativeFn function) {
     push(OBJ_VAL(copyString(name, (int)strlen(name))));
     push(OBJ_VAL(newNative(function)));
@@ -460,6 +464,7 @@ void initVM() {
     defineNative("spawn", spawnNative);
     defineNative("join", joinNative);
     defineNative("sync", syncNative);
+    defineNative("printStack", printStackNative);
     defineStringMethods();
     defineListMethods();
 
@@ -1197,9 +1202,9 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
         return callValueCtx(ctx, value, argCount);
     }
 
-    return invokeFromClassCtx(ctx, instance->klass, name, argCount);
-}
-
+    return invokeFromClassCtx(ctx, instance->klass, name, argCount); 
+} 
+    
 static int resolveMultiDispatch(Value* result, ObjString* name) {
     CallFrame* frame = &vm.frames[vm.frameCount - 1];
 
@@ -1245,7 +1250,7 @@ bool hasAncestor(ObjInstance* instance, ObjClass* ancestor) {
 
 Value readConst(CallFrame* frame){
     frame->ip += 3;
-    return frame->closure->function->chunk.constants.values[(uint8_t)(frame->ip[-3] << 16 | frame->ip[-2] << 8 | frame->ip[-1])];
+    return frame->closure->function->chunk.constants.values[(frame->ip[-3] << 16 | frame->ip[-2] << 8 | frame->ip[-1])];
 }
 
 static InterpretResult run() {

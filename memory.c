@@ -147,6 +147,7 @@ static void freeObject(Obj* object) {
 #ifdef DEBUG_LOG_GC
     printf("%p free type %d\n", (void*)object, object->type);
 #endif
+
     switch (object->type) {
         case OBJ_STRING: {
             ObjString* string = (ObjString*)object;
@@ -183,7 +184,6 @@ static void freeObject(Obj* object) {
         case OBJ_INSTANCE: {
             ObjInstance* instance = (ObjInstance*)object;
             freeTable(&instance->fields);
-
             FREE(ObjInstance, object);
             break;
         }
@@ -278,7 +278,7 @@ size_t getUsedRAM() {
     }
 
     fclose(file);
-    return (total - available) * 1024;  // kB → bytes
+    return (total - available) * 1024;  // kB -> bytes
 }
 
 void collectGarbage() {
