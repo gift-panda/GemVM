@@ -80,8 +80,8 @@ static Value spawnNative(int argCount, Value* args){
 }
 
 static Value joinNative(int argCount, Value* args){
-    pthread_join(*AS_THREAD(args[0])->thread, NULL);
-    return popCtx(AS_THREAD(args[0])->ctx);
+    pthread_join(*AS_THREAD(args[-1])->thread, NULL);
+    return popCtx(AS_THREAD(args[-1])->ctx);
 }
 
 static Value clockNative(int argCount, Value* args) {
@@ -182,6 +182,10 @@ void defineListMethods() {
     tableSet(&vm.imageClassMethods, copyString("getWidth", 8), OBJ_VAL(newNative(Image_getWidth)));
     tableSet(&vm.imageClassMethods, copyString("getHeight", 9), OBJ_VAL(newNative(Image_getHeight)));
     
+}
+
+void defineThreadMethods() {
+    tableSet(&vm.threadClassMethods, copyString("join", 4), OBJ_VAL(newNative(joinNative)));
 }
 
 static void resetStack() {
@@ -396,6 +400,7 @@ void initVM() {
     initTable(&vm.stringClassMethods);
     initTable(&vm.listClassMethods);
     initTable(&vm.imageClassMethods);
+    initTable(&vm.threadClassMethods);
 
     vm.main = pthread_self();
     vm.grayCount = 0;
@@ -467,8 +472,10 @@ void initVM() {
     defineNative("printStack", printStackNative);
     defineStringMethods();
     defineListMethods();
+    defineThreadMethods();
 
     vm.repl = 0;
+    vm.path = "";
 }
 
 void freeVM() {
@@ -1067,21 +1074,12 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
             }
             
             bool res = callValue(value, argCount);
-
-            //Idk why i added this? but look out ig? more bugs?
-            
-            //Value result = pop();
-            //pop();
-            //push(result);
             return res;
         }
 
         klass = klass->superclass;
         if (klass != NULL && tableGet(&klass->staticMethods, name, &value)) {
             bool res = callValue(value, argCount);
-            //Value result = pop();
-            //pop();
-            //push(result);
             return res;
         }
         runtimeError(vm.nameErrorClass, "Undefined static method '%s' on class '%s'.",
@@ -1089,6 +1087,19 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
         return false;
     }
 
+    if (IS_THREAD(receiver)) {
+        Value value;
+        if (tableGet(&vm.threadClassMethods, name, &value)) {
+            vm.isInvokingNative = true;
+            bool res = callBoundedNative(value, argCount);
+            Value result = pop();
+            pop();
+            push(result);
+            return res;
+        }
+        runtimeError(vm.nameErrorClass, "Undefined method '%s' on thread.", name->chars);
+        return false;
+    }
 
     if (!IS_INSTANCE(receiver)) {
         runtimeError(vm.typeErrorClass, "Only instances have methods.");
@@ -2940,8 +2951,21 @@ static void* runCtx(void *context) {
 #undef READ_SHORT
 }
 
+#include "serialize.h"
+#include "deserialize.h"
+
 InterpretResult interpret(const char* source) {
     ObjFunction* function = compile(source);
+    if (vm.noRun) {
+        size_t len = strlen(vm.path);
+        char* filename = malloc(len + 2);     // +1 for 'c', +1 for '\0'
+        strcpy(filename, vm.path);             // copy original filename
+        filename[len] = 'c';                   // append 'c'
+        filename[len + 1] = '\0';
+
+        serialize(filename, function);
+        free(filename);
+    }
     if (function == NULL) return INTERPRET_COMPILE_ERROR;
 
     if (1)
@@ -2956,38 +2980,23 @@ InterpretResult interpret(const char* source) {
             return 0;
 
         InterpretResult res = run();
-        for (int i = 0; i < threadCount; i++) {
-            pthread_join(threads[i], NULL);
-        }
         return res;
     }
-
-    Thread *ctx = malloc(sizeof(Thread));
-
-    resetStackCtx(ctx);
-
-    pushCtx(ctx, OBJ_VAL(function));
-    ObjClosure* closure = newClosure(function);
-    popCtx(ctx);
-    pushCtx(ctx, OBJ_VAL(closure));
-
-    callCtx(ctx, closure, 0);
-
-    if (vm.noRun)
-        return 0;
-
-
-    pthread_t tid;
-    pthread_create(&tid, NULL, runCtx, ctx);
-
-    //threads[threadCount++] = tid;
-
-    //for (int i = 0; i < threadCount; i++) {
-        pthread_join(tid, NULL);
-    //}
-
-    //runCtx(ctx);
-    //free(ctx);
     return INTERPRET_OK;
 }
 
+InterpretResult load(const char* source) {
+        ObjFunction* function = deserialize(source);
+        push(OBJ_VAL(function));
+        ObjClosure* closure = newClosure(function);
+        pop();
+        push(OBJ_VAL(closure));
+        call(closure, 0);
+
+        if (vm.noRun)
+            return 0;
+        
+        InterpretResult res = run();
+        return 0;
+    
+}

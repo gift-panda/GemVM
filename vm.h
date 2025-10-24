@@ -69,6 +69,7 @@ typedef struct {
     Table stringClassMethods;
     Table listClassMethods;
     Table imageClassMethods;
+    Table threadClassMethods;
 
     ObjString* errorString;
     ObjClass* errorClass;
@@ -89,6 +90,7 @@ typedef struct {
 
     pthread_t main;
 
+    const char* path;
     bool isInvokingNative;
     bool gcEnabled;
     bool showBytecode;
@@ -111,6 +113,7 @@ extern VM vm;
 void initVM();
 void freeVM();
 InterpretResult interpret(const char* source);
+InterpretResult load(const char* source);
 void push(Value value);
 Value pop();
 void printStack();

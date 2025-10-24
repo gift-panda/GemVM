@@ -13,6 +13,8 @@
 #include <setjmp.h>
 #define TB_IMPL
 #include "termbox2.h"
+#include "serialize.h"
+#include "deserialize.h"
 
 #define MAX_LINES 1000
 #define MAX_COL_LEN 512
@@ -424,82 +426,13 @@ int repl() {
 #include <stdlib.h>
 #include <string.h>
 
-void encrypt(const char *inputFile, const char *outputFile) {
-    FILE *in = fopen(inputFile, "rb");
-    if (!in) {
-        perror(inputFile);
-        return;
-    }
-
-    FILE *out = fopen(outputFile, "wb");
-    if (!out) {
-        perror(outputFile);
-        fclose(in);
-        return;
-    }
-
-    // Encrypt and write header first
-    const char *header = "//This is a random ass header\n";
-    for (size_t i = 0; i < strlen(header); i++) {
-        unsigned char encrypted = (unsigned char)(header[i] + 100);
-        fputc(encrypted, out);
-    }
-
-    // Then encrypt and write the actual file contents
-    int ch;
-    while ((ch = fgetc(in)) != EOF) {
-        unsigned char encrypted = (unsigned char)(ch + 100);
-        fputc(encrypted, out);
-    }
-
-    fclose(in);
-    fclose(out);
-}
-
 bool has_extension(const char *filename, const char *ext) {
     const char *dot = strrchr(filename, '.');
     if (!dot || dot == filename) return false;  // no dot or dot is first char
     return strcmp(dot + 1, ext) == 0;
 }
 
-char* decrypt(const char *inputFile){
-    FILE *in;
-    int ch;
-
-    in = fopen(inputFile, "rb");
-    if (!in)
-    {
-        perror(inputFile);
-        return NULL;
-    }
-
-    fseek(in, 0L, SEEK_END);
-    size_t size = 0, capacity = ftell(in);
-    rewind(in);
-    fflush(stdout);
-
-    char *buffer = malloc(capacity + 1);
-    if (!buffer){
-        perror("malloc");
-        exit(123);
-        return NULL;
-    }
-
-    while ((ch = fgetc(in)) != EOF){
-        unsigned char decrypted = (unsigned char)(ch - 100);
-        buffer[size++] = (char)decrypted;
-    }
-
-    fclose(in);
-    buffer[size] = '\0';
-    return buffer;
-}
-
 static char* readFile(const char* path) {
-    if (has_extension(path, "gemc")){
-        return decrypt(path);
-    }
-
     FILE* file = fopen(path, "rb");
     if (file == NULL) {
         fprintf(stderr, "Could not open file \"%s\".\n", path);
@@ -610,20 +543,17 @@ int main(int argc, const char* argv[]) {
         }
         
         if (!run) {
+            vm.path = scriptPath;
             vm.noRun = true;
         }
         if (showBytecode) {
            vm.showBytecode = true; // Set a VM flag, then respect it in your compiler
         }
+        if(has_extension(scriptPath, "gemc")){
+            load(scriptPath);
+            return 0;
+        }
         runFile(scriptPath);
-    }
-
-    if (vm.noRun){
-        char* source = malloc(strlen(scriptPath) + 1);
-        strcpy(source, scriptPath);
-        strcat(source, "c");
-        encrypt(scriptPath, source);
-        free(source);
     }
 
     return 0;
