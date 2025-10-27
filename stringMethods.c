@@ -39,7 +39,7 @@ static Value stringSplitNative(int argCount, Value* args) {
     int delimLen = delimiter->length;
 
     ObjList* result = newList();
-
+    push(OBJ_VAL(result));
     // ✅ SPECIAL CASE: empty delimiter → split into characters
     if (delimLen == 0) {
         for (int i = 0; i < strLen; i++) {
@@ -68,6 +68,7 @@ static Value stringSplitNative(int argCount, Value* args) {
         ObjString* segment = copyString(str + start, strLen - start);
         writeValueArray(&result->elements, OBJ_VAL(segment));
     }
+    pop();
 
     return OBJ_VAL(result);
 }

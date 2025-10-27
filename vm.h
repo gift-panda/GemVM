@@ -6,6 +6,7 @@
 #include "value.h"
 #include "table.h"
 #include "pthread.h"
+#include <stdatomic.h>
 
 // Forward declarations to break cyclic dependency
 typedef struct ObjClosure ObjClosure;
@@ -97,6 +98,14 @@ typedef struct {
     bool noRun;
     bool repl;
     bool hasError;
+    bool zip;
+
+    atomic_bool gcRequest;
+    atomic_int threads;
+    atomic_int waiting;
+
+    pthread_mutex_t lock;
+    pthread_cond_t cond;
 } VM;
 
 // ---------------------

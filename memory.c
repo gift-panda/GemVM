@@ -1,16 +1,14 @@
 #include <stdlib.h>
-
-#include "memory.h"
-
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
 
+#include "memory.h"
 #include "compiler.h"
 #include "value.h"
 #include "vm.h"
 
 #ifdef DEBUG_LOG_GC
-#include <stdio.h>
 #include "debug.h"
 #endif
 
@@ -28,7 +26,6 @@ void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
                 collectGarbage();
             }
     }
-
 
     if (newSize == 0) {
         free(pointer);
@@ -204,6 +201,8 @@ static void freeObject(Obj* object) {
 }
 
 void freeObjects() {
+    printf("freeing things"); fflush(stdout);
+    
     Obj* object = vm.objects;
     while (object != NULL) {
         Obj* next = object->next;
@@ -287,22 +286,34 @@ void collectGarbage() {
     size_t before = vm.bytesAllocated;
 #endif
 
+    atomic_store(&vm.gcRequest, true);
+    pthread_mutex_lock(&vm.lock);
 
+    while (atomic_load(&vm.waiting) < atomic_load(&vm.threads)) {
+        pthread_cond_wait(&vm.cond, &vm.lock);
+    }
+
+    pthread_mutex_unlock(&vm.lock);
 
     markRoots();
     traceReferences();
-    tableRemoveWhite(&vm.strings); // Removing strings from the string ppo
+    tableRemoveWhite(&vm.strings);
     sweep();
 
-    if (getUsedRAM() < 2.0/3 * vm.maxRAM) {
+    if (getUsedRAM() < 2.0 / 3 * vm.maxRAM) {
         vm.nextGC = vm.bytesAllocated * GC_HEAP_GROW_FACTOR;
-        //printf("Increasing size to %zu\n", vm.nextGC);
     }
+
+    pthread_mutex_lock(&vm.lock);
+    atomic_store(&vm.gcRequest, false);
+    pthread_cond_broadcast(&vm.cond); // wake all threads
+    pthread_mutex_unlock(&vm.lock);
 
 #ifdef DEBUG_LOG_GC
     printf("-- gc end\n");
     printf("   collected %zu bytes (from %zu to %zu) next at %zu\n",
-         before - vm.bytesAllocated, before, vm.bytesAllocated,
-         vm.nextGC);
+           before - vm.bytesAllocated, before, vm.bytesAllocated, vm.nextGC);
 #endif
+
 }
+

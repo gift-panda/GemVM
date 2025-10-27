@@ -68,19 +68,37 @@ static bool callValueCtx(Thread *ctx, Value callee, int argCount);
 static void* runCtx(void*);
 
 static Value spawnNative(int argCount, Value* args){
-    pthread_t *tid = malloc(sizeof(Thread));;
+    pthread_t *tid = malloc(sizeof(pthread_t));
+    if (!tid) {
+        perror("malloc");
+        exit(1);
+    }
+
     Thread *ctx = malloc(sizeof(Thread));
+    if (!ctx) {
+        perror("malloc");
+        free(tid);
+        exit(1);
+    }
+    memset(ctx, 0, sizeof(Thread));
     resetStackCtx(ctx);
     for (int i = 0; i < argCount; i++)
         pushCtx(ctx, args[i]);
+        
+    atomic_fetch_add(&vm.threads, 1);
     callValueCtx(ctx, args[0], argCount - 1);
-    pthread_create(tid, NULL, runCtx, ctx);
-
+    int res = pthread_create(tid, NULL, runCtx, ctx);
+    if(res != 0){
+        printf("Not enough memory\n");
+        exit(1);
+    }
+    
     return OBJ_VAL(newThread(tid, ctx));
 }
 
 static Value joinNative(int argCount, Value* args){
     pthread_join(*AS_THREAD(args[-1])->thread, NULL);
+    atomic_fetch_sub(&vm.threads, 1);
     return popCtx(AS_THREAD(args[-1])->ctx);
 }
 
@@ -393,6 +411,14 @@ static void defineNative(const char* name, NativeFn function) {
 }
 
 void initVM() {
+    atomic_init(&vm.gcRequest, false);
+    atomic_init(&vm.threads, 0);
+    atomic_init(&vm.waiting, 0);
+
+    pthread_mutex_init(&vm.lock, NULL);
+    pthread_cond_init(&vm.cond, NULL);
+
+    
     resetStack();
     vm.objects = NULL;
     initTable(&vm.strings);
@@ -478,12 +504,13 @@ void initVM() {
     vm.path = "";
 }
 
+/*
 void freeVM() {
     freeTable(&vm.strings);
     freeTable(&vm.globals);
     vm.initString = NULL;
     freeObjects();
-}
+}*/
 
 void push(Value value) {
     *vm.stackTop = value;
@@ -2135,7 +2162,20 @@ static void* runCtx(void *context) {
 
         for (;;) {
 
+            if (atomic_load(&vm.gcRequest)) {
+                pthread_mutex_lock(&vm.lock);
 
+                atomic_fetch_add(&vm.waiting, 1);
+                pthread_cond_broadcast(&vm.cond);
+
+                while (atomic_load(&vm.gcRequest)) {
+                    pthread_cond_wait(&vm.cond, &vm.lock);
+                }
+
+                atomic_fetch_sub(&vm.waiting, 1);
+                pthread_mutex_unlock(&vm.lock);
+            }
+            
     #ifdef DEBUG_TRACE_EXECUTION
             printf("          ");
             for (Value* slot = ctx->stack; slot < ctx->stackTop; slot++) {
@@ -2149,7 +2189,6 @@ static void* runCtx(void *context) {
     #endif
         uint8_t instruction;
         instruction = READ_BYTE();
-        //printf("hola\n"); //flush(stdout);
         switch (instruction) {
 
 

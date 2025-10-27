@@ -16,8 +16,8 @@ static cJSON* serialize_string(ObjString* string) {
     if (!string) return cJSON_CreateNull();
 
     cJSON* jsonStr = cJSON_CreateObject();
+    // Use length to get actual string content
     cJSON_AddStringToObject(jsonStr, "chars", strndup(string->chars, string->length));
-
     return jsonStr;
 }
 
@@ -105,14 +105,24 @@ void serialize(const char* filename, ObjFunction* function) {
     cJSON* funcJson = serialize_function(AS_FUNCTION(val));
     cJSON_AddItemToArray(root, funcJson);
     
-    char* jsonStr = cJSON_PrintUnformatted(root); // minified
+    char* jsonStr = cJSON_Print(root); // minified
     if (jsonStr) {
-        gzFile f = gzopen(filename, "wb"); // open gzip file
-        if (f) {
-            gzwrite(f, jsonStr, strlen(jsonStr));
-            gzclose(f);
+        if(vm.zip){
+            gzFile f = gzopen(filename, "wb"); // open gzip file
+            if (f) {
+                gzwrite(f, jsonStr, strlen(jsonStr));
+                gzclose(f);
+            }
+            free(jsonStr);
         }
-        free(jsonStr);
+        else{
+            FILE* f = fopen(filename, "wb");
+            if (f) {
+                fwrite(jsonStr, 1, strlen(jsonStr), f);
+                fclose(f);
+            }
+            free(jsonStr);
+        }
     }
 
     cJSON_Delete(root);

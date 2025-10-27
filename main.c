@@ -512,6 +512,9 @@ int main(int argc, const char* argv[]) {
             enableGC = 0;
         } else if (strcmp(arg, "--compile") == 0 || strcmp(arg, "-c") == 0) {
             run = 0;
+        }
+        else if (strcmp(arg, "--zip") == 0 || strcmp(arg, "-z") == 0) {
+            vm.zip = true;
         } else if (arg[0] == '-') {
             fprintf(stderr, "Unknown option: %s\n", arg);
             return 64;
