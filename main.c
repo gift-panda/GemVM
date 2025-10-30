@@ -492,8 +492,12 @@ char* getIteratorText() {
     return buf;
 }
 
+void no_warn_proc(char* msg, GC_word arg) {
+    // Do nothing
+}
 
 int main(int argc, const char* argv[]) {
+    GC_set_warn_proc(no_warn_proc);
     GC_INIT();
     GC_allow_register_threads();
     int runRepl = 1;

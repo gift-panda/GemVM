@@ -16,7 +16,8 @@
 #define GC_HEAP_GROW_FACTOR 1.3
 
 void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
-/*  vm.bytesAllocated += newSize - oldSize;
+/*
+    vm.bytesAllocated += newSize - oldSize;
 
 
     if (newSize > oldSize) {
@@ -26,6 +27,7 @@ void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
         if (pthread_self() == vm.main && vm.gcEnabled)
             if (vm.bytesAllocated > vm.nextGC) {
                 collectGarbage();
+                printf("gc triggered %d", vm.nextGC);
             }
     }
 
@@ -249,34 +251,6 @@ static void markRoots() {
     for (ObjUpvalue* upvalue = vm.openUpvalues; upvalue != NULL; upvalue = upvalue->next) {
         markObject((Obj*)upvalue);
     }
-
-    markTable(&vm.globals);
-    markTable(&vm.strings);
-    markTable(&vm.stringClassMethods);
-    markTable(&vm.listClassMethods);
-    markTable(&vm.imageClassMethods);
-    markTable(&vm.threadClassMethods);
-
-    markCompilerRoots();
-    markObject((Obj*)vm.initString);
-    markObject((Obj*)vm.toString);
-
-    markObject((Obj*)vm.errorString);
-    markObject((Obj*)vm.errorClass);
-    markObject((Obj*)vm.indexErrorString);
-    markObject((Obj*)vm.indexErrorClass);
-    markObject((Obj*)vm.typeErrorString);
-    markObject((Obj*)vm.typeErrorClass);
-    markObject((Obj*)vm.nameErrorString);
-    markObject((Obj*)vm.nameErrorClass);
-    markObject((Obj*)vm.accessErrorString);
-    markObject((Obj*)vm.accessErrorClass);
-    markObject((Obj*)vm.illegalArgumentsErrorString);
-    markObject((Obj*)vm.illegalArgumentsErrorClass);
-    markObject((Obj*)vm.lookUpErrorString);
-    markObject((Obj*)vm.lookUpErrorClass);
-    markObject((Obj*)vm.formatErrorString);
-    markObject((Obj*)vm.formatErrorClass);
 }
 
 static void traceReferences() {
@@ -332,29 +306,15 @@ void collectGarbage() {
     printf("-- gc begin\n");
     size_t before = vm.bytesAllocated;
 #endif
-
-    atomic_store(&vm.gcRequest, true);
-    pthread_mutex_lock(&vm.lock);
-
-    while (atomic_load(&vm.waiting) < atomic_load(&vm.threads)) {
-        pthread_cond_wait(&vm.cond, &vm.lock);
-    }
-
-    pthread_mutex_unlock(&vm.lock);
-
     markRoots();
     traceReferences();
     tableRemoveWhite(&vm.strings);
-    sweep();
+    //sweep();
 
-    if (getUsedRAM() < 2.0 / 3 * vm.maxRAM) {
+    if (getUsedRAM() < vm.maxRAM) {
         vm.nextGC = vm.bytesAllocated * GC_HEAP_GROW_FACTOR;
     }
 
-    pthread_mutex_lock(&vm.lock);
-    atomic_store(&vm.gcRequest, false);
-    pthread_cond_broadcast(&vm.cond); // wake all threads
-    pthread_mutex_unlock(&vm.lock);
 
 #ifdef DEBUG_LOG_GC
     printf("-- gc end\n");

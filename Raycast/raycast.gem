@@ -98,6 +98,7 @@ func draw_editor() {
         }
     }
         // draw the player in the editor (fluid)
+        //for(nigga in asfd)
     var px = WIDTH + player_x * ((TILE_DISPLAY_SIZE - 30.0) / TILE_SIZE);
     var py = player_y * (TILE_DISPLAY_SIZE / TILE_SIZE);
     win.drawCircle(px - 2, py - 2, 10, color(0, 200, 0));

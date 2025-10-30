@@ -5,6 +5,8 @@
 #include "object.h"
 #include "table.h"
 #include "value.h"
+#include "vm.h"
+#include <gc.h>
 
 #define TABLE_MAX_LOAD 0.5
 
@@ -30,14 +32,11 @@ static Entry* findEntry(Entry* entries, int capacity,
         Entry* entry = &entries[index];
         if (entry->key == NULL) {
             if (IS_NIL(entry->value)) {
-                // Empty entry.
                 return tombstone != NULL ? tombstone : entry;
             } else {
-                // We found a tombstone.
                 if (tombstone == NULL) tombstone = entry;
             }
         } else if (entry->key == key) {
-            // We found the key.
             return entry;
         }
 
@@ -90,6 +89,7 @@ bool tableSet(Table* table, ObjString* key, Value value) {
 
     entry->key = key;
     entry->value = value;
+    
     return isNewKey;
 }
 

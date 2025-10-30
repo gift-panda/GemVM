@@ -2291,6 +2291,83 @@ static char* process_for_in(const char* src) {
     return out;
 }
 
+bool has_for_in(const char* code) {
+    bool in_single = false;
+    bool in_double = false;
+    bool in_line_comment = false;
+    bool in_block_comment = false;
+    bool escaped = false;
+
+    size_t len = strlen(code);
+    for (size_t i = 0; i < len; i++) {
+        char c = code[i];
+        char n = (i + 1 < len) ? code[i + 1] : '\0';
+
+        if (in_line_comment) {
+            if (c == '\n') in_line_comment = false;
+            continue;
+        }
+
+        if (in_block_comment) {
+            if (c == '*' && n == '/') {
+                in_block_comment = false;
+                i++;
+            }
+            continue;
+        }
+
+        if (in_single) {
+            if (!escaped && c == '\'') in_single = false;
+            escaped = (c == '\\' && !escaped);
+            continue;
+        }
+
+        if (in_double) {
+            if (!escaped && c == '"') in_double = false;
+            escaped = (c == '\\' && !escaped);
+            continue;
+        }
+
+        // Entering comment or string
+        if (c == '/' && n == '/') {
+            in_line_comment = true;
+            i++;
+            continue;
+        } else if (c == '/' && n == '*') {
+            in_block_comment = true;
+            i++;
+            continue;
+        } else if (c == '\'') {
+            in_single = true;
+            escaped = false;
+            continue;
+        } else if (c == '"') {
+            in_double = true;
+            escaped = false;
+            continue;
+        }
+
+        // Detect "for(... in ...)"
+        if (c == 'f' && strncmp(&code[i], "for", 3) == 0 && !isalnum(code[i + 3])) {
+            const char *p = &code[i + 3];
+            while (*p && isspace(*p)) p++;
+            if (*p == '(') {
+                const char *q = p + 1;
+                while (*q && *q != ')') q++;
+                if (*q == ')') {
+                    char temp[256];
+                    size_t l = q - &code[i] + 1;
+                    if (l >= sizeof(temp)) l = sizeof(temp) - 1;
+                    strncpy(temp, &code[i], l);
+                    temp[l] = '\0';
+                    if (strstr(temp, " in ")) return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
 /* Top-level preprocessor */
 char* preprocessor(const char* src) {
     char* without = strip_macros_and_build_table(src);
@@ -2303,13 +2380,13 @@ char* preprocessor(const char* src) {
     char* desugared_for = process_for_in(desugared_ops);
     free(desugared_ops);
 
-    while(strstr(desugared_for, " in ")){
+    
+    while(has_for_in(desugared_ops)){
         char* temp = process_for_in(desugared_for);
         free(desugared_for);
         desugared_for = temp;
     }
 
-    printf("%s\n", desugared_for);
     return desugared_for;
 }
 

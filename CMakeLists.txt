@@ -66,6 +66,8 @@ link_directories(${GC_LIBRARY_DIRS})
 
 add_executable(GemVM ${GEMVM_SOURCES})
 
+target_compile_definitions(GemVM PRIVATE GC_THREADS)
+
 # Link libraries
 target_link_libraries(GemVM
         ${SDL2_TTF_LIBRARY}

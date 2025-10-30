@@ -27,7 +27,6 @@
 #include "windowMethods.h"
 #include "Math.c"
 #include <pthread.h>
-#define GC_THREADS
 #include <gc.h>
 
 extern jmp_buf repl_env;
@@ -69,37 +68,41 @@ static bool callCtx(Thread *ctx, ObjClosure* closure, int argCount);
 static bool callValueCtx(Thread *ctx, Value callee, int argCount);
 static void* runCtx(void*);
 
-static Value spawnNative(int argCount, Value* args){
-    pthread_t *tid = GC_MALLOC(sizeof(pthread_t));
+static Value spawnNative(int argCount, Value* args) {
+    pthread_t *tid = malloc(sizeof(pthread_t));  // ✅ not GC-allocated
     if (!tid) {
-        perror("GC_MALLOC");
+        perror("malloc");
         exit(1);
     }
 
-    Thread *ctx = GC_MALLOC(sizeof(Thread));
-    if (!ctx) {
-        perror("GC_MALLOC");
-        exit(1);
-    }
+    Thread *ctx = GC_MALLOC(sizeof(Thread));  // ok, GC-managed context
     memset(ctx, 0, sizeof(Thread));
     resetStackCtx(ctx);
+
     for (int i = 0; i < argCount; i++)
         pushCtx(ctx, args[i]);
-        
+
     callValueCtx(ctx, args[0], argCount - 1);
+
     int res = pthread_create(tid, NULL, runCtx, ctx);
-    if(res != 0){
-        printf("Not enough memory\n");
+    if (res != 0) {
+        printf("pthread_create failed: %s\n", strerror(res));
         exit(1);
     }
-    
+
     return OBJ_VAL(newThread(tid, ctx));
 }
 
-static Value joinNative(int argCount, Value* args){
-    pthread_join(*AS_THREAD(args[-1])->thread, NULL);
-    return popCtx(AS_THREAD(args[-1])->ctx);
+static Value joinNative(int argCount, Value* args) {
+    ObjThread* threadObj = AS_THREAD(args[-1]);
+
+    pthread_join(*threadObj->thread, NULL);
+    free(threadObj->thread);  // ✅ free after join
+    threadObj->thread = NULL;
+
+    return popCtx(threadObj->ctx);
 }
+
 
 static Value clockNative(int argCount, Value* args) {
     if(argCount != 0){
@@ -2123,11 +2126,17 @@ static InterpretResult run() {
 #undef BINARY_OP
 }
 
+#include <gc/gc.h>
 static void* runCtx(void *context) {
-    struct GC_stack_base sb;
-    GC_get_stack_base(&sb);
-    GC_register_my_thread(&sb);
-    auto ctx = (Thread*)context;
+    if (GC_thread_is_registered() == 0) {
+        if (GC_register_my_thread(NULL) != 0) {
+            fprintf(stderr, "Failed to register GC thread\n");
+            pthread_exit(NULL);
+        }
+    }
+
+    
+    Thread* ctx = (Thread*)context;
     ctx->finished = false;
     register CallFrame* frame = &ctx->frames[ctx->frameCount - 1];
 
@@ -2157,21 +2166,6 @@ static void* runCtx(void *context) {
     #define READ_STRING() AS_STRING(READ_CONSTANT())
 
         for (;;) {
-
-            if (atomic_load(&vm.gcRequest)) {
-                pthread_mutex_lock(&vm.lock);
-
-                atomic_fetch_add(&vm.waiting, 1);
-                pthread_cond_broadcast(&vm.cond);
-
-                while (atomic_load(&vm.gcRequest)) {
-                    pthread_cond_wait(&vm.cond, &vm.lock);
-                }
-
-                atomic_fetch_sub(&vm.waiting, 1);
-                pthread_mutex_unlock(&vm.lock);
-            }
-            
     #ifdef DEBUG_TRACE_EXECUTION
             printf("          ");
             for (Value* slot = ctx->stack; slot < ctx->stackTop; slot++) {
@@ -2186,8 +2180,6 @@ static void* runCtx(void *context) {
         uint8_t instruction;
         instruction = READ_BYTE();
         switch (instruction) {
-
-
             case OP_RETURN: {
                 Value result = popCtx(ctx);
                 closeUpvaluesCtx(ctx, frame->slots);
@@ -2195,7 +2187,7 @@ static void* runCtx(void *context) {
                 if (ctx->frameCount == 0) {
                     popCtx(ctx);
                     pushCtx(ctx, result);
-                    GC_unregister_my_thread();
+                    //GC_unregister_my_thread();
                     return nullptr;
                 }
 
@@ -2953,7 +2945,6 @@ static void* runCtx(void *context) {
                     uint32_t b3 = READ_BYTE();
                     uint32_t index = (b1 << 16) | (b2 << 8) | b3;
                     pushCtx(ctx, frame->closure->function->chunk.constants.values[index]);
-
                     break;
             }
 
@@ -2976,7 +2967,6 @@ static void* runCtx(void *context) {
         }
     }
     ctx->finished = true;
-    GC_unregister_my_thread();
 
 #undef READ_CONSTANT
 #undef READ_BYTE
