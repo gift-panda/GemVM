@@ -3,7 +3,7 @@ project(GemVM)
 
 set(CMAKE_CXX_STANDARD 23)
 add_compile_definitions(TB_IMPL_V1)
-set(CMAKE_BUILD_TYPE DEBUG)
+set(CMAKE_BUILD_TYPE RelWithDebInfo)
 
 # Add source files
 set(GEMVM_SOURCES
@@ -58,7 +58,12 @@ find_library(CJSON_LIBRARY
         PATHS /usr/lib /usr/local/lib /usr/lib64
 )
 
-# Create executable
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GC REQUIRED bdw-gc)
+
+include_directories(${GC_INCLUDE_DIRS})
+link_directories(${GC_LIBRARY_DIRS})
+
 add_executable(GemVM ${GEMVM_SOURCES})
 
 # Link libraries
@@ -69,6 +74,7 @@ target_link_libraries(GemVM
         ${SDL2_GFX_STATIC_LIB}    # ← Add this
         ${TERMBOX_LIB}
         ${CJSON_LIBRARY}          # ← Link cJSON here
+        ${GC_LIBRARIES}
         m
         png
         jpeg

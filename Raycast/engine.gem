@@ -170,15 +170,13 @@ while (true) {
     }
 
     var rotatedVerts = [];
-    for (var i = 0; i < cubeVerts.length(); i = i + 1) {
-        var v = cubeVerts[i];
+    for (var v in cubeVerts) {
         var rotated = v.rotateX(rotateX).rotateY(rotateY);
         rotatedVerts.append(rotated);
     }
 
     var faceData = [];
-    for (var i = 0; i < faces.length(); i = i + 1) {
-        var f = faces[i];
+    for (var f in faces) {
         var avgZ = (
             rotatedVerts[f[0]].z +
             rotatedVerts[f[1]].z +
@@ -192,16 +190,15 @@ while (true) {
     sortFaces(faceData);
 
     
-    for (var i = 0; i < faceData.length(); i = i + 1) {
-        var f = faceData[i][1];
-
+    for (var data in faceData) {
+        var f = data[1];
         var p0 = project(rotatedVerts[f[0]], 800, 600, 256, 3);
         var p1 = project(rotatedVerts[f[1]], 800, 600, 256, 3);
         var p2 = project(rotatedVerts[f[2]], 800, 600, 256, 3);
         var p3 = project(rotatedVerts[f[3]], 800, 600, 256, 3);
 
         var baseColor = 33023;
-        var redBoost = (faceData[i][0] * 50 \ 1) * 65536;
+        var redBoost = (data[0] * 50 \ 1) * 65536;
         var depthColor = baseColor + redBoost;
 
         Window.drawTrig(p0[0], p0[1], p1[0], p1[1], p2[0], p2[1], depthColor);

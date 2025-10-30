@@ -30,7 +30,7 @@ func drawBoard(Window, game) {
         y = y + 1;
     }
 
-    // Draw legal moves if selected
+    
     if (game.selected != nil) {
         var moves = game.selected[1];
         var i = 0;
@@ -44,7 +44,6 @@ func drawBoard(Window, game) {
     }
 
 
-    // ✅ Draw pieces last (always on top)
     var y = 0;
     while (y < 8) {
         var x = 0;

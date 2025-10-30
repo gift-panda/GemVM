@@ -2,6 +2,27 @@
 #include "value.h"
 #include "vm.h"
 
+static Value listIteratorNative(int argCount, Value* args) {
+    Value classVal;
+    ObjString* className = copyString("ListIterator", 12);
+    if (!tableGet(&vm.globals, className, &classVal)) {
+        runtimeError(vm.lookUpErrorClass, "ListIterator class not found.");
+        return NIL_VAL;
+    }
+
+    ObjClass* iteratorClass = AS_CLASS(classVal);
+    ObjInstance* instance = newInstance(iteratorClass);
+
+    Value listVal = args[-1];
+    ObjString* listField = copyString("list", 4);
+    tableSet(&instance->fields, listField, listVal);
+
+    ObjString* indexField = copyString("index", 5);
+    tableSet(&instance->fields, indexField, NUMBER_VAL(0));
+
+    return OBJ_VAL(instance);
+}
+
 static Value listAppendNative(int argCount, Value* args) {
     if (argCount != 1) {
         runtimeError(vm.illegalArgumentsErrorClass, "list.append() takes a value to append.");

@@ -27,6 +27,8 @@
 #include "windowMethods.h"
 #include "Math.c"
 #include <pthread.h>
+#define GC_THREADS
+#include <gc.h>
 
 extern jmp_buf repl_env;
 
@@ -68,16 +70,15 @@ static bool callValueCtx(Thread *ctx, Value callee, int argCount);
 static void* runCtx(void*);
 
 static Value spawnNative(int argCount, Value* args){
-    pthread_t *tid = malloc(sizeof(pthread_t));
+    pthread_t *tid = GC_MALLOC(sizeof(pthread_t));
     if (!tid) {
-        perror("malloc");
+        perror("GC_MALLOC");
         exit(1);
     }
 
-    Thread *ctx = malloc(sizeof(Thread));
+    Thread *ctx = GC_MALLOC(sizeof(Thread));
     if (!ctx) {
-        perror("malloc");
-        free(tid);
+        perror("GC_MALLOC");
         exit(1);
     }
     memset(ctx, 0, sizeof(Thread));
@@ -85,7 +86,6 @@ static Value spawnNative(int argCount, Value* args){
     for (int i = 0; i < argCount; i++)
         pushCtx(ctx, args[i]);
         
-    atomic_fetch_add(&vm.threads, 1);
     callValueCtx(ctx, args[0], argCount - 1);
     int res = pthread_create(tid, NULL, runCtx, ctx);
     if(res != 0){
@@ -98,7 +98,6 @@ static Value spawnNative(int argCount, Value* args){
 
 static Value joinNative(int argCount, Value* args){
     pthread_join(*AS_THREAD(args[-1])->thread, NULL);
-    atomic_fetch_sub(&vm.threads, 1);
     return popCtx(AS_THREAD(args[-1])->ctx);
 }
 
@@ -128,7 +127,7 @@ static Value readNative(int argCount, Value* args) {
     size_t size = ftell(file);
     rewind(file);
 
-    char* buffer = (char*)malloc(size + 1);
+    char* buffer = (char*)GC_MALLOC(size + 1);
     if (buffer == NULL) {
         fclose(file);
         runtimeError(vm.accessErrorClass, "Not enough memory to read file.");
@@ -183,6 +182,7 @@ void defineStringMethods() {
     tableSet(&vm.stringClassMethods, copyString("startsWith", 10), OBJ_VAL(newNative(stringStartsWithNative)));
     tableSet(&vm.stringClassMethods, copyString("endsWith", 8), OBJ_VAL(newNative(stringEndsWithNative)));
     tableSet(&vm.stringClassMethods, copyString("isDigit", 7), OBJ_VAL(newNative(str_isDigit)));
+    tableSet(&vm.stringClassMethods, copyString("iterator", 8), OBJ_VAL(newNative(stringIteratorNative)));
 }
 
 void defineListMethods() {
@@ -196,6 +196,8 @@ void defineListMethods() {
     tableSet(&vm.listClassMethods, copyString("contains", 8), OBJ_VAL(newNative(listContainsNative)));
     tableSet(&vm.listClassMethods, copyString("remove", 6), OBJ_VAL(newNative(listRemoveNative)));
     tableSet(&vm.listClassMethods, copyString("sort", 4), OBJ_VAL(newNative(listSortNative)));
+    tableSet(&vm.listClassMethods, copyString("iterator", 8), OBJ_VAL(newNative(listIteratorNative)));
+
 
     tableSet(&vm.imageClassMethods, copyString("getWidth", 8), OBJ_VAL(newNative(Image_getWidth)));
     tableSet(&vm.imageClassMethods, copyString("getHeight", 9), OBJ_VAL(newNative(Image_getHeight)));
@@ -503,14 +505,6 @@ void initVM() {
     vm.repl = 0;
     vm.path = "";
 }
-
-/*
-void freeVM() {
-    freeTable(&vm.strings);
-    freeTable(&vm.globals);
-    vm.initString = NULL;
-    freeObjects();
-}*/
 
 void push(Value value) {
     *vm.stackTop = value;
@@ -1287,8 +1281,8 @@ bool hasAncestor(ObjInstance* instance, ObjClass* ancestor) {
 }
 
 Value readConst(CallFrame* frame){
-    frame->ip += 3;
-    return frame->closure->function->chunk.constants.values[(frame->ip[-3] << 16 | frame->ip[-2] << 8 | frame->ip[-1])];
+    frame->ip += 1;
+    return frame->closure->function->chunk.constants.values[/*(frame->ip[-3] << 16 | frame->ip[-2] << 8 | */frame->ip[-1]];
 }
 
 static InterpretResult run() {
@@ -1897,7 +1891,6 @@ static InterpretResult run() {
                 if (!invoke(method, argCount, frame)) {
                     break;
                 }
-                //pop();
                 frame = &vm.frames[vm.frameCount - 1];
                 break;
             }
@@ -2131,6 +2124,9 @@ static InterpretResult run() {
 }
 
 static void* runCtx(void *context) {
+    struct GC_stack_base sb;
+    GC_get_stack_base(&sb);
+    GC_register_my_thread(&sb);
     auto ctx = (Thread*)context;
     ctx->finished = false;
     register CallFrame* frame = &ctx->frames[ctx->frameCount - 1];
@@ -2199,6 +2195,7 @@ static void* runCtx(void *context) {
                 if (ctx->frameCount == 0) {
                     popCtx(ctx);
                     pushCtx(ctx, result);
+                    GC_unregister_my_thread();
                     return nullptr;
                 }
 
@@ -2976,13 +2973,10 @@ static void* runCtx(void *context) {
                 throwRuntimeError(instance); // a function you'll define
                 break;
             }
-            case OP_ERROR: {
-                return nullptr;
-            }
-
         }
     }
     ctx->finished = true;
+    GC_unregister_my_thread();
 
 #undef READ_CONSTANT
 #undef READ_BYTE
@@ -2997,13 +2991,12 @@ InterpretResult interpret(const char* source) {
     ObjFunction* function = compile(source);
     if (vm.noRun) {
         size_t len = strlen(vm.path);
-        char* filename = malloc(len + 2);     // +1 for 'c', +1 for '\0'
+        char* filename = GC_MALLOC(len + 2);     // +1 for 'c', +1 for '\0'
         strcpy(filename, vm.path);             // copy original filename
         filename[len] = 'c';                   // append 'c'
         filename[len + 1] = '\0';
 
         serialize(filename, function);
-        free(filename);
     }
     if (function == NULL) return INTERPRET_COMPILE_ERROR;
 

@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <pthread.h>
+#include <gc.h>
 
 #include "memory.h"
 #include "compiler.h"
@@ -15,7 +16,8 @@
 #define GC_HEAP_GROW_FACTOR 1.3
 
 void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
-    vm.bytesAllocated += newSize - oldSize;
+/*  vm.bytesAllocated += newSize - oldSize;
+
 
     if (newSize > oldSize) {
 #ifdef DEBUG_STRESS_GC
@@ -27,16 +29,24 @@ void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
             }
     }
 
+
     if (newSize == 0) {
         free(pointer);
         return NULL;
     }
 
-    void* result = realloc(pointer, newSize);
+    void* result = GC_REALLOC(pointer, newSize);
+    if (result == NULL) exit(1);
+    return result;
+*/
+
+    (void)oldSize;
+    if (newSize == 0) return NULL;
+    if (pointer == NULL) return GC_MALLOC(newSize);
+    void* result = GC_REALLOC(pointer, newSize);
     if (result == NULL) exit(1);
     return result;
 }
-
 void markObject(Obj* object) {
     if (object == NULL) return;
     if (object->isMarked) return;
@@ -152,24 +162,27 @@ static void freeObject(Obj* object) {
             FREE(ObjString, object);
             break;
         }
+
         case OBJ_FUNCTION: {
             ObjFunction* function = (ObjFunction*)object;
             freeChunk(&function->chunk);
             FREE(ObjFunction, object);
             break;
         }
+
         case OBJ_CLOSURE: {
+            ObjClosure* closure = (ObjClosure*)object;
+            FREE_ARRAY(ObjUpvalue*, closure->upvalues, closure->upvalueCount);
             FREE(ObjClosure, object);
             break;
         }
-        case OBJ_UPVALUE: {
-            ObjClosure* closure = (ObjClosure*)object;
-            FREE_ARRAY(ObjUpvalue*, closure->upvalues,
-                       closure->upvalueCount);
 
+        case OBJ_UPVALUE: {
+            ObjUpvalue* upvalue = (ObjUpvalue*)object;
             FREE(ObjUpvalue, object);
             break;
         }
+
         case OBJ_CLASS: {
             ObjClass* klass = (ObjClass*)object;
             freeTable(&klass->methods);
@@ -178,27 +191,37 @@ static void freeObject(Obj* object) {
             FREE(ObjClass, object);
             break;
         }
+
         case OBJ_INSTANCE: {
             ObjInstance* instance = (ObjInstance*)object;
             freeTable(&instance->fields);
             FREE(ObjInstance, object);
             break;
         }
-        case OBJ_BOUND_METHOD:
+
+        case OBJ_BOUND_METHOD: {
             FREE(ObjBoundMethod, object);
             break;
+        }
+
         case OBJ_LIST: {
             ObjList* list = (ObjList*)object;
             freeValueArray(&list->elements);
             FREE(ObjList, object);
             break;
         }
+
         case OBJ_MULTI_DISPATCH: {
             FREE(ObjMultiDispatch, object);
             break;
         }
+
+        case OBJ_NATIVE:
+            FREE(ObjNative, object);
+            break;
     }
 }
+
 
 void freeObjects() {
     printf("freeing things"); fflush(stdout);
@@ -228,8 +251,32 @@ static void markRoots() {
     }
 
     markTable(&vm.globals);
+    markTable(&vm.strings);
+    markTable(&vm.stringClassMethods);
+    markTable(&vm.listClassMethods);
+    markTable(&vm.imageClassMethods);
+    markTable(&vm.threadClassMethods);
+
     markCompilerRoots();
     markObject((Obj*)vm.initString);
+    markObject((Obj*)vm.toString);
+
+    markObject((Obj*)vm.errorString);
+    markObject((Obj*)vm.errorClass);
+    markObject((Obj*)vm.indexErrorString);
+    markObject((Obj*)vm.indexErrorClass);
+    markObject((Obj*)vm.typeErrorString);
+    markObject((Obj*)vm.typeErrorClass);
+    markObject((Obj*)vm.nameErrorString);
+    markObject((Obj*)vm.nameErrorClass);
+    markObject((Obj*)vm.accessErrorString);
+    markObject((Obj*)vm.accessErrorClass);
+    markObject((Obj*)vm.illegalArgumentsErrorString);
+    markObject((Obj*)vm.illegalArgumentsErrorClass);
+    markObject((Obj*)vm.lookUpErrorString);
+    markObject((Obj*)vm.lookUpErrorClass);
+    markObject((Obj*)vm.formatErrorString);
+    markObject((Obj*)vm.formatErrorClass);
 }
 
 static void traceReferences() {

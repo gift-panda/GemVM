@@ -5,12 +5,16 @@
 #include "chunk.h"
 #include "compiler.h"
 #include "GemError.h"
+#include "GemIterator.h"
 #include "vm.h"
 
 #include <signal.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <setjmp.h>
+#include <pthread.h>
+#define GC_THREADS
+#include <gc.h>
 #define TB_IMPL
 #include "termbox2.h"
 #include "serialize.h"
@@ -478,9 +482,20 @@ char* getErrorText() {
     buf[Error_gem_len] = '\0';
     return buf;
 }
+//03371003678
+char* getIteratorText() {
+    char* buf = malloc(Iterator_gem_len + 1);
+    if (!buf) return NULL;
+
+    memcpy(buf, Iterator_gem, Iterator_gem_len);
+    buf[Iterator_gem_len] = '\0';
+    return buf;
+}
 
 
 int main(int argc, const char* argv[]) {
+    GC_INIT();
+    GC_allow_register_threads();
     int runRepl = 1;
     const char* scriptPath = NULL;
 
@@ -525,6 +540,8 @@ int main(int argc, const char* argv[]) {
     }
 
     interpret(getErrorText());
+    interpret(getIteratorText());
+
 
 
     if (runRepl) {

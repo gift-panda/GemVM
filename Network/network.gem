@@ -6,13 +6,13 @@ func loadMatrix(filename){
     var matrix = [];
     var content = read(filename);
     var lines = content.split("\n");
-    for(var i = 0; i < lines.length() - 1; i++){
-        var numbers = lines[i].trim().split(" ");
+    for(var n in lines){
+        var numbers = n.trim().split(" ");
         var row = [];
-        for(var j = 0; j < numbers.length(); j++){
-            row.append(numbers[j].asNum());
+        for(var num in numbers){
+            if(num != "") row.append(num.asNum());
         }
-        matrix.append(row);
+        if(row.length() != 0) matrix.append(row);
     }
     return matrix;
 }
@@ -21,9 +21,8 @@ func loadVector(filename){
     var vector = [];
     var content = read(filename);
     var lines = content.split("\n");
-    for(var i = 0; i < lines.length() - 1; i++){
-        var line = lines[i];
-        vector.append(line.trim().asNum());
+    for(var line in lines){
+        if(line != "") vector.append(line.trim().asNum());
     }
     return vector;
 }

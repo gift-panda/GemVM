@@ -30,6 +30,7 @@ typedef struct {
 typedef struct {
     int breakJumpOffsets[MAX_LOOP_DEPTH];
     int breakCount;
+    int localCount;
 } LoopContext;
 
 static LoopContext loopStack[MAX_LOOP_DEPTH];
@@ -198,12 +199,13 @@ static void emitReturn() {
 
 static uint8_t makeConstant(Value value) {
     int constant = addConstant(currentChunk(), value);
+    if(constant > 255) error("too many constants");
     return constant;
 }
 
 static void emitShortConstant(int constant){
-    emitByte(constant >> 16);
-    emitByte(constant >> 8);
+   //emitByte(constant >> 16);
+    //emitByte(constant >> 8);
     emitByte(constant);
 }
 
@@ -244,7 +246,9 @@ static void beginLoop() {
 
     LoopContext* loop = &loopStack[loopDepth++];
     loop->breakCount = 0;
+    loop->localCount = current->localCount; // NEW
 }
+
 
 static void endLoop(int loopExitTarget) {
     loopDepth--;
@@ -1113,7 +1117,6 @@ static void forStatement() {
 
         continueTarget = incrementStart;
     } else {
-        consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
         continueTarget = loopStart;
     }
 
@@ -1393,16 +1396,26 @@ char* loadModuleFile(const char* fileName) {
 
 static void breakStatement() {
     if (loopDepth == 0) {
-        error("Cannot use 'break' outside of a loop.");
+        error("Can't use 'break' outside of a loop.");
         return;
     }
 
-    consume(TOKEN_SEMICOLON, "Expect ';' after 'break'.");
-
-    int jump = emitJump(OP_JUMP);
-
     LoopContext* loop = &loopStack[loopDepth - 1];
-    loop->breakJumpOffsets[loop->breakCount++] = jump;
+
+    // Pop locals created inside the loop.
+    int localsToPop = current->localCount - loop->localCount;
+    for (int i = 0; i < localsToPop; i++) {
+        emitByte(OP_POP);
+    }
+    
+    int jumpOffset = emitJump(OP_JUMP);
+
+    if (loop->breakCount >= MAX_LOOP_DEPTH) {
+        error("Too many breaks in one loop.");
+        return;
+    }
+
+    loop->breakJumpOffsets[loop->breakCount++] = jumpOffset;
 }
 
 static void emitJumpTo(uint8_t instruction, int target) {
@@ -1422,9 +1435,14 @@ static void continueStatement() {
         return;
     }
 
+    LoopContext* loop = &loopStack[loopDepth - 1];
+
+    int localsToPop = current->localCount - loop->localCount;
+    for (int i = 0; i < localsToPop; i++) {
+        emitByte(OP_POP);
+    }
+
     consume(TOKEN_SEMICOLON, "Expect ';' after 'continue'.");
-    printf("continue statement to: %d\n", continueJumpOffset);
-    endScope();
     emitLoop(continueJumpOffset);
 }
 
@@ -1548,12 +1566,14 @@ static void statement() {
    - preserves "string literals" and // comments
    - expands macros (simple textual macro replacement)
    - desugars ++/-- and +=, -=, *=, /=, %=
+   - desugars for(var x in expr) into a while iterator loop
    Compile: gcc -std=c11 preproc_macro_multiline.c -O2 -o preproc_macro_multiline
 */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <time.h>
 
 /* safe strdup/strndup */
 static char* my_strndup(const char* s, int n) {
@@ -2044,16 +2064,254 @@ char* desugar_operators(const char* src) {
     return out;
 }
 
+/* Insert or merge these helper functions into your preprocessor module. */
+/* (my_strndup / my_strdup already exist in your posted code; keep them.) */
+
+/* helper checks/parsers used by the desugaring routine */
+static int is_token_for(const char* s, int i, int n) {
+    if (i+3 > n) return 0;
+    if (s[i] != 'f' || s[i+1] != 'o' || s[i+2] != 'r') return 0;
+    if (i>0 && (isalnum((unsigned char)s[i-1]) || s[i-1]=='_' )) return 0;
+    int j = i+3;
+    if (j < n && (isalnum((unsigned char)s[j]) || s[j]=='_')) return 0;
+    return 1;
+}
+static int parse_ident_end(const char* s, int idx, int n) {
+    int j = idx;
+    if (j < n && (isalpha((unsigned char)s[j]) || s[j]=='_')) {
+        j++;
+        while (j < n && (isalnum((unsigned char)s[j]) || s[j]=='_')) j++;
+        return j;
+    }
+    return -1;
+}
+static int find_next_nonspace_at_or_after(const char* s, int idx, int n) {
+    int p = idx;
+    while (p < n && isspace((unsigned char)s[p])) p++;
+    return (p < n) ? p : -1;
+}
+static int find_matching_paren(const char* s, int idx, int n) {
+    if (idx>=n || s[idx] != '(') return -1;
+    int i = idx+1;
+    int depth = 1;
+    while (i < n) {
+        char c = s[i];
+        if (c == '"') { /* skip string "..." */
+            i++;
+            while (i < n) { if (s[i] == '"' && s[i-1] != '\\') { i++; break; } i++; }
+            continue;
+        } else if (c == '\'') { /* skip '...' */
+            i++;
+            while (i < n) { if (s[i] == '\'' && s[i-1] != '\\') { i++; break; } i++; }
+            continue;
+        } else if (c == '(') { depth++; i++; continue; }
+        else if (c == ')') { depth--; i++; if (depth==0) return i; continue; }
+        else i++;
+    }
+    return -1;
+}
+static int find_matching_brace(const char* s, int idx, int n) {
+    if (idx>=n || s[idx] != '{') return -1;
+    int i = idx+1;
+    int depth = 1;
+    while (i < n) {
+        char c = s[i];
+        if (c == '"') { i++; while (i < n) { if (s[i] == '"' && s[i-1] != '\\') { i++; break; } i++; } continue; }
+        else if (c == '\'') { i++; while (i < n) { if (s[i] == '\'' && s[i-1] != '\\') { i++; break; } i++; } continue; }
+        else if (c == '{') { depth++; i++; continue; }
+        else if (c == '}') { depth--; i++; if (depth==0) return i; continue; }
+        else i++;
+    }
+    return -1;
+}
+static char* slice(const char* s, int start, int end) {
+    if (end <= start) return my_strdup("");
+    return my_strndup(s + start, end - start);
+}
+
+static int find_statement_end(const char* s, int idx, int n) {
+    /* Find the end of a single statement starting at idx.
+       We stop at the first semicolon that's not inside parens/braces/strings.
+       If there's no semicolon, return -1. */
+    int i = idx;
+    int pdepth = 0;
+    int bdepth = 0;
+    while (i < n) {
+        char c = s[i];
+        if (c == '"') { i++; while (i < n) { if (s[i] == '"' && s[i-1] != '\\') { i++; break; } i++; } continue; }
+        else if (c == '\'') { i++; while (i < n) { if (s[i] == '\'' && s[i-1] != '\\') { i++; break; } i++; } continue; }
+        else if (c == '(') { pdepth++; i++; continue; }
+        else if (c == ')') { if (pdepth>0) pdepth--; i++; continue; }
+        else if (c == '{') { bdepth++; i++; continue; }
+        else if (c == '}') { if (bdepth>0) bdepth--; i++; continue; }
+        else if (c == ';' && pdepth==0 && bdepth==0) { return i+1; }
+        else i++;
+    }
+    return -1;
+}
+
+/* For-in desugaring pass */
+static unsigned long for_in_counter = 0;
+static void seed_for_in() {
+    static int seeded = 0;
+    if (!seeded) {
+        seeded = 1;
+        srand((unsigned int)(time(NULL) ^ (uintptr_t)&for_in_counter));
+    }
+}
+
+/* create unique iter name */
+static char* make_iter_name() {
+    seed_for_in();
+    unsigned long c = ++for_in_counter;
+    unsigned int r = (unsigned int)rand();
+    char buf[64];
+    snprintf(buf, sizeof(buf), "__iter_%lu_%u", c, r);
+    return my_strdup(buf);
+}
+
+/* main desugaring function that replaces for(var id in expr) stmt_or_block */
+static int iter_counter = 0;
+
+// Skip whitespace
+static void skip_ws(const char** p) {
+    while (isspace(**p)) (*p)++;
+}
+
+// Extract block or single statement body
+static char* extract_block(const char** p) {
+    skip_ws(p);
+    if (**p == '{') {
+        int depth = 0;
+        const char* start = *p;
+        while (**p) {
+            if (**p == '{') depth++;
+            else if (**p == '}') {
+                depth--;
+                if (depth == 0) {
+                    (*p)++;
+                    break;
+                }
+            }
+            (*p)++;
+        }
+        size_t len = *p - start;
+        char* block = malloc(len + 1);
+        memcpy(block, start, len);
+        block[len] = '\0';
+        return block;
+    } else {
+        // Single statement body until semicolon or newline
+        const char* start = *p;
+        while (**p && **p != ';' && **p != '\n') (*p)++;
+        if (**p == ';') (*p)++;
+        size_t len = *p - start;
+        char* body = malloc(len + 1);
+        memcpy(body, start, len);
+        body[len] = '\0';
+        return body;
+    }
+}
+
+// Main transformation
+static char* process_for_in(const char* src) {
+    const char* p = src;
+    size_t out_cap = strlen(src) * 3;
+    char* out = calloc(1, out_cap);
+
+    while (*p) {
+        const char* match = strstr(p, "for");
+        if (!match) {
+            strcat(out, p);
+            break;
+        }
+        strncat(out, p, match - p);
+        p = match + 3;
+        skip_ws(&p);
+
+        if (*p != '(') {
+            strcat(out, "for");
+            continue;
+        }
+
+        const char* lp = ++p;
+        skip_ws(&lp);
+
+        int has_var = 0;
+        if (strncmp(lp, "var", 3) == 0) {
+            has_var = 1;
+            lp += 3;
+        }
+
+        skip_ws(&lp);
+        const char* name_start = lp;
+        while (*lp && (isalnum(*lp) || *lp == '_')) lp++;
+        char varname[64];
+        strncpy(varname, name_start, lp - name_start);
+        varname[lp - name_start] = 0;
+
+        skip_ws(&lp);
+        if (strncmp(lp, "in", 2) != 0) {
+            strcat(out, "for(");
+            continue;
+        }
+        lp += 2;
+        skip_ws(&lp);
+
+        const char* expr_start = lp;
+        int paren_depth = 1;
+        while (*lp && paren_depth > 0) {
+            if (*lp == '(') paren_depth++;
+            else if (*lp == ')') paren_depth--;
+            lp++;
+        }
+
+        size_t expr_len = (lp - expr_start) - 1;
+        char expr[256];
+        strncpy(expr, expr_start, expr_len);
+        expr[expr_len] = 0;
+
+        skip_ws(&lp);
+        const char* body_start = lp;
+        char* body = extract_block(&lp);
+
+        iter_counter++;
+        char itername[64];
+        sprintf(itername, "__iter_%d", iter_counter);
+
+        char expansion[2048];
+        snprintf(expansion, sizeof(expansion),
+            "{var %s = (%s).iterator();for(;%s.hasNext();){var %s = %s.next();%s}}",
+            itername, expr, itername, varname, itername, body);
+
+        strcat(out, expansion);
+        free(body);
+        p = lp;
+    }
+    return out;
+}
+
 /* Top-level preprocessor */
 char* preprocessor(const char* src) {
     char* without = strip_macros_and_build_table(src);
     char* expanded = expand_macros(without);
     free(without);
-    char* desugared = desugar_operators(expanded);
-    free(expanded);
-    return desugared;
-}
 
+    char* desugared_ops = desugar_operators(expanded);
+    free(expanded);
+
+    char* desugared_for = process_for_in(desugared_ops);
+    free(desugared_ops);
+
+    while(strstr(desugared_for, " in ")){
+        char* temp = process_for_in(desugared_for);
+        free(desugared_for);
+        desugared_for = temp;
+    }
+
+    printf("%s\n", desugared_for);
+    return desugared_for;
+}
 
 void compileImport(const char* source) {
     source = preprocessor(source);

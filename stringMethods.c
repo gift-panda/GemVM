@@ -12,6 +12,27 @@
 #include "vm.h"
 #include <stdlib.h>
 
+static Value stringIteratorNative(int argCount, Value* args) {
+    Value classVal;
+    ObjString* className = copyString("StringIterator", 14);
+    if (!tableGet(&vm.globals, className, &classVal)) {
+        runtimeError(vm.lookUpErrorClass, "StringIterator class not found.");
+        return NIL_VAL;
+    }
+
+    ObjClass* iteratorClass = AS_CLASS(classVal);
+    ObjInstance* instance = newInstance(iteratorClass);
+
+    Value listVal = args[-1];
+    ObjString* listField = copyString("str", 3);
+    tableSet(&instance->fields, listField, listVal);
+
+    ObjString* indexField = copyString("index", 5);
+    tableSet(&instance->fields, indexField, NUMBER_VAL(0));
+
+    return OBJ_VAL(instance);
+}
+
 static Value stringCharCodeNative(int argCount, Value* args) {
     if (argCount != 0) {
         runtimeError(vm.illegalArgumentsErrorClass, "charCode() takes no arguments.");
@@ -39,7 +60,6 @@ static Value stringSplitNative(int argCount, Value* args) {
     int delimLen = delimiter->length;
 
     ObjList* result = newList();
-    push(OBJ_VAL(result));
     // ✅ SPECIAL CASE: empty delimiter → split into characters
     if (delimLen == 0) {
         for (int i = 0; i < strLen; i++) {
@@ -68,7 +88,6 @@ static Value stringSplitNative(int argCount, Value* args) {
         ObjString* segment = copyString(str + start, strLen - start);
         writeValueArray(&result->elements, OBJ_VAL(segment));
     }
-    pop();
 
     return OBJ_VAL(result);
 }
