@@ -159,6 +159,7 @@ typedef struct ObjThread {
 // ---------------------
 ObjBoundMethod* newBoundMethod(Value receiver, ObjString*);
 ObjClass* newClass(ObjString* name);
+ObjString* newString(char* chars, int length);
 ObjClosure* newClosure(ObjFunction* function);
 ObjFunction* newFunction();
 ObjInstance* newInstance(ObjClass* klass);

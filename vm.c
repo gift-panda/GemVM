@@ -850,7 +850,7 @@ static void concatenate() {
     memcpy(chars + a->length, b->chars, b->length);
     chars[length] = '\0';
 
-    ObjString* result = takeString(chars, length);
+    ObjString* result = newString(chars, length);
     push(OBJ_VAL(result));
 }
 
@@ -864,7 +864,7 @@ static void concatenateCtx(Thread *ctx) {
     memcpy(chars + a->length, b->chars, b->length);
     chars[length] = '\0';
 
-    ObjString* result = takeString(chars, length);
+    ObjString* result = newString(chars, length);
     pushCtx(ctx, OBJ_VAL(result));
 }
 
@@ -1411,7 +1411,7 @@ static InterpretResult run() {
                     int len = snprintf(buffer, sizeof(buffer), "%.14g", num);
 
                     // Allocate and intern as ObjString
-                    ObjString* a = copyString(buffer, len);
+                    ObjString* a = newString(buffer, len);
 
                     int length = a->length + b->length;
                     char* chars = ALLOCATE(char, length + 1);
@@ -1419,7 +1419,7 @@ static InterpretResult run() {
                     memcpy(chars + a->length, b->chars, b->length);
                     chars[length] = '\0';
 
-                    ObjString* result = takeString(chars, length);
+                    ObjString* result = newString(chars, length);
                     pop();
                     pop();
                     push(OBJ_VAL(result));
@@ -1431,7 +1431,7 @@ static InterpretResult run() {
                     int len = snprintf(buffer, sizeof(buffer), "%.14g", num);
 
                     // Allocate and intern as ObjString
-                    ObjString* b = copyString(buffer, len);
+                    ObjString* b = newString(buffer, len);
                     ObjString* a = AS_STRING(peek(1));
 
                     int length = a->length + b->length;
@@ -1440,7 +1440,7 @@ static InterpretResult run() {
                     memcpy(chars + a->length, b->chars, b->length);
                     chars[length] = '\0';
 
-                    ObjString* result = takeString(chars, length);
+                    ObjString* result = newString(chars, length);
                     pop();pop();
                     push(OBJ_VAL(result));
                 }
@@ -2263,7 +2263,7 @@ static void* runCtx(void *context) {
                     int len = snprintf(buffer, sizeof(buffer), "%.14g", num);
 
                     // Allocate and intern as ObjString
-                    ObjString* a = copyString(buffer, len);
+                    ObjString* a = newString(buffer, len);
 
                     int length = a->length + b->length;
                     char* chars = ALLOCATE(char, length + 1);
@@ -2271,7 +2271,7 @@ static void* runCtx(void *context) {
                     memcpy(chars + a->length, b->chars, b->length);
                     chars[length] = '\0';
 
-                    ObjString* result = takeString(chars, length);
+                    ObjString* result = newString(chars, length);
                     popCtx(ctx);
                     popCtx(ctx);
                     pushCtx(ctx, OBJ_VAL(result));
@@ -2292,7 +2292,7 @@ static void* runCtx(void *context) {
                     memcpy(chars + a->length, b->chars, b->length);
                     chars[length] = '\0';
 
-                    ObjString* result = takeString(chars, length);
+                    ObjString* result = newString(chars, length);
                     popCtx(ctx);popCtx(ctx);
                     pushCtx(ctx, OBJ_VAL(result));
                 }
@@ -2987,6 +2987,22 @@ InterpretResult interpret(const char* source) {
         filename[len + 1] = '\0';
 
         serialize(filename, function);
+/*
+        printf("done\n");
+        ObjFunction* func = deserialize(filename);
+        printf("done\n");
+        serialize_json(filename, func);
+        printf("nigga\n");
+
+
+        char* filename_json = GC_MALLOC(len + 2);     // +1 for 'c', +1 for '\0'
+        strcpy(filename_json, vm.path);             // copy original filename
+        filename_json[len] = 'h';                   // append 'c'
+        filename_json[len + 1] = '\0';
+
+        serialize_json(filename_json, function);
+        exit(0);
+*/
     }
     if (function == NULL) return INTERPRET_COMPILE_ERROR;
 

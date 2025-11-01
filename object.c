@@ -69,15 +69,45 @@ ObjClosure* newClosure(ObjFunction* function) {
     return closure;
 }
 
+static uint32_t hashString(const char* key, int length) {
+    uint32_t hash = 0x811C9DC5u; // same offset as FNV-1a for compatibility
+    const uint32_t prime = 0x01000193u;
+
+    int i = 0;
+    // Fast path: process 4 bytes at a time
+    while (i + 4 <= length) {
+        uint32_t chunk;
+        memcpy(&chunk, key + i, 4);  // safely read 4 bytes
+        hash ^= chunk;
+        hash *= prime;
+        i += 4;
+    }
+
+    // Tail: process remaining bytes
+    while (i < length) {
+        hash ^= (uint8_t)key[i++];
+        hash *= prime;
+    }
+
+    return hash;
+}
+
 static ObjString* allocateString(char* chars, int length, uint32_t hash) {
     ObjString* string = ALLOCATE_OBJ(ObjString, OBJ_STRING);
     string->length = length;
     string->chars = chars;
     string->hash = hash;
 
-    //push(OBJ_VAL(string));
     tableSet(&vm.strings, string, NIL_VAL);
-    //pop();
+
+    return string;
+}
+
+ObjString* newString(char* chars, int length){
+    ObjString* string = ALLOCATE_OBJ(ObjString, OBJ_STRING);
+    string->length = length;
+    string->chars = chars;
+    string->hash = hashString(chars, length);
 
     return string;
 }
@@ -128,29 +158,6 @@ ObjThread* newThread(pthread_t *thread, Thread *ctx){
     return threadObj;
 }
 
-static uint32_t hashString(const char* key, int length) {
-    uint32_t hash = 0x811C9DC5u; // same offset as FNV-1a for compatibility
-    const uint32_t prime = 0x01000193u;
-
-    int i = 0;
-    // Fast path: process 4 bytes at a time
-    while (i + 4 <= length) {
-        uint32_t chunk;
-        memcpy(&chunk, key + i, 4);  // safely read 4 bytes
-        hash ^= chunk;
-        hash *= prime;
-        i += 4;
-    }
-
-    // Tail: process remaining bytes
-    while (i < length) {
-        hash ^= (uint8_t)key[i++];
-        hash *= prime;
-    }
-
-    return hash;
-}
-
 ObjString* takeString(char* chars, int length) {
     // Allocate enough space (worst case: no escapes)
     char* unescaped = ALLOCATE(char, length + 1);
@@ -181,6 +188,8 @@ ObjString* takeString(char* chars, int length) {
     unescaped[write] = '\0';
 
     uint32_t hash = hashString(unescaped, write);
+
+
     ObjString* interned = tableFindString(&vm.strings, unescaped, write, hash);
     if (interned != NULL) {
         FREE_ARRAY(char, chars, length + 1);
@@ -221,6 +230,8 @@ ObjString* copyString(const char* chars, int length) {
     unescaped[write] = '\0';
 
     uint32_t hash = hashString(unescaped, write);
+
+
     ObjString* interned = tableFindString(&vm.strings, unescaped, write, hash);
     if (interned != NULL) {
         FREE_ARRAY(char, unescaped, length + 1);

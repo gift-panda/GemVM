@@ -68,6 +68,7 @@ static void adjustCapacity(Table* table, int capacity) {
 
         Entry* dest = findEntry(entries, capacity, entry->key);
         dest->key = entry->key;
+        
         dest->value = entry->value;
         table->count++;
     }
@@ -77,6 +78,13 @@ static void adjustCapacity(Table* table, int capacity) {
     table->capacity = capacity;
 }
 
+void string_cleanup_finalizer(void *obj, void* client_data){
+    //printf("GC: cleaning strings\n");
+    Entry* entry = (Entry *)client_data;
+    entry->key = NULL;
+    entry->value = BOOL_VAL(true);
+}
+    
 bool tableSet(Table* table, ObjString* key, Value value) {
     if (table->count + 1 > table->capacity * TABLE_MAX_LOAD) {
         int capacity = GROW_CAPACITY(table->capacity);
@@ -96,11 +104,9 @@ bool tableSet(Table* table, ObjString* key, Value value) {
 bool tableDelete(Table* table, ObjString* key) {
     if (table->count == 0) return false;
 
-    // Find the entry.
     Entry* entry = findEntry(table->entries, table->capacity, key);
     if (entry->key == NULL) return false;
 
-    // Place a tombstone in the entry.
     entry->key = NULL;
     entry->value = BOOL_VAL(true);
     return true;
@@ -123,12 +129,10 @@ ObjString* tableFindString(Table* table, const char* chars,
     for (;;) {
         Entry* entry = &table->entries[index];
         if (entry->key == NULL) {
-            // Stop if we find an empty non-tombstone entry.
             if (IS_NIL(entry->value)) return NULL;
         } else if (entry->key->length == length &&
             entry->key->hash == hash &&
             memcmp(entry->key->chars, chars, length) == 0) {
-            // We found it.
                 return entry->key;
             }
 

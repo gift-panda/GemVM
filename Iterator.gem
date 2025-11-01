@@ -1,3 +1,5 @@
+//Depricated
+
 class ListIterator{
     init(list){
         this.list = list;

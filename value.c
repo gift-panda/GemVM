@@ -49,7 +49,13 @@ bool valuesEqual(Value a, Value b) {
         case VAL_BOOL:   return AS_BOOL(a) == AS_BOOL(b);
         case VAL_NIL:    return true;
         case VAL_NUMBER: return AS_NUMBER(a) == AS_NUMBER(b);
-        case VAL_OBJ:    return AS_OBJ(a) == AS_OBJ(b);
+        case VAL_OBJ:    
+            if (AS_OBJ(a)->type == OBJ_STRING && AS_OBJ(b)->type == OBJ_STRING)
+                return (
+                    AS_STRING(a)->length == AS_STRING(b)->length &&
+                    memcmp(AS_STRING(a)->chars, AS_STRING(b)->chars, AS_STRING(a)->length) == 0
+                );
+            return AS_OBJ(a) == AS_OBJ(b);
             
         default:         return false; // Unreachable.
     }

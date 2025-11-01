@@ -42,7 +42,6 @@ void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
     return result;
 */
 
-    (void)oldSize;
     if (newSize == 0) return NULL;
     if (pointer == NULL) return GC_MALLOC(newSize);
     void* result = GC_REALLOC(pointer, newSize);
@@ -309,7 +308,7 @@ void collectGarbage() {
     markRoots();
     traceReferences();
     tableRemoveWhite(&vm.strings);
-    //sweep();
+    sweep();
 
     if (getUsedRAM() < vm.maxRAM) {
         vm.nextGC = vm.bytesAllocated * GC_HEAP_GROW_FACTOR;

@@ -1,0 +1,5 @@
+println("he said, \"Hello Nigga!\"");
+for(var i = 0; i < 1000000000; i++){
+    var a = "hi " + i;
+    println(a == "hi " + i);
+}

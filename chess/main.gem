@@ -14,6 +14,10 @@ var tileSize = 100;
 var boardSize = tileSize * 8;
 Window.init(boardSize, boardSize, "Chess");
 
+var LIGHT_GREEN = "0xA6E59F".asNum();
+var DARK_GREEN = "0x3C8D2F".asNum();
+var RED = "0xFF0000".asNum();
+
 func drawBoard(Window, game) {
     var y = 0;
     while (y < 8) {
@@ -38,7 +42,15 @@ func drawBoard(Window, game) {
             var move = moves[i];
             var mx = move[0];
             var my = move[1];
-            Window.drawRect(mx * tileSize, my * tileSize, tileSize, tileSize, 65280); // green
+            var color;
+            if((mx + my) % 2 == 0)
+                color = LIGHT_GREEN;
+            else 
+                color = DARK_GREEN;
+
+            if(game.board.get(mx, my) != nil)
+                color = RED; 
+            Window.drawRect(mx * tileSize, my * tileSize, tileSize, tileSize, color); // green
             i = i + 1;
         }
     }
