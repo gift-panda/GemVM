@@ -2360,7 +2360,9 @@ bool has_for_in(const char* code) {
                     if (l >= sizeof(temp)) l = sizeof(temp) - 1;
                     strncpy(temp, &code[i], l);
                     temp[l] = '\0';
-                    if (strstr(temp, " in ")) return true;
+                    if (strstr(temp, " in ")) {
+                        return true;
+                    }
                 }
             }
         }
@@ -2381,12 +2383,14 @@ char* preprocessor(const char* src) {
     free(desugared_ops);
 
     
-    while(has_for_in(desugared_ops)){
+    while(has_for_in(desugared_for)){
         char* temp = process_for_in(desugared_for);
         free(desugared_for);
         desugared_for = temp;
     }
 
+    //printf(desugared_for);
+    
     return desugared_for;
 }
 

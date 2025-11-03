@@ -3,7 +3,7 @@ project(GemVM)
 
 set(CMAKE_CXX_STANDARD 23)
 add_compile_definitions(TB_IMPL_V1)
-set(CMAKE_BUILD_TYPE RelWithDebInfo)
+set(CMAKE_BUILD_TYPE Release)
 
 # Add source files
 set(GEMVM_SOURCES
@@ -68,14 +68,20 @@ add_executable(GemVM ${GEMVM_SOURCES})
 
 target_compile_definitions(GemVM PRIVATE GC_THREADS)
 
+add_custom_target(test
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/test.sh
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/test
+    DEPENDS GemVM
+    COMMENT "Running GemVM tests..."
+)
+
 # Link libraries
 target_link_libraries(GemVM
         ${SDL2_TTF_LIBRARY}
         ${SDL2_STATIC_LIB}
         ${SDL2_IMAGE_STATIC_LIB}
-        ${SDL2_GFX_STATIC_LIB}    # ← Add this
+        ${SDL2_GFX_STATIC_LIB}
         ${TERMBOX_LIB}
-        ${CJSON_LIBRARY}          # ← Link cJSON here
         ${GC_LIBRARIES}
         m
         png

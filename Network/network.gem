@@ -89,30 +89,17 @@ func predict(input_2d){
     }
 
     var y = softmax(z); 
-
-    var sorted = [];
-    for (var i = 0; i < y.length(); i++)
-        sorted.append(y[i]);
-
-    sorted.sort();
-
-    var pairs = [];
-    for (var i = sorted.length() - 1; i >= 0; i = i - 1) {
-        var prob = sorted[i];
-
-        var digit = -1;
-        for (var d = 0; d < y.length(); d++) {
-            if (y[d] == prob) {
-                digit = d;
-                y[d] = -1;   // mark as used
-                break;
-            }
-        }
-
-        pairs.append([digit, prob]);
+    for(var i = 0; i < y.length(); i++){
+        y[i] = [i, y[i]];
     }
 
-    return pairs;
+    y.sort(
+        lambda(x, y){
+            return x[1] > y[1];
+        }
+    );
+
+    return y;
 }
 
 // --- Panel Setup ---

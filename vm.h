@@ -128,4 +128,7 @@ Value pop();
 void printStack();
 CallFrame* runtimeError(ObjClass*, const char* format, ...);
 
+Value spawnNative(int argCount, Value* args);
+Value joinNative(int argCount, Value* args);
+Value joinInternal(Value arg);
 #endif

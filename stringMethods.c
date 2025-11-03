@@ -13,6 +13,12 @@
 #include <stdlib.h>
 
 static Value stringIteratorNative(int argCount, Value* args) {
+    if (argCount != 0) {
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "No method iterator for arity %d.", argCount);
+        return NIL_VAL;
+    }
+    
     Value classVal;
     ObjString* className = copyString("StringIterator", 14);
     if (!tableGet(&vm.globals, className, &classVal)) {
@@ -35,7 +41,8 @@ static Value stringIteratorNative(int argCount, Value* args) {
 
 static Value stringCharCodeNative(int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass, "charCode() takes no arguments.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "No method charCode for arity %d.", argCount);
         return NIL_VAL;
     }
 
@@ -46,12 +53,20 @@ static Value stringCharCodeNative(int argCount, Value* args) {
 }
 
 static Value stringSplitNative(int argCount, Value* args) {
-    if (argCount != 1 || !IS_STRING(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass, "split(delimiter) expects one string argument.");
+    if (argCount != 1) {
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "No method split for arity %d.", argCount);
         return NIL_VAL;
     }
 
-    ObjString* source = AS_STRING(args[-1]); // receiver: the original string
+    if (!IS_STRING(args[0])) {
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "split: expected (String) but got (%s).",
+                     getValueTypeName(args[0]));
+        return NIL_VAL;
+    }
+
+    ObjString* source = AS_STRING(args[-1]);
     ObjString* delimiter = AS_STRING(args[0]);
 
     const char* str = source->chars;
@@ -60,7 +75,7 @@ static Value stringSplitNative(int argCount, Value* args) {
     int delimLen = delimiter->length;
 
     ObjList* result = newList();
-    // ✅ SPECIAL CASE: empty delimiter → split into characters
+
     if (delimLen == 0) {
         for (int i = 0; i < strLen; i++) {
             ObjString* ch = copyString(str + i, 1);
@@ -70,8 +85,6 @@ static Value stringSplitNative(int argCount, Value* args) {
     }
 
     int start = 0;
-
-    // ✅ Normal splitting
     for (int i = 0; i <= strLen - delimLen;) {
         if (memcmp(str + i, delim, delimLen) == 0) {
             int segmentLen = i - start;
@@ -96,23 +109,17 @@ static Value stringSplitNative(int argCount, Value* args) {
 
 static Value stringTrimNative(int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass, "trim() takes no arguments.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "No method trim for arity %d.", argCount);
         return NIL_VAL;
     }
 
-    ObjString* self = AS_STRING(args[-1]); // receiver
+    ObjString* self = AS_STRING(args[-1]);
     const char* start = self->chars;
     const char* end = self->chars + self->length - 1;
 
-    // Trim leading whitespace
-    while (start <= end && isspace((unsigned char)*start)) {
-        start++;
-    }
-
-    // Trim trailing whitespace
-    while (end >= start && isspace((unsigned char)*end)) {
-        end--;
-    }
+    while (start <= end && isspace((unsigned char)*start)) start++;
+    while (end >= start && isspace((unsigned char)*end)) end--;
 
     int newLength = (int)(end - start + 1);
     return OBJ_VAL(copyString(start, newLength));
@@ -120,12 +127,8 @@ static Value stringTrimNative(int argCount, Value* args) {
 
 static Value stringLengthNative(int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass, "string.length() takes no arguments.");
-        return NIL_VAL;
-    }
-
-    if (!IS_STRING(args[-1])) {
-        runtimeError(vm.typeErrorClass, "string.length() must be called on a string.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "No method length for arity %d.", argCount);
         return NIL_VAL;
     }
 
@@ -134,8 +137,16 @@ static Value stringLengthNative(int argCount, Value* args) {
 }
 
 static Value stringStartsWithNative(int argCount, Value* args) {
-    if (argCount != 1 || !IS_STRING(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass, "startsWith() expects one string argument.");
+    if (argCount != 1) {
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "No method startsWith for arity %d.", argCount);
+        return NIL_VAL;
+    }
+
+    if (!IS_STRING(args[0])) {
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "startsWith: expected (String) but got (%s).",
+                     getValueTypeName(args[0]));
         return NIL_VAL;
     }
 
@@ -152,8 +163,16 @@ static Value stringStartsWithNative(int argCount, Value* args) {
 }
 
 static Value stringEndsWithNative(int argCount, Value* args) {
-    if (argCount != 1 || !IS_STRING(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass, "endsWith() expects one string argument.");
+    if (argCount != 1) {
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "No method endsWith for arity %d.", argCount);
+        return NIL_VAL;
+    }
+
+    if (!IS_STRING(args[0])) {
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "endsWith: expected (String) but got (%s).",
+                     getValueTypeName(args[0]));
         return NIL_VAL;
     }
 
@@ -170,82 +189,75 @@ static Value stringEndsWithNative(int argCount, Value* args) {
     return BOOL_VAL(true);
 }
 
-
 static Value stringCharAtNative(int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.typeErrorClass, "string.charAt() takes a integer.");
-        return NIL_VAL;
-    }
-
-    if (!IS_STRING(args[-1])) {
-        runtimeError(vm.typeErrorClass, "string.charAt() must be called on a string.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "No method charAt for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0])) {
-        runtimeError(vm.typeErrorClass, "string.charAt() index must be  an integer.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "charAt: expected (Number) but got (%s).",
+                     getValueTypeName(args[0]));
         return NIL_VAL;
     }
 
     ObjString* string = AS_STRING(args[-1]);
-    int index = AS_NUMBER(args[0]);
-    if (index < 0 || index >= string->length) {
-        runtimeError(vm.indexErrorClass, "string.charAt() index out of bounds.");
-        return NIL_VAL;
-    }
-    if (index%1 != 0) {
-        runtimeError(vm.typeErrorClass, "string.charAt() index must be an integer.");
-        return NIL_VAL;
-    }
+    double num = AS_NUMBER(args[0]);
+    int index = (int)num;
+
     return OBJ_VAL(copyString(&string->chars[index], 1));
 }
 
 static Value stringToUpperCaseNative(int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,"string.toUpperCase() takes no arguments.");
-        return NIL_VAL;
-    }
-
-    if (!IS_STRING(args[-1])) {
-        runtimeError(vm.typeErrorClass, "string.toUpperCase() must be called on a string.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "No method toUpperCase for arity %d.", argCount);
         return NIL_VAL;
     }
 
     ObjString* string = AS_STRING(args[-1]);
     char* upper = ALLOCATE(char, string->length);
     for (int i = 0; i < string->length; i++) {
-        upper[i] = toupper(string->chars[i]);
+        upper[i] = toupper((unsigned char)string->chars[i]);
     }
-    return OBJ_VAL(copyString(upper, string->length));
+
+    Value result = OBJ_VAL(copyString(upper, string->length));
+    FREE_ARRAY(char, upper, string->length);
+    return result;
 }
 
 static Value stringToLowerCaseNative(int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass, "string.toLowerCase() takes no arguments.");
-        return NIL_VAL;
-    }
-
-    if (!IS_STRING(args[-1])) {
-        runtimeError(vm.illegalArgumentsErrorClass, "string.toLowerCase() must be called on a string.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "No method toLowerCase for arity %d.", argCount);
         return NIL_VAL;
     }
 
     ObjString* string = AS_STRING(args[-1]);
     char* lower = ALLOCATE(char, string->length);
+
     for (int i = 0; i < string->length; i++) {
-        lower[i] = tolower(string->chars[i]);
+        lower[i] = tolower((unsigned char)string->chars[i]);
     }
-    return OBJ_VAL(copyString(lower, string->length));
+
+    Value result = OBJ_VAL(copyString(lower, string->length));
+    FREE_ARRAY(char, lower, string->length);
+    return result;
 }
 
 static Value stringSubstringNative(int argCount, Value* args) {
     if (argCount != 2) {
-        runtimeError(vm.illegalArgumentsErrorClass, "string.substring() takes 2 arguments: start and end indices.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "No method substring for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0]) || !IS_NUMBER(args[1])) {
-        runtimeError(vm.illegalArgumentsErrorClass, "string.substring() takes two number indices.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "substring: expected (Number, Number) but got (%s, %s).",
+                     getValueTypeName(args[0]), getValueTypeName(args[1]));
         return NIL_VAL;
     }
 
@@ -254,7 +266,7 @@ static Value stringSubstringNative(int argCount, Value* args) {
     int end = (int)AS_NUMBER(args[1]);
 
     if (start < 0 || end > string->length || start > end) {
-        runtimeError(vm.indexErrorClass, "string.substring() indices out of bounds.");
+        runtimeError(vm.indexErrorClass, "substring: indices out of bounds.");
         return NIL_VAL;
     }
 
@@ -263,12 +275,14 @@ static Value stringSubstringNative(int argCount, Value* args) {
 
 static Value stringIndexOfNative(int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass, "str.indexOf() takes 1 argument.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "no method indexOf for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_STRING(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass, "Parameter must be of type string.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "indexOf: expected (String) but got (%s).", getValueTypeName(args[0]));
         return NIL_VAL;
     }
 
@@ -284,66 +298,76 @@ static Value stringIndexOfNative(int argCount, Value* args) {
     return NUMBER_VAL(-1);
 }
 
+
 static Value stringParseNumberNative(int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass, "str.asNum() takes no arguments.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "no method asNum for arity %d.", argCount);
         return NIL_VAL;
     }
 
     ObjString* str = AS_STRING(args[-1]);
     char* end;
     double value = strtod(str->chars, &end);
+
     if (end == str->chars || *end != '\0') {
-        runtimeError(vm.formatErrorClass, "Invalid number value %s", str->chars);
+        runtimeError(vm.formatErrorClass,
+                     "asNum: invalid numeric value (%s).", str->chars);
         return NIL_VAL;
     }
+
     return NUMBER_VAL(value);
 }
 
 static Value stringParseBooleanNative(int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass, "str.parseBoolean() takes no arguments.");
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "no method parseBoolean for arity %d.", argCount);
         return NIL_VAL;
     }
 
     ObjString* str = AS_STRING(args[-1]);
-    if (strcasecmp(str->chars, "true") == 0 || strcmp(str->chars, "1") == 0) {
+    if (strcasecmp(str->chars, "true") == 0 || strcmp(str->chars, "1") == 0)
         return BOOL_VAL(true);
-    } else if (strcasecmp(str->chars, "false") == 0 || strcmp(str->chars, "0") == 0) {
+    if (strcasecmp(str->chars, "false") == 0 || strcmp(str->chars, "0") == 0)
         return BOOL_VAL(false);
-    } else {
-        runtimeError(vm.formatErrorClass, "Invalid boolean value %s", str->chars );
-        return NIL_VAL;
-    }
+
+    runtimeError(vm.formatErrorClass,
+                 "parseBoolean: invalid boolean value (%s).", str->chars);
+    return NIL_VAL;
 }
 
 static Value str_isDigit(int argCount, Value* args) {
-    if (argCount != 0) runtimeError(vm.illegalArgumentsErrorClass, "str.parse() takes no aruments.");
-    ObjString* str = AS_STRING(args[-1]);
+    if (argCount != 0) {
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "no method isDigit for arity %d.", argCount);
+        return NIL_VAL;
+    }
 
+    ObjString* str = AS_STRING(args[-1]);
     char* end;
     double num = strtod(str->chars, &end);
-    if (end != str->chars && *end == '\0') {
-        return BOOL_VAL(true);
-    }
-    return BOOL_VAL(false);
+    return BOOL_VAL(end != str->chars && *end == '\0');
 }
 
 static Value str_parse(int argCount, Value* args) {
-    if (argCount != 0) runtimeError(vm.illegalArgumentsErrorClass, "str.parse() takes no aruments.");
-    ObjString* str = AS_STRING(args[-1]);
+    if (argCount != 0) {
+        runtimeError(vm.illegalArgumentsErrorClass,
+                     "no method parse for arity %d.", argCount);
+        return NIL_VAL;
+    }
 
+    ObjString* str = AS_STRING(args[-1]);
     char* end;
     double num = strtod(str->chars, &end);
-    if (end != str->chars && *end == '\0') {
-        return NUMBER_VAL(num);
-    }
 
-    if (strcmp(str->chars, "true") == 0 || strcmp(str->chars, "1") == 0) {
+    if (end != str->chars && *end == '\0')
+        return NUMBER_VAL(num);
+
+    if (strcasecmp(str->chars, "true") == 0 || strcmp(str->chars, "1") == 0)
         return BOOL_VAL(true);
-    } else if (strcmp(str->chars, "false") == 0 || strcmp(str->chars, "0") == 0) {
+    if (strcasecmp(str->chars, "false") == 0 || strcmp(str->chars, "0") == 0)
         return BOOL_VAL(false);
-    }
 
     return OBJ_VAL(str);
 }

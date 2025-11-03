@@ -60,3 +60,27 @@ bool valuesEqual(Value a, Value b) {
         default:         return false; // Unreachable.
     }
 }
+
+char* getValueTypeName(Value value){
+    switch (value.type) {
+    case VAL_BOOL:   return "Boolean";
+    case VAL_NIL:    return "Nil";
+    case VAL_NUMBER: return "Number";
+    case VAL_OBJ:
+        switch (OBJ_TYPE(value)) {
+            case OBJ_STRING:   return "String";
+            case OBJ_FUNCTION: return "Function";
+            case OBJ_NATIVE:   return "Native";
+            case OBJ_CLOSURE:  return "Closure";
+            case OBJ_UPVALUE:  return "Upvalue";
+            case OBJ_CLASS:    return "Class";
+            case OBJ_INSTANCE: return "Instance";
+            case OBJ_BOUND_METHOD: return "BoundMethod";
+            case OBJ_MULTI_DISPATCH: return "MultiDispatch";
+            case OBJ_LIST:     return "List";
+            case OBJ_ERROR:    return "Error";
+            default:           return "Object";
+        }
+    }
+    return "Unknown";
+}

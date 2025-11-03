@@ -13,7 +13,6 @@
 #include <fcntl.h>
 #include <setjmp.h>
 #include <pthread.h>
-#define GC_THREADS
 #include <gc.h>
 #define TB_IMPL
 #include "termbox2.h"
@@ -492,7 +491,7 @@ char* getIteratorText() {
     return buf;
 }
 
-void no_warn_proc(char* msg, GC_word arg) {
+void no_warn_proc(const char* msg, GC_word arg) {
     // Do nothing
 }
 

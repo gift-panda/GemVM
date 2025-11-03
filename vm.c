@@ -68,7 +68,7 @@ static bool callCtx(Thread *ctx, ObjClosure* closure, int argCount);
 static bool callValueCtx(Thread *ctx, Value callee, int argCount);
 static void* runCtx(void*);
 
-static Value spawnNative(int argCount, Value* args) {
+Value spawnNative(int argCount, Value* args) {
     pthread_t *tid = malloc(sizeof(pthread_t));  // ✅ not GC-allocated
     if (!tid) {
         perror("malloc");
@@ -93,7 +93,7 @@ static Value spawnNative(int argCount, Value* args) {
     return OBJ_VAL(newThread(tid, ctx));
 }
 
-static Value joinNative(int argCount, Value* args) {
+Value joinNative(int argCount, Value* args) {
     ObjThread* threadObj = AS_THREAD(args[-1]);
 
     pthread_join(*threadObj->thread, NULL);
@@ -103,6 +103,15 @@ static Value joinNative(int argCount, Value* args) {
     return popCtx(threadObj->ctx);
 }
 
+Value joinInternal(Value arg) {
+    ObjThread* threadObj = AS_THREAD(arg);
+
+    pthread_join(*threadObj->thread, NULL);
+    free(threadObj->thread);
+    threadObj->thread = NULL;
+
+    return popCtx(threadObj->ctx);
+}
 
 static Value clockNative(int argCount, Value* args) {
     if(argCount != 0){
@@ -691,7 +700,7 @@ static bool callValue(Value callee, int argCount) {
 
                 ObjClosure* closure = md->closures[argCount];
                 if (closure == NULL) {
-                    runtimeError(vm.illegalArgumentsErrorClass, "No method for arity %d.", argCount);
+                    runtimeError(vm.illegalArgumentsErrorClass, "No method %s for arity %d.", md->name->chars, argCount);
                     return false;
                 }
                 return call(closure, argCount);
