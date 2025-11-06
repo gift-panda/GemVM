@@ -87,8 +87,9 @@ func predict(input_2d){
             sum_z = sum_z + W3[k][j] * h2[j];
         z.append(sum_z);
     }
+    
+    var y = softmax(z);
 
-    var y = softmax(z); 
     for(var i = 0; i < y.length(); i++){
         y[i] = [i, y[i]];
     }
@@ -98,7 +99,6 @@ func predict(input_2d){
             return x[1] > y[1];
         }
     );
-
     return y;
 }
 

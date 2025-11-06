@@ -69,13 +69,13 @@ static bool callValueCtx(Thread *ctx, Value callee, int argCount);
 static void* runCtx(void*);
 
 Value spawnNative(int argCount, Value* args) {
-    pthread_t *tid = malloc(sizeof(pthread_t));  // ✅ not GC-allocated
+    pthread_t *tid = malloc(sizeof(pthread_t)); 
     if (!tid) {
         perror("malloc");
         exit(1);
     }
 
-    Thread *ctx = GC_MALLOC(sizeof(Thread));  // ok, GC-managed context
+    Thread *ctx = GC_MALLOC(sizeof(Thread));
     memset(ctx, 0, sizeof(Thread));
     resetStackCtx(ctx);
 
@@ -305,6 +305,76 @@ CallFrame* runtimeError(ObjClass* errorClass, const char* format, ...) {
     longjmp(repl_env, 1);
 }
 
+CallFrame* runtimeErrorCtx(Thread *ctx, ObjClass* errorClass, const char* format, ...) {
+    char msgbuf[512];      // message only
+    char tracebuf[1024];   // stack trace
+    char linebuf[256];
+    size_t msgOffset = 0;
+    size_t traceOffset = 0;
+
+    va_list args;
+    va_start(args, format);
+
+    // Add the error type first
+    msgOffset += snprintf(msgbuf + msgOffset, sizeof(msgbuf) - msgOffset, "%s: ", errorClass->name->chars);
+    msgOffset += vsnprintf(msgbuf + msgOffset, sizeof(msgbuf) - msgOffset, format, args);
+    va_end(args);
+    //msgOffset += snprintf(msgbuf + msgOffset, sizeof(msgbuf) - msgOffset, "\n");
+
+
+    // Step 2: Build the stack trace string separately
+    for (int i = ctx->frameCount - 1; i >= 0; i--) {
+        CallFrame* frame = &ctx->frames[i];
+        ObjFunction* function = frame->closure->function;
+        size_t instruction = frame->ip - function->chunk.code - 1;
+        int line = function->chunk.lines[instruction];
+
+        int len = snprintf(linebuf, sizeof(linebuf), "[line %d] in ", line);
+        if (traceOffset + len < sizeof(tracebuf)) {
+            memcpy(tracebuf + traceOffset, linebuf, len);
+            traceOffset += len;
+        }
+        if (function->name == NULL) {
+            len = snprintf(linebuf, sizeof(linebuf), "script");
+        } else {
+            len = snprintf(linebuf, sizeof(linebuf), "%s()\n", function->name->chars);
+        }
+        if (traceOffset + len < sizeof(tracebuf)) {
+            memcpy(tracebuf + traceOffset, linebuf, len);
+            traceOffset += len;
+        }
+    }
+
+    // Step 3: Create the error instance and set msg + stackTrace
+    ObjInstance* errorInstance = newInstance(errorClass);
+    ObjString* msgString = copyString(msgbuf, msgOffset);
+    ObjString* traceString = copyString(tracebuf, traceOffset);
+
+    tableSet(&errorInstance->fields, copyString("msg", 3), OBJ_VAL(msgString));
+    tableSet(&errorInstance->fields, copyString("stackTrace", 10), OBJ_VAL(traceString));
+
+    // Step 4: Unwind the call stack looking for try block
+    while (ctx->frameCount > 0) {
+        CallFrame* frame = &ctx->frames[ctx->frameCount - 1];
+
+        if (frame->hasTry[frame->tryTop] != -1) {
+            ctx->stackTop = ++frame->saveStack[frame->tryTop];
+            frame->ip = frame->saveIP[frame->tryTop] + frame->hasTry[frame->tryTop] - 1;
+            pushCtx(ctx, OBJ_VAL(errorInstance));
+            ctx->hasError = true;
+            return frame;
+        }
+
+        ctx->frameCount--;
+        ctx->stackTop = frame->slots;
+    }
+    // Step 5: No try/catch found — print msg and stack trace, then exit
+    fwrite(msgbuf, 1, msgOffset, stderr);
+    fputc('\n', stderr); // <- Add a newline after the message
+    fwrite(tracebuf, 1, traceOffset, stderr);
+    pthread_exit(NULL);
+}
+
 CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
     char tracebuf[1024];
     char linebuf[256];
@@ -371,13 +441,73 @@ CallFrame* throwRuntimeError(ObjInstance* errorInstance) {
     longjmp(repl_env, 1);
 }
 
+CallFrame* throwRuntimeErrorCtx(Thread *ctx, ObjInstance* errorInstance) {
+    char tracebuf[1024];
+    char linebuf[256];
+    size_t offset = 0;
+
+    // Build the stack trace string
+    for (int i = ctx->frameCount - 1; i >= 0; i--) {
+        CallFrame* frame = &ctx->frames[i];
+        ObjFunction* function = frame->closure->function;
+        size_t instruction = frame->ip - function->chunk.code - 1;
+        int line = function->chunk.lines[instruction];
+
+        int len = snprintf(linebuf, sizeof(linebuf), "[line %d] in ", line);
+        if (offset + len < sizeof(tracebuf)) {
+            memcpy(tracebuf + offset, linebuf, len);
+            offset += len;
+        }
+
+        if (function->name == NULL) {
+            len = snprintf(linebuf, sizeof(linebuf), "script\n");
+        } else {
+            len = snprintf(linebuf, sizeof(linebuf), "%s()\n", function->name->chars);
+        }
+
+        if (offset + len < sizeof(tracebuf)) {
+            memcpy(tracebuf + offset, linebuf, len);
+            offset += len;
+        }
+    }
+
+    // Create and set the 'stackTrace' field
+    ObjString* traceString = copyString(tracebuf, offset);
+    Value traceValue = OBJ_VAL(traceString);
+    tableSet(&errorInstance->fields, copyString("stackTrace", 10), traceValue);
+
+    // Unwind the call stack looking for a try block
+    while (ctx->frameCount > 0) {
+        CallFrame* frame = &ctx->frames[ctx->frameCount - 1];
+
+        if (frame->hasTry[frame->tryTop] != -1) {
+            ctx->stackTop = ++frame->saveStack[frame->tryTop];
+            frame->ip = frame->saveIP[frame->tryTop] + frame->hasTry[frame->tryTop] - 1;
+            pushCtx(ctx, OBJ_VAL(errorInstance));
+            ctx->hasError = true;
+            return frame;
+        }
+
+        ctx->frameCount--;
+        ctx->stackTop = frame->slots;
+    }
+
+    // No try block found — print message and stack trace, then exit
+    Value msgVal;
+    if (tableGet(&errorInstance->fields, copyString("msg", 3), &msgVal) && IS_STRING(msgVal)) {
+        fwrite(AS_CSTRING(msgVal), 1, AS_STRING(msgVal)->length, stderr);
+        fputc('\n', stderr);
+    }
+
+    fwrite(tracebuf, 1, offset, stderr);
+    pthread_exit(NULL);
+}
 
 CallFrame* VMError(const char* format, ...) {
     char msgbuf[1024];
     char linebuf[256];
     size_t offset = 0;
 
-    // Step 1: Format the error message
     va_list args;
     va_start(args, format);
     offset += vsnprintf(msgbuf + offset, sizeof(msgbuf) - offset, format, args);
@@ -385,7 +515,6 @@ CallFrame* VMError(const char* format, ...) {
 
     offset += snprintf(msgbuf + offset, sizeof(msgbuf) - offset, "\n");
 
-    // Step 2: Add stack trace to msgbuf
     for (int i = vm.frameCount - 1; i >= 0; i--) {
         CallFrame* frame = &vm.frames[i];
         ObjFunction* function = frame->closure->function;
@@ -414,7 +543,45 @@ CallFrame* VMError(const char* format, ...) {
     exit(1);
 }
 
+CallFrame* VMErrorCtx(Thread *ctx, const char* format, ...) {
+    char msgbuf[1024];
+    char linebuf[256];
+    size_t offset = 0;
 
+    va_list args;
+    va_start(args, format);
+    offset += vsnprintf(msgbuf + offset, sizeof(msgbuf) - offset, format, args);
+    va_end(args);
+
+    offset += snprintf(msgbuf + offset, sizeof(msgbuf) - offset, "\n");
+
+    for (int i = ctx->frameCount - 1; i >= 0; i--) {
+        CallFrame* frame = &ctx->frames[i];
+        ObjFunction* function = frame->closure->function;
+        size_t instruction = frame->ip - function->chunk.code - 1;
+        int line = function->chunk.lines[instruction];
+
+        int len = snprintf(linebuf, sizeof(linebuf), "[line %d] in ", line);
+        if (offset + len < sizeof(msgbuf)) {
+            memcpy(msgbuf + offset, linebuf, len);
+            offset += len;
+        }
+
+        if (function->name == NULL) {
+            len = snprintf(linebuf, sizeof(linebuf), "script\n");
+        } else {
+            len = snprintf(linebuf, sizeof(linebuf), "%s()\n", function->name->chars);
+        }
+
+        if (offset + len < sizeof(msgbuf)) {
+            memcpy(msgbuf + offset, linebuf, len);
+            offset += len;
+        }
+    }
+
+    fwrite(msgbuf, 1, offset, stderr);
+    pthread_exit(NULL);
+}
 
 static void defineNative(const char* name, NativeFn function) {
     push(OBJ_VAL(copyString(name, (int)strlen(name))));
@@ -571,13 +738,13 @@ static bool call(ObjClosure* closure, int argCount) {
 
 static bool callCtx(Thread *ctx, ObjClosure* closure, int argCount) {
     if (argCount != closure->function->arity) {
-        runtimeError(vm.illegalArgumentsErrorClass, "Expected %d arguments but got %d.",
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass, "Expected %d arguments but got %d.",
             closure->function->arity, argCount);
         return false;
     }
 
     if (ctx->frameCount == FRAMES_MAX) {
-        VMError("Stack overflow.");
+        VMErrorCtx(ctx, "Stack overflow.");
         return false;
     }
 
@@ -738,7 +905,7 @@ static bool callValueCtx(Thread *ctx, Value callee, int argCount) {
 
                     ctx->stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
                     if (AS_BOUND_METHOD(initializer)->method[argCount] == NULL) {
-                        runtimeError(vm.illegalArgumentsErrorClass, "No matching initializer found with %d arguments.", argCount);
+                        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass, "No matching initializer found with %d arguments.", argCount);
                         return false;
                     }
                     return callCtx(ctx, AS_BOUND_METHOD(initializer)->method[argCount], argCount);
@@ -754,7 +921,7 @@ static bool callValueCtx(Thread *ctx, Value callee, int argCount) {
                 ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
                 ObjClosure* closure = bound->method[argCount];
                 if (closure == NULL) {
-                    runtimeError(vm.illegalArgumentsErrorClass, "No method with arity %d found.", argCount);
+                    runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass, "No method with arity %d found.", argCount);
                     return false;
                 }
 
@@ -766,7 +933,7 @@ static bool callValueCtx(Thread *ctx, Value callee, int argCount) {
 
                 ObjClosure* closure = md->closures[argCount];
                 if (closure == NULL) {
-                    runtimeError(vm.illegalArgumentsErrorClass, "No method for arity %d.", argCount);
+                    runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass, "No method for arity %d.", argCount);
                     return false;
                 }
                 return callCtx(ctx, closure, argCount);
@@ -775,7 +942,7 @@ static bool callValueCtx(Thread *ctx, Value callee, int argCount) {
                 break;
         }
     }
-    runtimeError(vm.typeErrorClass, "Can only call functions and classes.");
+    runtimeErrorCtx(ctx, vm.typeErrorClass, "Can only call functions and classes.");
     return false;
 }
 
@@ -819,7 +986,7 @@ static ObjUpvalue* captureUpvalueCtx(Thread *ctx, Value* local) {
 
     createdUpvalue->next = upvalue;
     if (prevUpvalue == NULL) {
-        vm.openUpvalues = createdUpvalue;
+        ctx->openUpvalues = createdUpvalue;
     } else {
         prevUpvalue->next = createdUpvalue;
     }
@@ -954,8 +1121,7 @@ static bool bindMethodCtx(Thread *ctx, ObjClass* klass, ObjString* name) {
 }
 
 
-static bool invokeFromClass(ObjClass* klass, ObjString* name,
-                            int argCount) {
+static bool invokeFromClass(ObjClass* klass, ObjString* name, int argCount) {
     Value method;
 
     if (tableGet(&klass->methods, name, &method)) {
@@ -1008,7 +1174,7 @@ static bool invokeFromClassCtx(Thread *ctx, ObjClass* klass, ObjString* name, in
         return res;
     }
 
-    runtimeError(vm.nameErrorClass, "Undefined method '%s' on instance of class '%s'.",
+    runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined method '%s' on instance of class '%s'.",
                  name->chars, klass->name->chars);
     return false;
 }
@@ -1135,7 +1301,7 @@ static bool invoke(ObjString* name, int argCount, CallFrame* frame) {
     }
 
     if (!IS_INSTANCE(receiver)) {
-        runtimeError(vm.typeErrorClass, "Only instances have methods.");
+        runtimeError(vm.typeErrorClass, "Only instances have methods, got %s.", getValueTypeName(receiver));
         return false;
     }
 
@@ -1164,7 +1330,7 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
             pushCtx(ctx, result);
             return res;
         }
-        runtimeError(vm.nameErrorClass, "Undefined method '%s' on string.", name->chars);
+        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined method '%s' on string.", name->chars);
         return false;
     }
 
@@ -1178,7 +1344,7 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
             pushCtx(ctx, result);
             return res;
         }
-        runtimeError(vm.nameErrorClass, "Undefined method '%s' on image.", name->chars);
+        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined method '%s' on image.", name->chars);
         return false;
     }
 
@@ -1191,7 +1357,20 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
             pushCtx(ctx, result);
             return res;
         }
-        runtimeError(vm.nameErrorClass, "Undefined method '%s' on list.", name->chars);
+        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined method '%s' on list.", name->chars);
+        return false;
+    }
+
+    if (IS_THREAD(receiver)) {
+        Value value;
+        if (tableGet(&vm.threadClassMethods, name, &value)) {
+            bool res = callBoundedNativeCtx(ctx, value, argCount);
+            Value result = popCtx(ctx);
+            popCtx(ctx);
+            pushCtx(ctx, result);
+            return res;
+        }
+        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined method '%s' on thread.", name->chars);
         return false;
     }
 
@@ -1200,7 +1379,7 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
         ObjClass* klass = AS_CLASS(receiver);
 
         if (isPrivate(name) && klass != frame->klass){
-            runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
+            runtimeErrorCtx(ctx, vm.accessErrorClass, "Cannot access private field from a different class.");
             return false;
         }
 
@@ -1225,20 +1404,21 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
             bool res = callValueCtx(ctx, value, argCount);
             return res;
         }
-        runtimeError(vm.nameErrorClass, "Undefined static method '%s' on class '%s'.",
+        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined static method '%s' on class '%s'.",
                      name->chars, klass->name->chars);
         return false;
     }
 
 
     if (!IS_INSTANCE(receiver)) {
-        runtimeError(vm.typeErrorClass, "Only instances have methods.");
+        runtimeErrorCtx(ctx, vm.typeErrorClass, "Only instances have methods.");
         return false;
     }
 
     ObjInstance* instance = AS_INSTANCE(receiver);
 
-    if (isPrivate(name) && instance->klass != frame->klass) runtimeError(vm.accessErrorClass, "Cannot access private field of a different class.");
+    if (isPrivate(name) && instance->klass != frame->klass) 
+        runtimeErrorCtx(ctx, vm.accessErrorClass, "Cannot access private field of a different class.");
 
     Value value;
     if (tableGet(&instance->fields, name, &value)) {
@@ -1308,6 +1488,10 @@ static InterpretResult run() {
 
     #define READ_CONSTANT() \
         readConst(frame)
+    
+
+    #define READ_STRING() AS_STRING(READ_CONSTANT())
+
     #define BINARY_OP(valueType, op) \
     do { \
         bool fl = false; \
@@ -1322,11 +1506,9 @@ static InterpretResult run() {
         push(valueType(a op b)); \
         if (fl) break;\
     } while (false)\
-
-    #define READ_STRING() AS_STRING(READ_CONSTANT())
-
-        for (;;) {
-    #ifdef DEBUG_TRACE_EXECUTION
+    
+    for (;;) {
+        #ifdef DEBUG_TRACE_EXECUTION
             printf("          ");
             for (Value* slot = vm.stack; slot < vm.stackTop; slot++) {
                 printf("[ ");
@@ -1336,7 +1518,7 @@ static InterpretResult run() {
             printf("\n");
             disassembleInstruction(&frame->closure->function->chunk,
                     (int)(frame->ip - frame->closure->function->chunk.code));
-    #endif
+        #endif
         uint8_t instruction;
         switch (instruction = READ_BYTE()) {
             case OP_RETURN: {
@@ -2162,7 +2344,7 @@ static void* runCtx(void *context) {
             bool fl = false; \
             int peeker = 1; \
             if (!IS_NUMBER(peekCtx(ctx, 0)) || !IS_NUMBER(peekCtx(ctx, peeker))) { \
-                runtimeError(vm.typeErrorClass, "Operands must be numbers."); \
+                runtimeErrorCtx(ctx, vm.typeErrorClass, "Operands must be numbers."); \
                 fl = true; \
                 break; \
             } \
@@ -2229,7 +2411,7 @@ static void* runCtx(void *context) {
             }
             case OP_NEGATE:
                 if (!IS_NUMBER(peekCtx(ctx, 0))) {
-                    runtimeError(vm.typeErrorClass, "Operand must be a number.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "Operand must be a number.");
                     break;
                 }
                 pushCtx(ctx, NUMBER_VAL(-AS_NUMBER(popCtx(ctx))));
@@ -2241,7 +2423,7 @@ static void* runCtx(void *context) {
                     ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
 
                     if (a->klass != b->klass) {
-                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeErrorCtx(ctx, vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -2252,7 +2434,7 @@ static void* runCtx(void *context) {
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
-                    runtimeError(vm.typeErrorClass, "No overload of '+' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "No overload of '+' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
                 if (IS_STRING(peekCtx(ctx, 0)) && IS_STRING(peekCtx(ctx, 1))) {
@@ -2306,7 +2488,7 @@ static void* runCtx(void *context) {
                     pushCtx(ctx, OBJ_VAL(result));
                 }
                 else {
-                    runtimeError(vm.typeErrorClass,
+                    runtimeErrorCtx(ctx, vm.typeErrorClass,
                         "Operands must be two numbers or two strings.");
                     break;
                 }
@@ -2318,7 +2500,7 @@ static void* runCtx(void *context) {
                     ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
 
                     if (a->klass != b->klass) {
-                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeErrorCtx(ctx, vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -2329,7 +2511,7 @@ static void* runCtx(void *context) {
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
-                    runtimeError(vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
                 BINARY_OP(NUMBER_VAL, -); break;
@@ -2339,7 +2521,7 @@ static void* runCtx(void *context) {
                     ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
 
                     if (a->klass != b->klass) {
-                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeErrorCtx(ctx, vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -2350,7 +2532,7 @@ static void* runCtx(void *context) {
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
-                    runtimeError(vm.typeErrorClass, "No overload of '*' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "No overload of '*' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
                 BINARY_OP(NUMBER_VAL, *); break;
@@ -2361,7 +2543,7 @@ static void* runCtx(void *context) {
                     ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
 
                     if (a->klass != b->klass) {
-                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeErrorCtx(ctx, vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -2372,7 +2554,7 @@ static void* runCtx(void *context) {
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
-                    runtimeError(vm.typeErrorClass, "No overload of '/' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "No overload of '/' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
                 BINARY_OP(NUMBER_VAL, /); break;
@@ -2382,7 +2564,7 @@ static void* runCtx(void *context) {
                     ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
 
                     if (a->klass != b->klass) {
-                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeErrorCtx(ctx, vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -2393,13 +2575,13 @@ static void* runCtx(void *context) {
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
-                    runtimeError(vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "No overload of '-' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
 
                 bool fl = false;
                 if (!IS_NUMBER(peekCtx(ctx, 0)) || !IS_NUMBER(peekCtx(ctx, 1))) {
-                    runtimeError(vm.typeErrorClass, "Operands must be numbers.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "Operands must be numbers.");
                     fl = true;
                     break;
                 }
@@ -2414,7 +2596,7 @@ static void* runCtx(void *context) {
                     ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
 
                     if (a->klass != b->klass) {
-                        runtimeError(vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeErrorCtx(ctx, vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
@@ -2425,13 +2607,13 @@ static void* runCtx(void *context) {
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
-                    runtimeError(vm.typeErrorClass, "No overload of '\' for instances of class '%s'.", a->klass->name->chars);
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "No overload of '\' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
 
                 bool fl = false;
                 if (!IS_NUMBER(peekCtx(ctx, 0)) || !IS_NUMBER(peekCtx(ctx, 1))) {
-                    runtimeError(vm.typeErrorClass, "Operands must be numbers.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "Operands must be numbers.");
                     fl = true;
                     break;
                 }
@@ -2502,7 +2684,7 @@ static void* runCtx(void *context) {
                 ObjString* name = READ_STRING();
                 Value value;
                 if (!tableGet(&vm.globals, name, &value)) {
-                    runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
+                    runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
                     //flush(stdout);
                     break;
                 }
@@ -2513,7 +2695,7 @@ static void* runCtx(void *context) {
                 ObjString* name = READ_STRING();
                 if (tableSet(&vm.globals, name, peekCtx(ctx, 0))) {
                     tableDelete(&vm.globals, name);
-                    runtimeError(vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
+                    runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
                     break;
                 }
                 break;
@@ -2609,6 +2791,7 @@ static void* runCtx(void *context) {
                     tableSet(&klass->staticMethods, copyString("exit", 4),        OBJ_VAL(newNative(window_exit)));
                     tableSet(&klass->staticMethods, copyString("drawLine", 8),        OBJ_VAL(newNative(window_drawLine)));
                     tableSet(&klass->staticMethods, copyString("drawTrig", 8),        OBJ_VAL(newNative(window_drawTriangle)));
+                    tableSet(&klass->staticMethods, copyString("drawText", 8),    OBJ_VAL(newNative(window_drawText)));
                 }
 
                 if (name == copyString("Math", 4)) {
@@ -2649,14 +2832,17 @@ static void* runCtx(void *context) {
                 break;
             case OP_GET_PROPERTY: {
                 if (IS_STRING(peekCtx(ctx, 0)) || IS_LIST(peekCtx(ctx, 0))){
-                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                    runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
                 if (IS_INSTANCE(peekCtx(ctx, 0))) {
                     ObjInstance* instance = AS_INSTANCE(peekCtx(ctx, 0));
                     ObjString* name = READ_STRING();
 
-                    if (isPrivate(name) && instance->klass != frame->klass) runtimeError(vm.accessErrorClass, "Cannot access private field from a different class.");
-
+                    if (isPrivate(name) && instance->klass != frame->klass){
+                        runtimeErrorCtx(ctx, vm.accessErrorClass, "Cannot access private field from a different class.");
+                        break;
+                    }
+                    
                     Value value;
                     if (tableGet(&instance->fields, name, &value)) {
                         popCtx(ctx);
@@ -2668,7 +2854,7 @@ static void* runCtx(void *context) {
                         break;
                     }
 
-                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                    runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
 
                 if (IS_CLASS(peekCtx(ctx, 0))) {
@@ -2703,16 +2889,16 @@ static void* runCtx(void *context) {
                             break;
                         }
                     }
-                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                    runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                     break;
                 }
 
-                runtimeError(vm.typeErrorClass, "Only instances and classes have fields.");
+                runtimeErrorCtx(ctx, vm.typeErrorClass, "Only instances and classes have fields, got %s.", getValueTypeName(peekCtx(ctx, 0)));
                 break;
             }
             case OP_SET_PROPERTY: {
                 if (IS_STRING(peekCtx(ctx, 1)) || IS_LIST(peekCtx(ctx, 1))){
-                    runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
+                    runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
 
                 if (IS_CLASS(peekCtx(ctx, 1))) {
@@ -2734,7 +2920,7 @@ static void* runCtx(void *context) {
                 }
 
                 if (!IS_INSTANCE(peekCtx(ctx, 1))) {
-                    runtimeError(vm.typeErrorClass, "Only instances have fields.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "Only instances have fields.");
                     break;
                 }
 
@@ -2760,7 +2946,7 @@ static void* runCtx(void *context) {
             }
             case OP_INHERIT: {
                 if (!IS_CLASS(peekCtx(ctx, 1))) {
-                    runtimeError(vm.typeErrorClass, "Superclass must be a class.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "Superclass must be a class.");
                     break;
                 }
 
@@ -2812,12 +2998,12 @@ static void* runCtx(void *context) {
                 Value list = popCtx(ctx);
 
                 if (!IS_LIST(list)) {
-                    runtimeError(vm.typeErrorClass, "Can only index into lists.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "Can only index into lists.");
                     break;
                 }
 
                 if (!IS_NUMBER(index)) {
-                    runtimeError(vm.typeErrorClass, "List index must be a number.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "List index must be a number.");
                     break;
                 }
 
@@ -2825,7 +3011,7 @@ static void* runCtx(void *context) {
                 int i = (int)AS_NUMBER(index);
 
                 if (i < 0 || i >= objList->elements.count) {
-                    runtimeError(vm.indexErrorClass, "List index out of bounds.");
+                    runtimeErrorCtx(ctx, vm.indexErrorClass, "List index out of bounds.");
                     break;
                 }
 
@@ -2839,12 +3025,12 @@ static void* runCtx(void *context) {
                 Value list = popCtx(ctx);
 
                 if (!IS_LIST(list)) {
-                    runtimeError(vm.typeErrorClass, "Can only index into lists.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "Can only index into lists.");
                     break;
                 }
 
                 if (!IS_NUMBER(index)) {
-                    runtimeError(vm.typeErrorClass, "List index must be a number.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "List index must be a number.");
                     break;
                 }
 
@@ -2852,7 +3038,7 @@ static void* runCtx(void *context) {
                 int i = (int)AS_NUMBER(index);
 
                 if (i < 0 || i >= objList->elements.count) {
-                    runtimeError(vm.indexErrorClass, "List index out of bounds.");
+                    runtimeErrorCtx(ctx, vm.indexErrorClass, "List index out of bounds.");
                     break;
                 }
 
@@ -2877,7 +3063,7 @@ static void* runCtx(void *context) {
             case OP_DISPATCH: {
                 Value closureVal = peekCtx(ctx, 0);
                 if (!IS_CLOSURE(closureVal)) {
-                    runtimeError(vm.typeErrorClass, "Expected function to dispatch.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "Expected function to dispatch.");
                     break;
                 }
 
@@ -2905,7 +3091,7 @@ static void* runCtx(void *context) {
                 break;
             }
             case OP_TRY: {
-                if (frame->tryTop == 10) VMError("Max try depth reached");
+                if (frame->tryTop == 10) VMErrorCtx(ctx, "Max try depth reached");
                 frame->tryTop++;
                 frame->saveStack[frame->tryTop] = ctx->stackTop;
                 frame->saveIP[frame->tryTop] = frame->ip;
@@ -2914,7 +3100,7 @@ static void* runCtx(void *context) {
                 break;
             }
             case OP_END_TRY: {
-                if (frame->tryTop == 0) VMError("No try block to end");
+                if (frame->tryTop == 0) VMErrorCtx(ctx, "No try block to end");
                 frame->hasTry[frame->tryTop] = -1;
                 if (frame->tryTop >= 0) {
                     frame->tryTop--;
@@ -2960,19 +3146,20 @@ static void* runCtx(void *context) {
             case OP_THROW: {
                 Value error = popCtx(ctx);
                 if (!IS_INSTANCE(error)) {
-                    runtimeError(vm.typeErrorClass, "Can only throw instances of error classes.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "Can only throw instances of error classes.");
                     return nullptr;
                 }
 
                 ObjInstance* instance = AS_INSTANCE(error);
                 if (!hasAncestor(instance, vm.errorClass)) {
-                    runtimeError(vm.typeErrorClass, "Can only throw instances of error.");
+                    runtimeErrorCtx(ctx, vm.typeErrorClass, "Can only throw instances of error.");
                     return nullptr;
                 }
 
-                throwRuntimeError(instance); // a function you'll define
+                throwRuntimeErrorCtx(ctx, instance); // a function you'll define
                 break;
             }
+            
         }
     }
     ctx->finished = true;
@@ -2996,26 +3183,10 @@ InterpretResult interpret(const char* source) {
         filename[len + 1] = '\0';
 
         serialize(filename, function);
-/*
-        printf("done\n");
-        ObjFunction* func = deserialize(filename);
-        printf("done\n");
-        serialize_json(filename, func);
-        printf("nigga\n");
-
-
-        char* filename_json = GC_MALLOC(len + 2);     // +1 for 'c', +1 for '\0'
-        strcpy(filename_json, vm.path);             // copy original filename
-        filename_json[len] = 'h';                   // append 'c'
-        filename_json[len + 1] = '\0';
-
-        serialize_json(filename_json, function);
-        exit(0);
-*/
     }
     if (function == NULL) return INTERPRET_COMPILE_ERROR;
 
-    if (1)
+    if (0)
     {
         push(OBJ_VAL(function));
         ObjClosure* closure = newClosure(function);
@@ -3029,6 +3200,12 @@ InterpretResult interpret(const char* source) {
         InterpretResult res = run();
         return res;
     }
+
+    Value input[1] = {OBJ_VAL(newClosure(function))};
+
+    Value result = spawnNative(1, input);
+    result = joinInternal(result);
+    
     return INTERPRET_OK;
 }
 

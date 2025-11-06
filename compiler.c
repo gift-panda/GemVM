@@ -272,6 +272,7 @@ static void initCompiler(Compiler* compiler, FunctionType type) {
     local->depth = 0;
     local->isCaptured = false;
     local->name.start = "";
+    // type == TYPE_METHOD || type == TYPE_INITIALIZER to remove static methods refering to the class
     if (type != TYPE_FUNCTION) {
         local->name.start = "this";
         local->name.length = 4;
@@ -987,6 +988,8 @@ static Token syntheticToken(const char* text) {
     return token;
 }
 
+#include <gc.h>
+
 static void classDeclaration() {
     consume(TOKEN_IDENTIFIER, "Expect class name.");
     Token className = parser.previous;
@@ -1019,10 +1022,14 @@ static void classDeclaration() {
         classCompiler.hasSuperclass = true;
     }
 
+    Chunk new;
+    initChunk(&new);
+    
     namedVariable(className, false);
     consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
     while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
         if (match(TOKEN_VAR)) {
+            int startPoint = current->function->chunk.count;
             consume(TOKEN_IDENTIFIER, "Expect variable name.");
             uint8_t global = identifierConstant(&parser.previous);
             if (match(TOKEN_EQUAL)) {
@@ -1035,12 +1042,25 @@ static void classDeclaration() {
 
             emitByte(OP_STATIC_VAR);
             emitShortConstant(global);
+
+            //Save all the static variable bytecode
+            int endPoint = current->function->chunk.count;
+            for(int i = startPoint; i < endPoint; i++){
+                writeChunk(&new, current->function->chunk.code[i], current->function->chunk.lines[i]);
+            }
+            current->function->chunk.count = startPoint;
         }
         else {
             match(TOKEN_OPERATOR);
             method();
         }
     }
+
+    //Insert the saved code at last to ensure the class and methods is well defined.
+    for(int i = 0; i < new.count; i++){
+        writeChunk(&current->function->chunk, new.code[i], new.lines[i]);
+    }
+    
     consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
     emitByte(OP_POP);
 

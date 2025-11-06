@@ -158,6 +158,13 @@ ObjThread* newThread(pthread_t *thread, Thread *ctx){
     return threadObj;
 }
 
+ObjNamespace* newNamespace(ObjString* name) {
+    ObjNamespace* ns = ALLOC_OBJ(ObjNamespace, OBJ_NAMESPACE);
+    initTable(&ns->globals);
+    ns->name = name;
+    return ns;
+}
+
 ObjString* takeString(char* chars, int length) {
     // Allocate enough space (worst case: no escapes)
     char* unescaped = ALLOCATE(char, length + 1);

@@ -86,6 +86,12 @@ typedef struct {
     NativeFn function;
 } ObjNative;
 
+typedef struct {
+    Obj obj;
+    Table globals;
+    ObjString* name;
+} ObjNamespace;
+
 typedef struct ObjString {
     Obj obj;
     int length;
@@ -171,6 +177,8 @@ ObjList* newList();
 ObjMultiDispatch* newMultiDispatch(ObjString*);
 ObjImage* newImage(SDL_Texture* texture, int width, int height);
 ObjThread* newThread(pthread_t *thread, Thread *ctx);
+ObjNamespace* newNamespace(ObjString* name)
+
 void printObject(Value value);
 
 static inline bool isObjType(Value value, ObjType type) {
