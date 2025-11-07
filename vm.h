@@ -37,6 +37,8 @@ typedef struct Thread {
     Value stack[STACK_MAX];
     Value* stackTop;
 
+    Table* namespace;
+
     struct ObjUpvalue* openUpvalues; // forward-declared elsewhere
     bool hasError;
     bool finished;
@@ -113,6 +115,7 @@ typedef struct {
 // ---------------------
 typedef enum {
     INTERPRET_OK,
+    COMPILE_OK,
     INTERPRET_COMPILE_ERROR,
     INTERPRET_RUNTIME_ERROR
 } InterpretResult;

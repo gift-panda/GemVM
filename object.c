@@ -158,9 +158,10 @@ ObjThread* newThread(pthread_t *thread, Thread *ctx){
     return threadObj;
 }
 
-ObjNamespace* newNamespace(ObjString* name) {
-    ObjNamespace* ns = ALLOC_OBJ(ObjNamespace, OBJ_NAMESPACE);
-    initTable(&ns->globals);
+ObjNamespace* newNamespace(ObjString* name){
+    ObjNamespace* ns = ALLOCATE_OBJ(ObjNamespace, OBJ_NAMESPACE);
+    ns->namespace = ALLOCATE(Table, 1);
+    initTable(ns->namespace);
     ns->name = name;
     return ns;
 }
@@ -314,9 +315,13 @@ void printObject(Value value) {
             break;
         }
         case OBJ_MULTI_DISPATCH: {
-            //printf("list");
             ObjMultiDispatch* method = AS_MULTI_DISPATCH(value);
             printf("<fn %s>", method->name->chars);
+            break;
+        }
+        case OBJ_NAMESPACE:{
+            ObjNamespace* ns = AS_NAMESPACE(value);
+            printf("<ns %s>", ns->name->chars);
             break;
         }
     }

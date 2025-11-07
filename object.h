@@ -42,6 +42,8 @@ typedef struct ObjClass ObjClass;
 #define AS_IMAGE(value)        ((ObjImage*)AS_OBJ(value))
 #define IS_THREAD(value)       isObjType(value, OBJ_THREAD)
 #define AS_THREAD(value)       ((ObjThread*)AS_OBJ(value))
+#define IS_NAMESPACE(value)       isObjType(value, OBJ_NAMESPACE)
+#define AS_NAMESPACE(value)       ((ObjNamespace*)AS_OBJ(value))
 
 // ---------------------
 // Object types
@@ -60,6 +62,7 @@ typedef enum {
     OBJ_ERROR,
     OBJ_IMAGE,
     OBJ_THREAD,
+    OBJ_NAMESPACE,
 } ObjType;
 
 struct Obj {
@@ -85,12 +88,6 @@ typedef struct {
     Obj obj;
     NativeFn function;
 } ObjNative;
-
-typedef struct {
-    Obj obj;
-    Table globals;
-    ObjString* name;
-} ObjNamespace;
 
 typedef struct ObjString {
     Obj obj;
@@ -160,6 +157,12 @@ typedef struct ObjThread {
     Thread *ctx; // pointer is ok with forward declaration
 } ObjThread;
 
+typedef struct ObjNamespace{
+    Obj obj;
+    Table *namespace;
+    ObjString* name;
+} ObjNamespace;
+
 // ---------------------
 // Functions
 // ---------------------
@@ -177,7 +180,7 @@ ObjList* newList();
 ObjMultiDispatch* newMultiDispatch(ObjString*);
 ObjImage* newImage(SDL_Texture* texture, int width, int height);
 ObjThread* newThread(pthread_t *thread, Thread *ctx);
-ObjNamespace* newNamespace(ObjString* name)
+ObjNamespace* newNamespace(ObjString* name);
 
 void printObject(Value value);
 

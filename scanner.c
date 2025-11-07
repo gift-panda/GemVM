@@ -136,7 +136,13 @@ static TokenType identifierType() {
                 }
             }
         case 'l': return checkKeyword(1, 5, "ambda", TOKEN_LAMBDA);
-        case 'n': return checkKeyword(1, 2, "il", TOKEN_NIL);
+        case 'n': 
+            if(scanner.current - scanner.start > 1){
+                switch(scanner.start[1]){
+                    case 'a': return checkKeyword(2, 7, "mespace", TOKEN_NAMESPACE);
+                    case 'i': return checkKeyword(2, 1, "l", TOKEN_NIL);
+                }
+            }
         case 'o':
             if (scanner.current - scanner.start > 1) {
                 switch (scanner.start[1]) {

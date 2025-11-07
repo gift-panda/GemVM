@@ -78,11 +78,36 @@ Value spawnNative(int argCount, Value* args) {
     Thread *ctx = GC_MALLOC(sizeof(Thread));
     memset(ctx, 0, sizeof(Thread));
     resetStackCtx(ctx);
+    ctx->namespace = NULL;
 
     for (int i = 0; i < argCount; i++)
         pushCtx(ctx, args[i]);
 
     callValueCtx(ctx, args[0], argCount - 1);
+
+    int res = pthread_create(tid, NULL, runCtx, ctx);
+    if (res != 0) {
+        printf("pthread_create failed: %s\n", strerror(res));
+        exit(1);
+    }
+
+    return OBJ_VAL(newThread(tid, ctx));
+}
+
+Value spawnNamespace(ObjClosure* closure, ObjNamespace* namespace) {
+    pthread_t *tid = malloc(sizeof(pthread_t)); 
+    if (!tid) {
+        perror("malloc");
+        exit(1);
+    }
+
+    Thread *ctx = GC_MALLOC(sizeof(Thread));
+    memset(ctx, 0, sizeof(Thread));
+    resetStackCtx(ctx);
+    ctx->namespace = namespace->namespace;
+
+    pushCtx(ctx, OBJ_VAL(closure));
+    callValueCtx(ctx, OBJ_VAL(closure), 0);
 
     int res = pthread_create(tid, NULL, runCtx, ctx);
     if (res != 0) {
@@ -592,14 +617,6 @@ static void defineNative(const char* name, NativeFn function) {
 }
 
 void initVM() {
-    atomic_init(&vm.gcRequest, false);
-    atomic_init(&vm.threads, 0);
-    atomic_init(&vm.waiting, 0);
-
-    pthread_mutex_init(&vm.lock, NULL);
-    pthread_cond_init(&vm.cond, NULL);
-
-    
     resetStack();
     vm.objects = NULL;
     initTable(&vm.strings);
@@ -1361,6 +1378,19 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
         return false;
     }
 
+    if (IS_NAMESPACE(receiver)){
+        ObjNamespace* ns = AS_NAMESPACE(receiver);
+        Value value;
+                
+        if (tableGet(ns->namespace, name, &value)) {
+            bool res = callValueCtx(ctx, value, argCount);
+            return res;
+        }
+                
+        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined function '%s' in namespace '%s'.", name->chars, ns->name->chars);
+        return false;
+    }
+
     if (IS_THREAD(receiver)) {
         Value value;
         if (tableGet(&vm.threadClassMethods, name, &value)) {
@@ -1393,9 +1423,6 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
             }
 
             bool res = callValueCtx(ctx, value, argCount);
-
-            //Idk why i added this? but look out ig? more bugs?
-
             return res;
         }
 
@@ -1982,6 +2009,7 @@ static InterpretResult run() {
                 if (IS_STRING(peek(0)) || IS_LIST(peek(0))){
                     runtimeError(vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
+                
                 if (IS_INSTANCE(peek(0))) {
                     ObjInstance* instance = AS_INSTANCE(peek(0));
                     ObjString* name = READ_STRING();
@@ -2676,28 +2704,48 @@ static void* runCtx(void *context) {
             case OP_POP: popCtx(ctx); break;
             case OP_DEFINE_GLOBAL: {
                 ObjString* name = READ_STRING();
-                tableSet(&vm.globals, name, peekCtx(ctx, 0));
+                if(ctx->namespace != NULL)
+                    tableSet(ctx->namespace, name, peekCtx(ctx, 0));
+                else 
+                    tableSet(&vm.globals, name, peekCtx(ctx, 0));
                 popCtx(ctx);
                 break;
             }
             case OP_GET_GLOBAL: {
                 ObjString* name = READ_STRING();
                 Value value;
-                if (!tableGet(&vm.globals, name, &value)) {
-                    runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
-                    //flush(stdout);
-                    break;
+
+                if (!(ctx->namespace && tableGet(ctx->namespace, name, &value))) {
+                    if (!tableGet(&vm.globals, name, &value)) {
+                        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
+                        break;
+                    }
                 }
+
                 pushCtx(ctx, value);
                 break;
             }
             case OP_SET_GLOBAL: {
                 ObjString* name = READ_STRING();
-                if (tableSet(&vm.globals, name, peekCtx(ctx, 0))) {
-                    tableDelete(&vm.globals, name);
-                    runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
-                    break;
+                Value value = peekCtx(ctx, 0);
+
+                if (ctx->namespace != NULL) {
+                    if (tableSet(ctx->namespace, name, value)) {
+                        tableDelete(ctx->namespace, name);
+                        if (tableSet(&vm.globals, name, value)) {
+                            tableDelete(&vm.globals, name);
+                            runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
+                            break;
+                        }
+                    }
+                } else {
+                    if (tableSet(&vm.globals, name, value)) {
+                        tableDelete(&vm.globals, name);
+                        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
+                        break;
+                    }
                 }
+
                 break;
             }
             case OP_GET_LOCAL: {
@@ -2834,6 +2882,20 @@ static void* runCtx(void *context) {
                 if (IS_STRING(peekCtx(ctx, 0)) || IS_LIST(peekCtx(ctx, 0))){
                     runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
+                if (IS_NAMESPACE(peekCtx(ctx, 0))){
+                    ObjNamespace* ns = AS_NAMESPACE(peekCtx(ctx, 0));
+                    ObjString* name = READ_STRING();
+                    Value value;
+
+                    if (!tableGet(ns->namespace, name, &value)) {
+                        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s' in namespace '%s'.", name->chars, ns->name->chars);
+                        break;
+                    }
+
+                    popCtx(ctx);
+                    pushCtx(ctx, value);
+                    break;
+                }
                 if (IS_INSTANCE(peekCtx(ctx, 0))) {
                     ObjInstance* instance = AS_INSTANCE(peekCtx(ctx, 0));
                     ObjString* name = READ_STRING();
@@ -2900,7 +2962,22 @@ static void* runCtx(void *context) {
                 if (IS_STRING(peekCtx(ctx, 1)) || IS_LIST(peekCtx(ctx, 1))){
                     runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
+                if (IS_NAMESPACE(peekCtx(ctx, 1))){
+                    ObjNamespace* ns = AS_NAMESPACE(peekCtx(ctx, 1));
 
+                    ObjString* name = READ_STRING();
+                    Value value = peekCtx(ctx, 0);
+
+                    if (tableSet(ns->namespace, name, value)) {
+                        tableDelete(ns->namespace, name);
+                        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s' in namespace '%s'.", name->chars, ns->name->chars);
+                        break;
+                    }
+                    popCtx(ctx);
+                    popCtx(ctx);
+                    pushCtx(ctx, value);
+                    break;
+                }
                 if (IS_CLASS(peekCtx(ctx, 1))) {
                     ObjClass* klass = AS_CLASS(peekCtx(ctx, 1));
                     ObjString* name = READ_STRING();
@@ -3070,22 +3147,18 @@ static void* runCtx(void *context) {
                 ObjClosure* closure = AS_CLOSURE(closureVal);
                 ObjString* name = closure->function->name;
 
-
                 Value dispatchVal;
                 int scope = resolveMultiDispatchCtx(ctx, &dispatchVal, name);
                 if (scope) {
-                    // Reuse existing MultiDispatch
                     ObjMultiDispatch* dispatch = AS_MULTI_DISPATCH(dispatchVal);
                     multiDispatchAdd(dispatch, closure);
-                    popCtx(ctx); // remove closure
-                    //if (scope == 1)
-                        pushCtx(ctx, OBJ_VAL(dispatch)); // push dispatch instead
+                    popCtx(ctx); 
+                    pushCtx(ctx, OBJ_VAL(dispatch));
                 } else {
-                        // Create new one
                     ObjMultiDispatch* dispatch = newMultiDispatch(name);
                     multiDispatchAdd(dispatch, closure);
-                    popCtx(ctx); // remove closure
-                    pushCtx(ctx, OBJ_VAL(dispatch)); // push new dispatch
+                    popCtx(ctx); 
+                    pushCtx(ctx, OBJ_VAL(dispatch));
                 }
 
                 break;
@@ -3159,7 +3232,16 @@ static void* runCtx(void *context) {
                 throwRuntimeErrorCtx(ctx, instance); // a function you'll define
                 break;
             }
-            
+            case OP_NAMESPACE:{
+                ObjClosure* closure = AS_CLOSURE(peekCtx(ctx, 0));
+                ObjString* name = closure->function->name;
+
+                ObjNamespace* namespace = newNamespace(name);
+
+                joinInternal(spawnNamespace(closure, namespace));
+                popCtx(ctx);
+                pushCtx(ctx, OBJ_VAL(namespace));
+            }
         }
     }
     ctx->finished = true;
@@ -3183,6 +3265,7 @@ InterpretResult interpret(const char* source) {
         filename[len + 1] = '\0';
 
         serialize(filename, function);
+        return COMPILE_OK;
     }
     if (function == NULL) return INTERPRET_COMPILE_ERROR;
 
@@ -3211,16 +3294,11 @@ InterpretResult interpret(const char* source) {
 
 InterpretResult load(const char* source) {
         ObjFunction* function = deserialize(source);
-        push(OBJ_VAL(function));
-        ObjClosure* closure = newClosure(function);
-        pop();
-        push(OBJ_VAL(closure));
-        call(closure, 0);
+        Value input[1] = {OBJ_VAL(newClosure(function))};
 
-        if (vm.noRun)
-            return 0;
+        Value result = spawnNative(1, input);
+        result = joinInternal(result);
         
-        InterpretResult res = run();
-        return 0;
+        return INTERPRET_OK;
     
 }

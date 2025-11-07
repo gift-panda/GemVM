@@ -81,6 +81,7 @@ typedef enum {
     TYPE_LAMBDA,
     TYPE_INITIALIZER,
     TYPE_STATIC_METHOD,
+    TYPE_NAMESPACE,
 } FunctionType;
 
 typedef struct Compiler {
@@ -273,7 +274,7 @@ static void initCompiler(Compiler* compiler, FunctionType type) {
     local->isCaptured = false;
     local->name.start = "";
     // type == TYPE_METHOD || type == TYPE_INITIALIZER to remove static methods refering to the class
-    if (type != TYPE_FUNCTION) {
+    if (type == TYPE_METHOD || type == TYPE_INITIALIZER || type == TYPE_STATIC_METHOD) {
         local->name.start = "this";
         local->name.length = 4;
     } else {
@@ -1485,6 +1486,36 @@ char* getMathText() {
     return buf;
 }
 
+void namespaceStatement(){
+    uint8_t global = parseVariable("Expected namespace name.");
+    ObjString* namespaceName = copyString(parser.previous.start,
+                                         parser.previous.length);
+
+    Compiler compiler;
+    initCompiler(&compiler, TYPE_SCRIPT);
+
+    compiler.function->name = namespaceName;
+    current->function->arity = 0;
+
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before body.");
+    block();
+
+    ObjFunction* function = endCompiler();
+    int closureConstant = makeConstant(OBJ_VAL(function));
+
+    emitByte(OP_CLOSURE);
+    emitShortConstant(closureConstant);
+
+    for (int i = 0; i < function->upvalueCount; i++) {
+        emitByte(compiler.upvalues[i].isLocal ? 1 : 0);
+        emitByte(compiler.upvalues[i].index);
+    }
+
+    emitByte(OP_NAMESPACE);
+
+    defineVariable(global);
+}
+
 void compileImport(const char* source);
 
 static void statement() {
@@ -1515,7 +1546,6 @@ static void statement() {
 
         Scanner* sc = getScanner();
 
-        //Storing state
         int prevLine = sc->line;
         const char* prevStart = sc->start;
         const char* prevCurrent = sc->current;
@@ -1534,20 +1564,11 @@ static void statement() {
             compileImport(source);
         }
 
-        //Restoring state
         sc->current = prevCurrent;
         sc->start = prevStart;
         sc->line = prevLine;
-
-        /*function->name = fileName;
-        int constant = makeConstant(OBJ_VAL(function));
-        emitBytes(OP_CLOSURE, constant);
-        emitBytes(OP_CALL, 0);
-
-        */
+        
         advance();
-        //emitByte(OP_POP);
-
         free(source);
     }
     else if (match(TOKEN_PRINTLN)) {
@@ -1574,6 +1595,8 @@ static void statement() {
     }
     else if (match(TOKEN_RETURN)) {
         returnStatement();
+    }else if(match(TOKEN_NAMESPACE)){
+        namespaceStatement();
     }else {
         expressionStatement();
     }

@@ -3,6 +3,7 @@
 #include "value.h"
 #include "chunk.h"
 #include "table.h"
+#include "debug.h"
 #include "vm.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -119,6 +120,9 @@ static ObjFunction* deserialize_function() {
     func->upvalueCount = readInt();
     deserialize_chunk(&func->chunk);
 
+    if (vm.showBytecode)
+        disassembleChunk(&func->chunk, func->name != NULL ? func->name->chars : "<script>");
+        
     return func;
 }
 

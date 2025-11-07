@@ -205,6 +205,9 @@ int disassembleInstruction(Chunk* chunk, int offset) {
         }
         case OP_THROW:
             return simpleInstruction("OP_THROW", offset);
+        case OP_NAMESPACE:{
+            return simpleInstruction("OP_NAMESPACE", offset);
+        }
         default:
             printf("Unknown opcode %d\n", instruction);
             return offset + 1;
