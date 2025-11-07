@@ -82,7 +82,7 @@ typedef struct {
     struct ObjString* name;
 } ObjFunction;
 
-typedef Value (*NativeFn)(int argCount, Value* args);
+typedef Value (*NativeFn)(Thread* ctx, int argCount, Value* args);
 
 typedef struct {
     Obj obj;

@@ -2,11 +2,11 @@
 #include "value.h"
 #include "vm.h"
 
-static Value listIteratorNative(int argCount, Value* args) {
+static Value listIteratorNative(Thread* ctx, int argCount, Value* args) {
     Value classVal;
     ObjString* className = copyString("ListIterator", 12);
     if (!tableGet(&vm.globals, className, &classVal)) {
-        runtimeError(vm.lookUpErrorClass, "ListIterator class not found.");
+        runtimeErrorCtx(ctx, vm.lookUpErrorClass, "ListIterator class not found.");
         return NIL_VAL;
     }
 
@@ -23,9 +23,9 @@ static Value listIteratorNative(int argCount, Value* args) {
     return OBJ_VAL(instance);
 }
 
-static Value listAppendNative(int argCount, Value* args) {
+static Value listAppendNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method append for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -35,9 +35,9 @@ static Value listAppendNative(int argCount, Value* args) {
     return OBJ_VAL(list);
 }
 
-static Value listLengthNative(int argCount, Value* args) {
+static Value listLengthNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method length for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -46,15 +46,15 @@ static Value listLengthNative(int argCount, Value* args) {
     return NUMBER_VAL(list->elements.count);
 }
 
-static Value listGetNative(int argCount, Value* args) {
+static Value listGetNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method get for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "get: expected (Number) but got (%s).",
                      getValueTypeName(args[0]));
         return NIL_VAL;
@@ -63,7 +63,7 @@ static Value listGetNative(int argCount, Value* args) {
     ObjList* list = AS_LIST(args[-1]);
     int index = (int)AS_NUMBER(args[0]);
     if (index < 0 || index >= list->elements.count) {
-        runtimeError(vm.indexErrorClass,
+        runtimeErrorCtx(ctx, vm.indexErrorClass,
                      "get: index %d out of range (0–%d).",
                      index, list->elements.count - 1);
         return NIL_VAL;
@@ -72,15 +72,15 @@ static Value listGetNative(int argCount, Value* args) {
     return list->elements.values[index];
 }
 
-static Value listSetNative(int argCount, Value* args) {
+static Value listSetNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 2) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method set for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "set: expected (Number, Any) but got (%s, %s).",
                      getValueTypeName(args[0]), getValueTypeName(args[1]));
         return NIL_VAL;
@@ -89,7 +89,7 @@ static Value listSetNative(int argCount, Value* args) {
     ObjList* list = AS_LIST(args[-1]);
     int index = (int)AS_NUMBER(args[0]);
     if (index < 0 || index >= list->elements.count) {
-        runtimeError(vm.indexErrorClass,
+        runtimeErrorCtx(ctx, vm.indexErrorClass,
                      "set: index %d out of range (0–%d).",
                      index, list->elements.count - 1);
         return NIL_VAL;
@@ -99,16 +99,16 @@ static Value listSetNative(int argCount, Value* args) {
     return args[1];
 }
 
-static Value listPopNative(int argCount, Value* args) {
+static Value listPopNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method pop for arity %d.", argCount);
         return NIL_VAL;
     }
 
     ObjList* list = AS_LIST(args[-1]);
     if (list->elements.count == 0) {
-        runtimeError(vm.indexErrorClass, "pop: empty list.");
+        runtimeErrorCtx(ctx, vm.indexErrorClass, "pop: empty list.");
         return NIL_VAL;
     }
 
@@ -116,15 +116,15 @@ static Value listPopNative(int argCount, Value* args) {
     return list->elements.values[list->elements.count];
 }
 
-static Value listInsertNative(int argCount, Value* args) {
+static Value listInsertNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 2) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method insert for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "insert: expected (Number, Any) but got (%s, %s).",
                      getValueTypeName(args[0]), getValueTypeName(args[1]));
         return NIL_VAL;
@@ -133,7 +133,7 @@ static Value listInsertNative(int argCount, Value* args) {
     ObjList* list = AS_LIST(args[-1]);
     int index = (int)AS_NUMBER(args[0]);
     if (index < 0 || index > list->elements.count) {
-        runtimeError(vm.indexErrorClass,
+        runtimeErrorCtx(ctx, vm.indexErrorClass,
                      "insert: index %d out of range (0–%d).",
                      index, list->elements.count);
         return NIL_VAL;
@@ -156,9 +156,9 @@ static Value listInsertNative(int argCount, Value* args) {
     return args[1];
 }
 
-static Value listClearNative(int argCount, Value* args) {
+static Value listClearNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method clear for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -168,9 +168,9 @@ static Value listClearNative(int argCount, Value* args) {
     return NIL_VAL;
 }
 
-static Value listContainsNative(int argCount, Value* args) {
+static Value listContainsNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method contains for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -187,15 +187,15 @@ static Value listContainsNative(int argCount, Value* args) {
     return BOOL_VAL(false);
 }
 
-static Value listRemoveNative(int argCount, Value* args) {
+static Value listRemoveNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method remove for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "remove: expected (Number) but got (%s).",
                      getValueTypeName(args[0]));
         return NIL_VAL;
@@ -204,7 +204,7 @@ static Value listRemoveNative(int argCount, Value* args) {
     ObjList* list = AS_LIST(args[-1]);
     int index = (int)AS_NUMBER(args[0]);
     if (index < 0 || index >= list->elements.count) {
-        runtimeError(vm.indexErrorClass,
+        runtimeErrorCtx(ctx, vm.indexErrorClass,
                      "remove: index %d out of range (0–%d).",
                      index, list->elements.count - 1);
         return NIL_VAL;
@@ -219,14 +219,14 @@ static Value listRemoveNative(int argCount, Value* args) {
     return removed;
 }
 
-static bool compareWithComparator(Value comparator, Value a, Value b) {
+static bool compareWithComparator(Thread* ctx, Value comparator, Value a, Value b) {
     Value args[3] = {comparator, a, b };
-    Value result = spawnNative(3, args);
+    Value result = spawnNative(NULL, 3, args);
     
     result = joinInternal(result);
     
     if (!IS_BOOL(result) && !IS_NUMBER(result)) {
-        runtimeError(vm.typeErrorClass,
+        runtimeErrorCtx(ctx, vm.typeErrorClass,
                      "Comparator must return a boolean, got %s.",
                      getValueTypeName(result));
         return false;
@@ -235,7 +235,7 @@ static bool compareWithComparator(Value comparator, Value a, Value b) {
     return AS_BOOL(result);
 }
 
-static void quickSort(Value* arr, int left, int right, Value comparator, bool useComparator) {
+static void quickSort(Thread* ctx, Value* arr, int left, int right, Value comparator, bool useComparator) {
     if (left >= right) return;
 
     Value pivot = arr[right];
@@ -244,7 +244,7 @@ static void quickSort(Value* arr, int left, int right, Value comparator, bool us
     for (int j = left; j < right; j++) {
         bool lessOrEqual;
         if (useComparator) {
-            lessOrEqual = compareWithComparator(comparator, arr[j], pivot);
+            lessOrEqual = compareWithComparator(ctx, comparator, arr[j], pivot);
         } else {
             lessOrEqual = AS_NUMBER(arr[j]) <= AS_NUMBER(pivot);
         }
@@ -262,13 +262,13 @@ static void quickSort(Value* arr, int left, int right, Value comparator, bool us
     arr[right] = tmp;
 
     int pi = i + 1;
-    quickSort(arr, left, pi - 1, comparator, useComparator);
-    quickSort(arr, pi + 1, right, comparator, useComparator);
+    quickSort(ctx, arr, left, pi - 1, comparator, useComparator);
+    quickSort(ctx, arr, pi + 1, right, comparator, useComparator);
 }
 
-static Value listSortNative(int argCount, Value* args) {
+static Value listSortNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0 && argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "sort() expects 0 or 1 argument, got %d.", argCount);
         return NIL_VAL;
     }
@@ -281,7 +281,7 @@ static Value listSortNative(int argCount, Value* args) {
 
     if (argCount == 1) {
         if (!IS_MULTI_DISPATCH(args[0]) && !IS_CLOSURE(args[0])) {
-            runtimeError(vm.typeErrorClass,
+            runtimeErrorCtx(ctx, vm.typeErrorClass,
                          "sort(comparator): comparator must be a function.");
             return NIL_VAL;
         }
@@ -289,7 +289,7 @@ static Value listSortNative(int argCount, Value* args) {
         if(IS_MULTI_DISPATCH(args[0])){
             ObjMultiDispatch* dispatch = AS_MULTI_DISPATCH(args[0]);
             if (dispatch->closures[1] != NULL) {
-                runtimeError(vm.illegalArgumentsErrorClass,
+                runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                             "Comparator must have arity 2.");
                 return NIL_VAL;
     
@@ -298,7 +298,7 @@ static Value listSortNative(int argCount, Value* args) {
         else if(IS_CLOSURE(args[0])){
             ObjClosure* closure = AS_CLOSURE(args[0]);
             if(closure->function->arity != 2){
-                runtimeError(vm.illegalArgumentsErrorClass,
+                runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                             "Comparator must have arity 2.");
                 return NIL_VAL;
             }
@@ -312,7 +312,7 @@ static Value listSortNative(int argCount, Value* args) {
     if (!useComparator) {
         for (int i = 0; i < list->elements.count; i++) {
             if (!IS_NUMBER(list->elements.values[i])) {
-                runtimeError(vm.typeErrorClass,
+                runtimeErrorCtx(ctx, vm.typeErrorClass,
                              "sort: unsupported element type (%s).",
                              getValueTypeName(list->elements.values[i]));
                 return NIL_VAL;
@@ -320,7 +320,7 @@ static Value listSortNative(int argCount, Value* args) {
         }
     }
 
-    quickSort(list->elements.values, 0, list->elements.count - 1, comparator, useComparator);
+    quickSort(ctx, list->elements.values, 0, list->elements.count - 1, comparator, useComparator);
     return OBJ_VAL(list);
 }
 

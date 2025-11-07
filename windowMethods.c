@@ -4,13 +4,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "vm.h"
 #include "windowMethods.h"
 
 #include <assert.h>
 
 #include "value.h"
 #include "object.h"
-#include "vm.h"
 #include "memory.h"
 
 char* getValueTypeName(Value value);
@@ -18,21 +18,21 @@ char* getValueTypeName(Value value);
 static GlobalWindow gw = {0};  // One global SDL window
 
 
-Value window_init(int argCount, Value* args) {
+Value window_init(Thread* ctx, int argCount, Value* args) {
     if (argCount != 3) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method init for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (gw.isInitialized) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "init() can only be called once — window already initialized.");
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0]) || !IS_NUMBER(args[1]) || !IS_STRING(args[2])) {
-        runtimeError(vm.typeErrorClass,
+        runtimeErrorCtx(ctx, vm.typeErrorClass,
                      "init(width, height, title) expected (Number, Number, String), but got (%s, %s, %s).",
                      getValueTypeName(args[0]),
                      getValueTypeName(args[1]),
@@ -45,19 +45,19 @@ Value window_init(int argCount, Value* args) {
     const char* title = AS_STRING(args[2])->chars;
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
-        runtimeError(vm.formatErrorClass, "ray init failed: %s", SDL_GetError());
+        runtimeErrorCtx(ctx, vm.formatErrorClass, "ray init failed: %s", SDL_GetError());
         return NIL_VAL;
     }
 
     gw.window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, 0);
     if (!gw.window) {
-        runtimeError(vm.formatErrorClass, "window creation failed: %s", SDL_GetError());
+        runtimeErrorCtx(ctx, vm.formatErrorClass, "window creation failed: %s", SDL_GetError());
         return NIL_VAL;
     }
 
     gw.renderer = SDL_CreateRenderer(gw.window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!gw.renderer) {
-        runtimeError(vm.formatErrorClass, "renderer creation failed: %s", SDL_GetError());
+        runtimeErrorCtx(ctx, vm.formatErrorClass, "renderer creation failed: %s", SDL_GetError());
         SDL_DestroyWindow(gw.window);
         gw.window = NULL;
         return NIL_VAL;
@@ -67,15 +67,15 @@ Value window_init(int argCount, Value* args) {
     return NIL_VAL;
 }
 
-Value window_exit(int argCount, Value* args) {
+Value window_exit(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method exit for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!gw.isInitialized) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "exit() called before init() — no active window to close.");
         return NIL_VAL;
     }
@@ -91,21 +91,21 @@ Value window_exit(int argCount, Value* args) {
     return NIL_VAL;
 }
 
-Value window_clear(int argCount, Value* args) {
+Value window_clear(Thread* ctx, int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method clear for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!gw.isInitialized) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "clear() called before init() — no active window to draw on.");
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0])) {
-        runtimeError(vm.typeErrorClass,
+        runtimeErrorCtx(ctx, vm.typeErrorClass,
                      "clear(color) expected (Number), but got (%s).",
                      getValueTypeName(args[0]));
         return NIL_VAL;
@@ -122,15 +122,15 @@ Value window_clear(int argCount, Value* args) {
     return NIL_VAL;
 }
 
-Value window_drawRect(int argCount, Value* args) {
+Value window_drawRect(Thread* ctx, int argCount, Value* args) {
     if (argCount != 5) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method drawRect for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!gw.isInitialized) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "drawRect() called before init() — no active window to draw on.");
         return NIL_VAL;
     }
@@ -138,7 +138,7 @@ Value window_drawRect(int argCount, Value* args) {
     if (!IS_NUMBER(args[0]) || !IS_NUMBER(args[1]) ||
         !IS_NUMBER(args[2]) || !IS_NUMBER(args[3]) ||
         !IS_NUMBER(args[4])) {
-        runtimeError(vm.typeErrorClass,
+        runtimeErrorCtx(ctx, vm.typeErrorClass,
                      "drawRect(x, y, width, height, color) expected (Number, Number, Number, Number, Number), "
                      "but got (%s, %s, %s, %s, %s).",
                      getValueTypeName(args[0]),
@@ -163,7 +163,7 @@ Value window_drawRect(int argCount, Value* args) {
 
     SDL_Rect rect = {x, y, w, h};
     if (SDL_RenderFillRect(gw.renderer, &rect) != 0) {
-        runtimeError(vm.formatErrorClass, "drawRect failed: %s", SDL_GetError());
+        runtimeErrorCtx(ctx, vm.formatErrorClass, "drawRect failed: %s", SDL_GetError());
         return NIL_VAL;
     }
 
@@ -173,15 +173,15 @@ Value window_drawRect(int argCount, Value* args) {
 
 #include <SDL2_gfxPrimitives.h>
 
-Value window_drawLine(int argCount, Value* args) {
+Value window_drawLine(Thread* ctx, int argCount, Value* args) {
     if (argCount != 5 && argCount != 6) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method drawLine for arity %d.", argCount);
         return NIL_VAL;
     }
     
     if (!gw.isInitialized) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "drawLine() called before init() — no active window to draw on.");
         return NIL_VAL;
     }
@@ -190,7 +190,7 @@ Value window_drawLine(int argCount, Value* args) {
         !IS_NUMBER(args[2]) || !IS_NUMBER(args[3]) ||
         !IS_NUMBER(args[4]) || (argCount == 6 && !IS_NUMBER(args[5]))) {
         if (argCount == 6) {
-            runtimeError(vm.typeErrorClass,
+            runtimeErrorCtx(ctx, vm.typeErrorClass,
                          "drawLine(x1, y1, x2, y2, color, thickness) expected (Number, Number, Number, Number, Number, Number), "
                          "but got (%s, %s, %s, %s, %s, %s).",
                          getValueTypeName(args[0]),
@@ -200,7 +200,7 @@ Value window_drawLine(int argCount, Value* args) {
                          getValueTypeName(args[4]),
                          getValueTypeName(args[5]));
         } else {
-            runtimeError(vm.typeErrorClass,
+            runtimeErrorCtx(ctx, vm.typeErrorClass,
                          "drawLine(x1, y1, x2, y2, color) expected (Number, Number, Number, Number, Number), "
                          "but got (%s, %s, %s, %s, %s).",
                          getValueTypeName(args[0]),
@@ -224,22 +224,22 @@ Value window_drawLine(int argCount, Value* args) {
     Uint8 b = color & 0xFF;
 
     if (GFX_thickLineRGBA(gw.renderer, x1, y1, x2, y2, thickness, r, g, b, 255) != 0) {
-        runtimeError(vm.formatErrorClass, "drawLine failed: %s", SDL_GetError());
+        runtimeErrorCtx(ctx, vm.formatErrorClass, "drawLine failed: %s", SDL_GetError());
         return NIL_VAL;
     }
 
     return NIL_VAL;
 }
 
-Value window_drawTriangle(int argCount, Value* args) {
+Value window_drawTriangle(Thread* ctx, int argCount, Value* args) {
     if (argCount != 7) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method drawTriangle for arity %d.", argCount);
         return NIL_VAL;
     }
     
     if (!gw.isInitialized) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "drawTriangle() called before init() — no active window to draw on.");
         return NIL_VAL;
     }
@@ -248,7 +248,7 @@ Value window_drawTriangle(int argCount, Value* args) {
         !IS_NUMBER(args[2]) || !IS_NUMBER(args[3]) ||
         !IS_NUMBER(args[4]) || !IS_NUMBER(args[5]) ||
         !IS_NUMBER(args[6])) {
-        runtimeError(vm.typeErrorClass,
+        runtimeErrorCtx(ctx, vm.typeErrorClass,
                      "drawTriangle(x1, y1, x2, y2, x3, y3, color) expected "
                      "(Number, Number, Number, Number, Number, Number, Number), "
                      "but got (%s, %s, %s, %s, %s, %s, %s).",
@@ -275,7 +275,7 @@ Value window_drawTriangle(int argCount, Value* args) {
     Uint8 b = color & 0xFF;
 
     if (GFX_filledTrigonRGBA(gw.renderer, x1, y1, x2, y2, x3, y3, r, g, b, 255) != 0) {
-        runtimeError(vm.formatErrorClass, "drawTriangle failed: %s", SDL_GetError());
+        runtimeErrorCtx(ctx, vm.formatErrorClass, "drawTriangle failed: %s", SDL_GetError());
         return NIL_VAL;
     }
 
@@ -284,22 +284,22 @@ Value window_drawTriangle(int argCount, Value* args) {
 
 #include <SDL2/SDL_ttf.h>
 
-Value window_drawText(int argCount, Value* args) {
+Value window_drawText(Thread* ctx, int argCount, Value* args) {
     if (argCount != 5) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method drawText for arity %d.", argCount);
         return NIL_VAL;
     }
     
     if (!gw.isInitialized) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "drawText() called before init() — no active window to draw on.");
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0]) || !IS_NUMBER(args[1]) ||
         !IS_STRING(args[2]) || !IS_NUMBER(args[3]) || !IS_NUMBER(args[4])) {
-        runtimeError(vm.typeErrorClass,
+        runtimeErrorCtx(ctx, vm.typeErrorClass,
                      "drawText(x, y, text, size, color) expected (Number, Number, String, Number, Number), "
                      "but got (%s, %s, %s, %s, %s).",
                      getValueTypeName(args[0]),
@@ -321,14 +321,14 @@ Value window_drawText(int argCount, Value* args) {
     Uint8 b = colorVal & 0xFF;
 
     if (TTF_WasInit() == 0 && TTF_Init() == -1) {
-        runtimeError(vm.formatErrorClass, "text system init failed: %s", TTF_GetError());
+        runtimeErrorCtx(ctx, vm.formatErrorClass, "text system init failed: %s", TTF_GetError());
         return NIL_VAL;
     }
 
     const char* defaultFontPath = "/usr/share/fonts/TTF/ZedMonoNerdFont-Regular.ttf";
     TTF_Font* font = TTF_OpenFont(defaultFontPath, fontSize);
     if (!font) {
-        runtimeError(vm.formatErrorClass, "font load failed: %s", TTF_GetError());
+        runtimeErrorCtx(ctx, vm.formatErrorClass, "font load failed: %s", TTF_GetError());
         return NIL_VAL;
     }
 
@@ -336,7 +336,7 @@ Value window_drawText(int argCount, Value* args) {
     SDL_Surface* surface = TTF_RenderUTF8_Blended(font, textObj->chars, color);
     if (!surface) {
         TTF_CloseFont(font);
-        runtimeError(vm.formatErrorClass, "text render failed: %s", TTF_GetError());
+        runtimeErrorCtx(ctx, vm.formatErrorClass, "text render failed: %s", TTF_GetError());
         return NIL_VAL;
     }
 
@@ -344,7 +344,7 @@ Value window_drawText(int argCount, Value* args) {
     if (!texture) {
         SDL_FreeSurface(surface);
         TTF_CloseFont(font);
-        runtimeError(vm.formatErrorClass, "text texture creation failed: %s", SDL_GetError());
+        runtimeErrorCtx(ctx, vm.formatErrorClass, "text texture creation failed: %s", SDL_GetError());
         return NIL_VAL;
     }
 
@@ -354,7 +354,7 @@ Value window_drawText(int argCount, Value* args) {
     if (SDL_RenderCopy(gw.renderer, texture, NULL, &dst) != 0) {
         SDL_DestroyTexture(texture);
         TTF_CloseFont(font);
-        runtimeError(vm.formatErrorClass, "text draw failed: %s", SDL_GetError());
+        runtimeErrorCtx(ctx, vm.formatErrorClass, "text draw failed: %s", SDL_GetError());
         return NIL_VAL;
     }
 
@@ -364,15 +364,15 @@ Value window_drawText(int argCount, Value* args) {
     return NIL_VAL;
 }
 
-Value window_update(int argCount, Value* args) {
+Value window_update(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method update for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!gw.renderer) {
-        runtimeError(vm.errorClass, "Renderer failed.");
+        runtimeErrorCtx(ctx, vm.errorClass, "Renderer failed.");
         return NIL_VAL;
     }
 
@@ -380,9 +380,9 @@ Value window_update(int argCount, Value* args) {
     return NIL_VAL;
 }
 
-Value window_pollEvent(int argCount, Value* args) {
+Value window_pollEvent(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass, "No method pollEvent for arity %d.", argCount);
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass, "No method pollEvent for arity %d.", argCount);
         return NIL_VAL;
     }
 
@@ -447,9 +447,9 @@ Value window_pollEvent(int argCount, Value* args) {
 }
 
 
-Value window_getMousePosition(int argCount, Value* args) {
+Value window_getMousePosition(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass, "No method getMousePosition for arity %d.", argCount);
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass, "No method getMousePosition for arity %d.", argCount);
         return NIL_VAL;
     }
 
@@ -463,16 +463,16 @@ Value window_getMousePosition(int argCount, Value* args) {
     return OBJ_VAL(list);
 }
 
-Value window_drawCircle(int argCount, Value* args) {
+Value window_drawCircle(Thread* ctx, int argCount, Value* args) {
     if (argCount != 4) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method drawCircle for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0]) || !IS_NUMBER(args[1]) ||
         !IS_NUMBER(args[2]) || !IS_NUMBER(args[3])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "drawCircle(x, y, radius, color) expects arguments (Number, Number, Number, Number).");
         return NIL_VAL;
     }
@@ -483,7 +483,7 @@ Value window_drawCircle(int argCount, Value* args) {
     int color = (int)AS_NUMBER(args[3]);
 
     if (!gw.renderer) {
-        runtimeError(vm.errorClass, "Renderer failed.");
+        runtimeErrorCtx(ctx, vm.errorClass, "Renderer failed.");
         return NIL_VAL;
     }
 
@@ -507,16 +507,16 @@ Value window_drawCircle(int argCount, Value* args) {
 }
 
 #include <SDL_image.h>
-static SDL_Texture* loadTexture(const char* path) {
+static SDL_Texture* loadTexture(Thread* ctx, const char* path) {
     if (!path) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "loadTexture(path) expects argument (String).");
         return NULL;
     }
 
     SDL_Surface* surface = IMG_Load(path);
     if (!surface) {
-        runtimeError(vm.errorClass,
+        runtimeErrorCtx(ctx, vm.errorClass,
                      "Failed to load texture: %s.", IMG_GetError());
         return NULL;
     }
@@ -525,30 +525,30 @@ static SDL_Texture* loadTexture(const char* path) {
     SDL_FreeSurface(surface);
 
     if (!texture) {
-        runtimeError(vm.errorClass, "Renderer failed to create texture.");
+        runtimeErrorCtx(ctx, vm.errorClass, "Renderer failed to create texture.");
         return NULL;
     }
 
     return texture;
 }
 
-Value window_loadImage(int argCount, Value* args) {
+Value window_loadImage(Thread* ctx, int argCount, Value* args) {
     if (argCount != 1 && argCount != 3) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "loadImage: no method for %d argument(s).", argCount);
         return NIL_VAL;
     }
 
     if (argCount == 1) {
         if (!IS_STRING(args[0])) {
-            runtimeError(vm.illegalArgumentsErrorClass,
+            runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                 "loadImage: expected (String) but got (%s).",
                 getValueTypeName(args[0]));
             return NIL_VAL;
         }
 
         ObjString* path = AS_STRING(args[0]);
-        SDL_Texture* tex = loadTexture(path->chars);
+        SDL_Texture* tex = loadTexture(ctx, path->chars);
         if (!tex) return NIL_VAL;
 
         int texW, texH;
@@ -560,7 +560,7 @@ Value window_loadImage(int argCount, Value* args) {
 
     if (argCount == 3) {
         if (!IS_STRING(args[0]) || !IS_NUMBER(args[1]) || !IS_NUMBER(args[2])) {
-            runtimeError(vm.illegalArgumentsErrorClass,
+            runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                 "loadImage: expected (String, Number, Number) but got (%s, %s, %s).",
                 getValueTypeName(args[0]),
                 getValueTypeName(args[1]),
@@ -569,7 +569,7 @@ Value window_loadImage(int argCount, Value* args) {
         }
 
         ObjString* path = AS_STRING(args[0]);
-        SDL_Texture* tex = loadTexture(path->chars);
+        SDL_Texture* tex = loadTexture(ctx, path->chars);
         if (!tex) return NIL_VAL;
 
         int width  = (int)AS_NUMBER(args[1]);
@@ -582,9 +582,9 @@ Value window_loadImage(int argCount, Value* args) {
     return NIL_VAL; // unreachable
 }
 
-Value window_drawImage(int argCount, Value* args) {
+Value window_drawImage(Thread* ctx, int argCount, Value* args) {
     if (argCount != 3 && argCount != 5) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "drawImage: no method for %d argument(s).", argCount);
         return NIL_VAL;
     }
@@ -593,7 +593,7 @@ Value window_drawImage(int argCount, Value* args) {
         if (!IS_NUMBER(args[0]) || !IS_NUMBER(args[1]) ||
             !(IS_OBJ(args[2]) && AS_OBJ(args[2])->type == OBJ_IMAGE)) {
 
-            runtimeError(vm.illegalArgumentsErrorClass,
+            runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                 "drawImage: expected (Number, Number, Image) but got (%s, %s, %s).",
                 getValueTypeName(args[0]),
                 getValueTypeName(args[1]),
@@ -614,7 +614,7 @@ Value window_drawImage(int argCount, Value* args) {
         if (!IS_NUMBER(args[0]) || !IS_NUMBER(args[1]) ||
             !IS_STRING(args[2]) || !IS_NUMBER(args[3]) || !IS_NUMBER(args[4])) {
 
-            runtimeError(vm.illegalArgumentsErrorClass,
+            runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                 "drawImage: expected (Number, Number, String, Number, Number) but got (%s, %s, %s, %s, %s).",
                 getValueTypeName(args[0]),
                 getValueTypeName(args[1]),
@@ -630,7 +630,7 @@ Value window_drawImage(int argCount, Value* args) {
         int w = (int)AS_NUMBER(args[3]);
         int h = (int)AS_NUMBER(args[4]);
 
-        SDL_Texture* tex = loadTexture(path->chars);
+        SDL_Texture* tex = loadTexture(ctx, path->chars);
         if (!tex) return NIL_VAL;
 
         SDL_Rect dst = {x, y, w, h};
@@ -643,15 +643,15 @@ Value window_drawImage(int argCount, Value* args) {
     return NIL_VAL;
 }
 
-Value Image_getWidth(int argCount, Value* args) {
+Value Image_getWidth(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method getWidth for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_IMAGE(args[-1])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "getWidth: expected receiver (Image) but got (%s).",
                      getValueTypeName(args[-1]));
         return NIL_VAL;
@@ -661,15 +661,15 @@ Value Image_getWidth(int argCount, Value* args) {
     return NUMBER_VAL(image->width);
 }
 
-Value Image_getHeight(int argCount, Value* args) {
+Value Image_getHeight(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method getHeight for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_IMAGE(args[-1])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "getHeight: expected receiver (Image) but got (%s).",
                      getValueTypeName(args[-1]));
         return NIL_VAL;

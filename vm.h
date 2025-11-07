@@ -57,15 +57,6 @@ typedef struct {
     Table strings;
 
     struct ObjUpvalue* openUpvalues;
-    struct Obj* objects;
-
-    int grayCount;
-    int grayCapacity;
-    struct Obj** grayStack;
-
-    size_t bytesAllocated;
-    size_t nextGC;
-    size_t maxRAM;
 
     ObjString* initString;
     ObjString* toString;
@@ -91,7 +82,6 @@ typedef struct {
     ObjString* formatErrorString;
     ObjClass* formatErrorClass;
 
-    pthread_t main;
 
     const char* path;
     bool isInvokingNative;
@@ -102,12 +92,6 @@ typedef struct {
     bool hasError;
     bool zip;
 
-    atomic_bool gcRequest;
-    atomic_int threads;
-    atomic_int waiting;
-
-    pthread_mutex_t lock;
-    pthread_cond_t cond;
 } VM;
 
 // ---------------------
@@ -129,9 +113,9 @@ InterpretResult load(const char* source);
 void push(Value value);
 Value pop();
 void printStack();
-CallFrame* runtimeError(ObjClass*, const char* format, ...);
+CallFrame* runtimeErrorCtx(Thread*, ObjClass*, const char* format, ...);
 
-Value spawnNative(int argCount, Value* args);
-Value joinNative(int argCount, Value* args);
+Value spawnNative(Thread* ctx, int argCount, Value* args);
+Value joinNative(Thread* ctx, int argCount, Value* args);
 Value joinInternal(Value arg);
 #endif

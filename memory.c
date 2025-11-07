@@ -48,6 +48,7 @@ void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
     if (result == NULL) exit(1);
     return result;
 }
+/*
 void markObject(Obj* object) {
     if (object == NULL) return;
     if (object->isMarked) return;
@@ -322,4 +323,4 @@ void collectGarbage() {
 #endif
 
 }
-
+*/

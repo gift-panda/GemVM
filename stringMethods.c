@@ -12,9 +12,9 @@
 #include "vm.h"
 #include <stdlib.h>
 
-static Value stringIteratorNative(int argCount, Value* args) {
+static Value stringIteratorNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method iterator for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -22,7 +22,7 @@ static Value stringIteratorNative(int argCount, Value* args) {
     Value classVal;
     ObjString* className = copyString("StringIterator", 14);
     if (!tableGet(&vm.globals, className, &classVal)) {
-        runtimeError(vm.lookUpErrorClass, "StringIterator class not found.");
+        runtimeErrorCtx(ctx, vm.lookUpErrorClass, "StringIterator class not found.");
         return NIL_VAL;
     }
 
@@ -39,9 +39,9 @@ static Value stringIteratorNative(int argCount, Value* args) {
     return OBJ_VAL(instance);
 }
 
-static Value stringCharCodeNative(int argCount, Value* args) {
+static Value stringCharCodeNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method charCode for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -52,15 +52,15 @@ static Value stringCharCodeNative(int argCount, Value* args) {
     return NUMBER_VAL((uint8_t)self->chars[0]);
 }
 
-static Value stringSplitNative(int argCount, Value* args) {
+static Value stringSplitNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method split for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_STRING(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "split: expected (String) but got (%s).",
                      getValueTypeName(args[0]));
         return NIL_VAL;
@@ -107,9 +107,9 @@ static Value stringSplitNative(int argCount, Value* args) {
 
 #include <ctype.h>
 
-static Value stringTrimNative(int argCount, Value* args) {
+static Value stringTrimNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method trim for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -125,9 +125,9 @@ static Value stringTrimNative(int argCount, Value* args) {
     return OBJ_VAL(copyString(start, newLength));
 }
 
-static Value stringLengthNative(int argCount, Value* args) {
+static Value stringLengthNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method length for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -136,15 +136,15 @@ static Value stringLengthNative(int argCount, Value* args) {
     return NUMBER_VAL(string->length);
 }
 
-static Value stringStartsWithNative(int argCount, Value* args) {
+static Value stringStartsWithNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method startsWith for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_STRING(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "startsWith: expected (String) but got (%s).",
                      getValueTypeName(args[0]));
         return NIL_VAL;
@@ -162,15 +162,15 @@ static Value stringStartsWithNative(int argCount, Value* args) {
     return BOOL_VAL(true);
 }
 
-static Value stringEndsWithNative(int argCount, Value* args) {
+static Value stringEndsWithNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method endsWith for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_STRING(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "endsWith: expected (String) but got (%s).",
                      getValueTypeName(args[0]));
         return NIL_VAL;
@@ -189,15 +189,15 @@ static Value stringEndsWithNative(int argCount, Value* args) {
     return BOOL_VAL(true);
 }
 
-static Value stringCharAtNative(int argCount, Value* args) {
+static Value stringCharAtNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method charAt for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "charAt: expected (Number) but got (%s).",
                      getValueTypeName(args[0]));
         return NIL_VAL;
@@ -210,9 +210,9 @@ static Value stringCharAtNative(int argCount, Value* args) {
     return OBJ_VAL(copyString(&string->chars[index], 1));
 }
 
-static Value stringToUpperCaseNative(int argCount, Value* args) {
+static Value stringToUpperCaseNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method toUpperCase for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -228,9 +228,9 @@ static Value stringToUpperCaseNative(int argCount, Value* args) {
     return result;
 }
 
-static Value stringToLowerCaseNative(int argCount, Value* args) {
+static Value stringToLowerCaseNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method toLowerCase for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -247,15 +247,15 @@ static Value stringToLowerCaseNative(int argCount, Value* args) {
     return result;
 }
 
-static Value stringSubstringNative(int argCount, Value* args) {
+static Value stringSubstringNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 2) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "No method substring for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_NUMBER(args[0]) || !IS_NUMBER(args[1])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "substring: expected (Number, Number) but got (%s, %s).",
                      getValueTypeName(args[0]), getValueTypeName(args[1]));
         return NIL_VAL;
@@ -266,22 +266,22 @@ static Value stringSubstringNative(int argCount, Value* args) {
     int end = (int)AS_NUMBER(args[1]);
 
     if (start < 0 || end > string->length || start > end) {
-        runtimeError(vm.indexErrorClass, "substring: indices out of bounds.");
+        runtimeErrorCtx(ctx, vm.indexErrorClass, "substring: indices out of bounds.");
         return NIL_VAL;
     }
 
     return OBJ_VAL(copyString(&string->chars[start], end - start));
 }
 
-static Value stringIndexOfNative(int argCount, Value* args) {
+static Value stringIndexOfNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 1) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "no method indexOf for arity %d.", argCount);
         return NIL_VAL;
     }
 
     if (!IS_STRING(args[0])) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "indexOf: expected (String) but got (%s).", getValueTypeName(args[0]));
         return NIL_VAL;
     }
@@ -299,9 +299,9 @@ static Value stringIndexOfNative(int argCount, Value* args) {
 }
 
 
-static Value stringParseNumberNative(int argCount, Value* args) {
+static Value stringParseNumberNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "no method asNum for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -311,7 +311,7 @@ static Value stringParseNumberNative(int argCount, Value* args) {
     double value = strtod(str->chars, &end);
 
     if (end == str->chars || *end != '\0') {
-        runtimeError(vm.formatErrorClass,
+        runtimeErrorCtx(ctx, vm.formatErrorClass,
                      "asNum: invalid numeric value (%s).", str->chars);
         return NIL_VAL;
     }
@@ -319,9 +319,9 @@ static Value stringParseNumberNative(int argCount, Value* args) {
     return NUMBER_VAL(value);
 }
 
-static Value stringParseBooleanNative(int argCount, Value* args) {
+static Value stringParseBooleanNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "no method parseBoolean for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -332,14 +332,14 @@ static Value stringParseBooleanNative(int argCount, Value* args) {
     if (strcasecmp(str->chars, "false") == 0 || strcmp(str->chars, "0") == 0)
         return BOOL_VAL(false);
 
-    runtimeError(vm.formatErrorClass,
+    runtimeErrorCtx(ctx, vm.formatErrorClass,
                  "parseBoolean: invalid boolean value (%s).", str->chars);
     return NIL_VAL;
 }
 
-static Value str_isDigit(int argCount, Value* args) {
+static Value str_isDigit(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "no method isDigit for arity %d.", argCount);
         return NIL_VAL;
     }
@@ -350,9 +350,9 @@ static Value str_isDigit(int argCount, Value* args) {
     return BOOL_VAL(end != str->chars && *end == '\0');
 }
 
-static Value str_parse(int argCount, Value* args) {
+static Value str_parse(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
-        runtimeError(vm.illegalArgumentsErrorClass,
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
                      "no method parse for arity %d.", argCount);
         return NIL_VAL;
     }
