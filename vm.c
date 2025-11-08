@@ -890,8 +890,8 @@ bool hasAncestor(ObjInstance* instance, ObjClass* ancestor) {
 }
 
 Value readConst(CallFrame* frame){
-    frame->ip += 1;
-    return frame->closure->function->chunk.constants.values[/*(frame->ip[-3] << 16 | frame->ip[-2] << 8 | */frame->ip[-1]];
+    frame->ip += 2;
+    return frame->closure->function->chunk.constants.values[(uint16_t)((frame->ip[-2] << 8) | frame->ip[-1])];
 }
 
 
@@ -903,7 +903,6 @@ static void* runCtx(void *context) {
             pthread_exit(NULL);
         }
     }
-
     
     Thread* ctx = (Thread*)context;
     ctx->finished = false;
