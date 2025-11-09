@@ -12,6 +12,7 @@
 typedef struct Thread Thread;
 typedef struct ObjClosure ObjClosure;
 typedef struct ObjClass ObjClass;
+typedef struct ObjInstance ObjInstance;
 
 // ---------------------
 // Object type macros
@@ -44,6 +45,8 @@ typedef struct ObjClass ObjClass;
 #define AS_THREAD(value)       ((ObjThread*)AS_OBJ(value))
 #define IS_NAMESPACE(value)       isObjType(value, OBJ_NAMESPACE)
 #define AS_NAMESPACE(value)       ((ObjNamespace*)AS_OBJ(value))
+#define IS_BOUND_NATIVE(value)       isObjType(value, OBJ_BOUND_NATIVE)
+#define AS_BOUND_NATIVE(value)       ((ObjBoundNative*)AS_OBJ(value))
 
 // ---------------------
 // Object types
@@ -63,6 +66,7 @@ typedef enum {
     OBJ_IMAGE,
     OBJ_THREAD,
     OBJ_NAMESPACE,
+    OBJ_BOUND_NATIVE,
 } ObjType;
 
 struct Obj {
@@ -94,6 +98,7 @@ typedef struct ObjString {
     int length;
     char* chars;
     uint32_t hash;
+    ObjInstance* instance;
 } ObjString;
 
 typedef struct ObjUpvalue {
@@ -133,9 +138,16 @@ typedef struct ObjBoundMethod {
     ObjClosure* method[10];
 } ObjBoundMethod;
 
+typedef struct ObjBoundNative {
+    Obj obj;
+    Value receiver;
+    NativeFn* method;
+} ObjBoundNative;
+
 typedef struct ObjList {
     Obj obj;
     ValueArray elements;
+    ObjInstance* instance;
 } ObjList;
 
 typedef struct ObjMultiDispatch {
@@ -149,12 +161,14 @@ typedef struct ObjImage {
     SDL_Texture* texture;
     int width;
     int height;
+    ObjInstance* instance;
 } ObjImage;
 
 typedef struct ObjThread {
     Obj obj;
     pthread_t *thread;
-    Thread *ctx; // pointer is ok with forward declaration
+    Thread *ctx;
+    ObjInstance* instance;
 } ObjThread;
 
 typedef struct ObjNamespace{
@@ -166,7 +180,8 @@ typedef struct ObjNamespace{
 // ---------------------
 // Functions
 // ---------------------
-ObjBoundMethod* newBoundMethod(Value receiver, ObjString*);
+ObjBoundMethod* newBoundMethod(Value receiver, ObjString* name);
+ObjBoundNative* newBoundNative(NativeFn* fn);
 ObjClass* newClass(ObjString* name);
 ObjString* newString(char* chars, int length);
 ObjClosure* newClosure(ObjFunction* function);
@@ -183,6 +198,11 @@ ObjThread* newThread(pthread_t *thread, Thread *ctx);
 ObjNamespace* newNamespace(ObjString* name);
 
 void printObject(Value value);
+uint32_t hashString(const char* key, int length);
+
+Obj* allocateObject(size_t size, ObjType type);
+#define ALLOCATE_OBJ(type, objectType) \
+    (type*)allocateObject(sizeof(type), objectType)
 
 static inline bool isObjType(Value value, ObjType type) {
     return IS_OBJ(value) && AS_OBJ(value)->type == type;

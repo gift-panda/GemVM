@@ -37,8 +37,9 @@ static LoopContext loopStack[MAX_LOOP_DEPTH];
 static int loopDepth = 0;
 static int continueJumpOffset = -1;
 
-static Token lastVariableName;
-static bool lastWasVariable;
+static char** importedFiles = NULL;
+static int importedCount = 0;
+static int importedCapacity = 0;
 
 typedef enum {
     PREC_NONE,
@@ -445,8 +446,6 @@ static void namedVariable(Token name, bool canAssign) {
 
 static void variable(bool canAssign) {
     Token name = parser.previous;
-    lastVariableName = name;
-    lastWasVariable = true;
     namedVariable(name, canAssign);
 }
 
@@ -639,7 +638,6 @@ ParseRule rules[] = {
 };
 
 static void parsePrecedence(Precedence precedence) {
-    lastWasVariable = false;
     advance();
     ParseFn prefixRule = getRule(parser.previous.type)->prefix;
     if (prefixRule == NULL) {
@@ -1439,6 +1437,28 @@ static void statement() {
         }
         char* file = fileName->chars;
 
+         bool alreadyImported = false;
+        for (int i = 0; i < importedCount; i++) {
+            if (strcmp(importedFiles[i], file) == 0) {
+                alreadyImported = true;
+                break;
+            }
+        }
+
+        if (alreadyImported) {
+            // Skip import but still consume the semicolon
+            advance();
+            return;
+        }
+
+        // Add this file name to the imported list
+        if (importedCount + 1 > importedCapacity) {
+            importedCapacity = importedCapacity < 8 ? 8 : importedCapacity * 2;
+            importedFiles = realloc(importedFiles, sizeof(char*) * importedCapacity);
+        }
+
+        importedFiles[importedCount++] = strdup(file);
+        
         char* source;
         if (memcmp(file, "Window", 6) == 0) {
             source = getWindowText();
@@ -1459,19 +1479,14 @@ static void statement() {
         const char* prevStart = sc->start;
         const char* prevCurrent = sc->current;
 
-        if(1){
-            ObjFunction* function = compile(source);
-            function->name = fileName;
-            int constant = makeConstant(OBJ_VAL(function));
-            emitByte(OP_CLOSURE);
-            emitShort(constant);
+        ObjFunction* function = compile(source);
+        function->name = fileName;
+        int constant = makeConstant(OBJ_VAL(function));
+        emitByte(OP_CLOSURE);
+        emitShort(constant);
             
-            emitBytes(OP_CALL, 0);
-            emitByte(OP_POP);
-        }
-        else{
-            compileImport(source);
-        }
+        emitBytes(OP_CALL, 0);
+        emitByte(OP_POP);
 
         sc->current = prevCurrent;
         sc->start = prevStart;

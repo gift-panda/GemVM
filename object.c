@@ -14,17 +14,10 @@
 #include "value.h"
 #include "vm.h"
 
-
-#define ALLOCATE_OBJ(type, objectType) \
-(type*)allocateObject(sizeof(type), objectType)
-
-static Obj* allocateObject(size_t size, ObjType type) {
+Obj* allocateObject(size_t size, ObjType type) {
     Obj* object = (Obj*)reallocate(NULL, 0, size);
     object->type = type;
     object->isMarked = false;
-
-    //object->next = vm.objects;
-    //vm.objects = object;
 
 #ifdef DEBUG_LOG_GC
     printf("%p allocate %zu for %d\n", (void*)object, size, type);
@@ -41,6 +34,14 @@ ObjBoundMethod* newBoundMethod(Value receiver, ObjString* name) {
         bound->method[i] = NULL;
     }
     bound->name = name;
+    return bound;
+}
+
+ObjBoundNative* newBoundNative(NativeFn* fn) {
+    ObjBoundNative* bound = ALLOCATE_OBJ(ObjBoundNative,
+                                         OBJ_BOUND_NATIVE);
+    bound->receiver = NIL_VAL;
+    bound->method = fn;
     return bound;
 }
 
@@ -69,7 +70,7 @@ ObjClosure* newClosure(ObjFunction* function) {
     return closure;
 }
 
-static uint32_t hashString(const char* key, int length) {
+uint32_t hashString(const char* key, int length) {
     uint32_t hash = 0x811C9DC5u; // same offset as FNV-1a for compatibility
     const uint32_t prime = 0x01000193u;
 
@@ -97,6 +98,7 @@ static ObjString* allocateString(char* chars, int length, uint32_t hash) {
     string->length = length;
     string->chars = chars;
     string->hash = hash;
+    string->instance = newInstance(vm.stringClass);
 
     tableSet(&vm.strings, string, NIL_VAL);
 
@@ -108,6 +110,7 @@ ObjString* newString(char* chars, int length){
     string->length = length;
     string->chars = chars;
     string->hash = hashString(chars, length);
+    string->instance = newInstance(vm.stringClass);
 
     return string;
 }
@@ -134,6 +137,7 @@ ObjMultiDispatch* newMultiDispatch(ObjString* name) {
 ObjList* newList() {
     ObjList* list = ALLOCATE_OBJ(ObjList, OBJ_LIST);
     initValueArray(&list->elements);
+    list->instance = newInstance(vm.listClass);
     return list;
 }
 
@@ -155,6 +159,7 @@ ObjThread* newThread(pthread_t *thread, Thread *ctx){
     ObjThread* threadObj = ALLOCATE_OBJ(ObjThread, OBJ_THREAD);
     threadObj->thread = thread;
     threadObj->ctx = ctx;
+    threadObj->instance = newInstance(vm.threadClass);
     return threadObj;
 }
 
@@ -263,6 +268,8 @@ ObjImage* newImage(SDL_Texture* texture, int width, int height) {
     image->texture = texture;
     image->width = width;
     image->height = height;
+    image->instance = newInstance(vm.imageClass);
+    
     return image;
 }
 

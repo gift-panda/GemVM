@@ -199,45 +199,46 @@ static Value inputNative(Thread* ctx, int argCount, Value* args) {
 }
 
 void defineStringMethods() {
-    tableSet(&vm.stringClassMethods, copyString("length", 6), OBJ_VAL(newNative(stringLengthNative)));
-    tableSet(&vm.stringClassMethods, copyString("charAt", 6), OBJ_VAL(newNative(stringCharAtNative)));
-    tableSet(&vm.stringClassMethods, copyString("toUpperCase", 11), OBJ_VAL(newNative(stringToUpperCaseNative)));
-    tableSet(&vm.stringClassMethods, copyString("toLowerCase", 11), OBJ_VAL(newNative(stringToLowerCaseNative)));
-    tableSet(&vm.stringClassMethods, copyString("substring", 9), OBJ_VAL(newNative(stringSubstringNative)));
-    tableSet(&vm.stringClassMethods, copyString("indexOf", 7), OBJ_VAL(newNative(stringIndexOfNative)));
-    tableSet(&vm.stringClassMethods, copyString("asNum", 5), OBJ_VAL(newNative(stringParseNumberNative)));
-    tableSet(&vm.stringClassMethods, copyString("asBool", 6), OBJ_VAL(newNative(stringParseBooleanNative)));
-    tableSet(&vm.stringClassMethods, copyString("charCode", 8), OBJ_VAL(newNative(stringCharCodeNative)));
-    tableSet(&vm.stringClassMethods, copyString("parse", 5), OBJ_VAL(newNative(str_parse)));
-    tableSet(&vm.stringClassMethods, copyString("split", 5), OBJ_VAL(newNative(stringSplitNative)));
-    tableSet(&vm.stringClassMethods, copyString("trim", 4), OBJ_VAL(newNative(stringTrimNative)));
-    tableSet(&vm.stringClassMethods, copyString("startsWith", 10), OBJ_VAL(newNative(stringStartsWithNative)));
-    tableSet(&vm.stringClassMethods, copyString("endsWith", 8), OBJ_VAL(newNative(stringEndsWithNative)));
-    tableSet(&vm.stringClassMethods, copyString("isDigit", 7), OBJ_VAL(newNative(str_isDigit)));
-    tableSet(&vm.stringClassMethods, copyString("iterator", 8), OBJ_VAL(newNative(stringIteratorNative)));
+    tableSet(&vm.stringClass->methods, copyString("length", 6), OBJ_VAL(newNative(stringLengthNative)));
+    tableSet(&vm.stringClass->methods, copyString("charAt", 6), OBJ_VAL(newNative(stringCharAtNative)));
+    tableSet(&vm.stringClass->methods, copyString("toUpperCase", 11), OBJ_VAL(newNative(stringToUpperCaseNative)));
+    tableSet(&vm.stringClass->methods, copyString("toLowerCase", 11), OBJ_VAL(newNative(stringToLowerCaseNative)));
+    tableSet(&vm.stringClass->methods, copyString("substring", 9), OBJ_VAL(newNative(stringSubstringNative)));
+    tableSet(&vm.stringClass->methods, copyString("indexOf", 7), OBJ_VAL(newNative(stringIndexOfNative)));
+    tableSet(&vm.stringClass->methods, copyString("asNum", 5), OBJ_VAL(newNative(stringParseNumberNative)));
+    tableSet(&vm.stringClass->methods, copyString("asBool", 6), OBJ_VAL(newNative(stringParseBooleanNative)));
+    tableSet(&vm.stringClass->methods, copyString("charCode", 8), OBJ_VAL(newNative(stringCharCodeNative)));
+    tableSet(&vm.stringClass->methods, copyString("parse", 5), OBJ_VAL(newNative(str_parse)));
+    tableSet(&vm.stringClass->methods, copyString("split", 5), OBJ_VAL(newNative(stringSplitNative)));
+    tableSet(&vm.stringClass->methods, copyString("trim", 4), OBJ_VAL(newNative(stringTrimNative)));
+    tableSet(&vm.stringClass->methods, copyString("startsWith", 10), OBJ_VAL(newNative(stringStartsWithNative)));
+    tableSet(&vm.stringClass->methods, copyString("endsWith", 8), OBJ_VAL(newNative(stringEndsWithNative)));
+    tableSet(&vm.stringClass->methods, copyString("isDigit", 7), OBJ_VAL(newNative(str_isDigit)));
+    tableSet(&vm.stringClass->methods, copyString("iterator", 8), OBJ_VAL(newNative(stringIteratorNative)));
+
 }
 
 void defineListMethods() {
-    tableSet(&vm.listClassMethods, copyString("append", 6), OBJ_VAL(newNative(listAppendNative)));
-    tableSet(&vm.listClassMethods, copyString("length", 6), OBJ_VAL(newNative(listLengthNative)));
-    tableSet(&vm.listClassMethods, copyString("get", 3), OBJ_VAL(newNative(listGetNative)));
-    tableSet(&vm.listClassMethods, copyString("set", 3), OBJ_VAL(newNative(listSetNative)));
-    tableSet(&vm.listClassMethods, copyString("pop", 3), OBJ_VAL(newNative(listPopNative)));
-    tableSet(&vm.listClassMethods, copyString("insert", 6), OBJ_VAL(newNative(listInsertNative)));
-    tableSet(&vm.listClassMethods, copyString("clear", 5), OBJ_VAL(newNative(listClearNative)));
-    tableSet(&vm.listClassMethods, copyString("contains", 8), OBJ_VAL(newNative(listContainsNative)));
-    tableSet(&vm.listClassMethods, copyString("remove", 6), OBJ_VAL(newNative(listRemoveNative)));
-    tableSet(&vm.listClassMethods, copyString("sort", 4), OBJ_VAL(newNative(listSortNative)));
-    tableSet(&vm.listClassMethods, copyString("iterator", 8), OBJ_VAL(newNative(listIteratorNative)));
+    tableSet(&vm.listClass->methods, copyString("append", 6), OBJ_VAL(newNative(listAppendNative)));
+    tableSet(&vm.listClass->methods, copyString("add", 3), OBJ_VAL(newNative(listAppendNative)));
+    tableSet(&vm.listClass->methods, copyString("push", 4), OBJ_VAL(newNative(listAppendNative)));
+    tableSet(&vm.listClass->methods, copyString("length", 6), OBJ_VAL(newNative(listLengthNative)));
+    tableSet(&vm.listClass->methods, copyString("get", 3), OBJ_VAL(newNative(listGetNative)));
+    tableSet(&vm.listClass->methods, copyString("set", 3), OBJ_VAL(newNative(listSetNative)));
+    tableSet(&vm.listClass->methods, copyString("pop", 3), OBJ_VAL(newNative(listPopNative)));
+    tableSet(&vm.listClass->methods, copyString("insert", 6), OBJ_VAL(newNative(listInsertNative)));
+    tableSet(&vm.listClass->methods, copyString("clear", 5), OBJ_VAL(newNative(listClearNative)));
+    tableSet(&vm.listClass->methods, copyString("contains", 8), OBJ_VAL(newNative(listContainsNative)));
+    tableSet(&vm.listClass->methods, copyString("remove", 6), OBJ_VAL(newNative(listRemoveNative)));
+    tableSet(&vm.listClass->methods, copyString("sort", 4), OBJ_VAL(newNative(listSortNative)));
+    tableSet(&vm.listClass->methods, copyString("iterator", 8), OBJ_VAL(newNative(listIteratorNative)));
 
-
-    tableSet(&vm.imageClassMethods, copyString("getWidth", 8), OBJ_VAL(newNative(Image_getWidth)));
-    tableSet(&vm.imageClassMethods, copyString("getHeight", 9), OBJ_VAL(newNative(Image_getHeight)));
-    
+    tableSet(&vm.imageClass->methods, copyString("getWidth", 8), OBJ_VAL(newNative(Image_getWidth)));
+    tableSet(&vm.imageClass->methods, copyString("getHeight", 9), OBJ_VAL(newNative(Image_getHeight)));
 }
 
 void defineThreadMethods() {
-    tableSet(&vm.threadClassMethods, copyString("join", 4), OBJ_VAL(newNative(joinNative)));
+    tableSet(&vm.threadClass->methods, copyString("join", 4), OBJ_VAL(newNative(joinNative)));
 }
 
 static void resetStack() {
@@ -436,6 +437,19 @@ void initVM() {
     initTable(&vm.imageClassMethods);
     initTable(&vm.threadClassMethods);
 
+    ObjString* string = ALLOCATE_OBJ(ObjString, OBJ_STRING);
+    string->length = 6;
+    string->chars = "String";
+    string->hash = hashString(string->chars, string->length);
+    string->instance = NULL;
+
+    vm.stringClass = newClass(string);
+    string->instance = newInstance(vm.stringClass);
+    
+    vm.listClass = newClass(copyString("List", 4));
+    vm.threadClass = newClass(copyString("Thread", 6));
+    vm.imageClass = newClass(copyString("Image", 5));
+
     vm.initString = copyString("init", 4);
     vm.toString = copyString("toString", 8);
     vm.errorString = copyString("Error", 5);
@@ -586,6 +600,16 @@ static bool callValueCtx(Thread *ctx, Value callee, int argCount) {
                 ctx->stackTop[-argCount - 1] = bound->receiver;
                 return callCtx(ctx, bound->method[argCount], argCount);
             }
+            case OBJ_BOUND_NATIVE: {
+                ObjBoundNative* bound = AS_BOUND_NATIVE(callee);
+                NativeFn native = *bound->method;
+                ctx->stackTop[-argCount - 1] = bound->receiver;
+
+                Value result = native(ctx, argCount, ctx->stackTop - argCount);
+                ctx->stackTop = ctx->stackTop - argCount;
+                pushCtx(ctx, result);
+                return true;
+            }
             case OBJ_MULTI_DISPATCH:{
                 ObjMultiDispatch* md = AS_MULTI_DISPATCH(callee);
 
@@ -689,8 +713,24 @@ static bool bindMethodCtx(Thread *ctx, ObjClass* klass, ObjString* name) {
         return false;
     }
 
+    if(IS_NATIVE(method)){
+        ObjBoundNative* bound = newBoundNative(&AS_NATIVE(method));
+        bound->receiver = peekCtx(ctx, 0);
+        popCtx(ctx);
+        pushCtx(ctx, OBJ_VAL(bound));
+        return true;
+    }
+
+    
     ObjBoundMethod* bound = AS_BOUND_METHOD(method);
-    bound->receiver = peekCtx(ctx, 0);
+    ObjInstance* instance;
+    if (IS_STRING(peekCtx(ctx, 0))) instance = AS_STRING(peekCtx(ctx, 0))->instance;
+    if (IS_LIST(peekCtx(ctx, 0))) instance = AS_LIST(peekCtx(ctx, 0))->instance;
+    if (IS_THREAD(peekCtx(ctx, 0))) instance = AS_THREAD(peekCtx(ctx, 0))->instance;
+    if (IS_IMAGE(peekCtx(ctx, 0))) instance = AS_IMAGE(peekCtx(ctx, 0))->instance;
+    if(instance == NULL) instance = AS_INSTANCE(peekCtx(ctx, 0));
+
+    bound->receiver = OBJ_VAL(instance);;
 
     popCtx(ctx);
     pushCtx(ctx, OBJ_VAL(bound));
@@ -702,6 +742,14 @@ static bool invokeFromClassCtx(Thread *ctx, ObjClass* klass, ObjString* name, in
     Value method;
 
     if (tableGet(&klass->methods, name, &method)) {
+        if(IS_NATIVE(method)){
+            bool res = callBoundedNativeCtx(ctx, method, argCount);
+            Value result = popCtx(ctx);
+            popCtx(ctx);
+            pushCtx(ctx, result);
+            return res;
+        }
+            
         AS_BOUND_METHOD(method)->receiver = peekCtx(ctx, argCount);
         bool yes = callValueCtx(ctx, OBJ_VAL(AS_BOUND_METHOD(method)), argCount);
         return yes;
@@ -744,47 +792,7 @@ static bool isPrivate(ObjString* name) {
 
 static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* frame) {
     Value receiver = peekCtx(ctx, argCount);
-
-    if (IS_STRING(receiver)) {
-        Value value;
-        if (tableGet(&vm.stringClassMethods, name, &value)) {
-            bool res = callBoundedNativeCtx(ctx, value, argCount);
-            Value result = popCtx(ctx);
-            popCtx(ctx);
-            pushCtx(ctx, result);
-            return res;
-        }
-        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined method '%s' on string.", name->chars);
-        return false;
-    }
-
-
-    if (IS_IMAGE(receiver)) {
-        Value value;
-        if (tableGet(&vm.imageClassMethods, name, &value)) {
-            bool res = callBoundedNativeCtx(ctx, value, argCount);
-            Value result = popCtx(ctx);
-            popCtx(ctx);
-            pushCtx(ctx, result);
-            return res;
-        }
-        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined method '%s' on image.", name->chars);
-        return false;
-    }
-
-    if (IS_LIST(receiver)) {
-        Value value;
-        if (tableGet(&vm.listClassMethods, name, &value)) {
-            bool res = callBoundedNativeCtx(ctx, value, argCount);
-            Value result = popCtx(ctx);
-            popCtx(ctx);
-            pushCtx(ctx, result);
-            return res;
-        }
-        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined method '%s' on list.", name->chars);
-        return false;
-    }
-
+    
     if (IS_NAMESPACE(receiver)){
         ObjNamespace* ns = AS_NAMESPACE(receiver);
         Value value;
@@ -797,20 +805,7 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
         runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined function '%s' in namespace '%s'.", name->chars, ns->name->chars);
         return false;
     }
-
-    if (IS_THREAD(receiver)) {
-        Value value;
-        if (tableGet(&vm.threadClassMethods, name, &value)) {
-            bool res = callBoundedNativeCtx(ctx, value, argCount);
-            Value result = popCtx(ctx);
-            popCtx(ctx);
-            pushCtx(ctx, result);
-            return res;
-        }
-        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined method '%s' on thread.", name->chars);
-        return false;
-    }
-
+    
     if (IS_CLASS(receiver)) {
         Value value;
         ObjClass* klass = AS_CLASS(receiver);
@@ -843,14 +838,19 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
         return false;
     }
 
+    ObjInstance* instance;
 
-    if (!IS_INSTANCE(receiver)) {
-        runtimeErrorCtx(ctx, vm.typeErrorClass, "Only instances have methods.");
+    if (IS_STRING(receiver)) instance = AS_STRING(receiver)->instance;
+    if (IS_IMAGE(receiver)) instance = AS_IMAGE(receiver)->instance;
+    if (IS_LIST(receiver)) instance = AS_LIST(receiver)->instance;
+    if (IS_THREAD(receiver)) instance = AS_THREAD(receiver)->instance;
+    if (IS_INSTANCE(receiver)) instance = AS_INSTANCE(receiver);
+
+    if(instance == NULL){
+        runtimeErrorCtx(ctx, vm.typeErrorClass, "Invalid caller of type %s.", getValueTypeName(receiver));
         return false;
     }
-
-    ObjInstance* instance = AS_INSTANCE(receiver);
-
+    
     if (isPrivate(name) && instance->klass != frame->klass) 
         runtimeErrorCtx(ctx, vm.accessErrorClass, "Cannot access private field of a different class.");
 
@@ -995,43 +995,52 @@ static void* runCtx(void *context) {
                 break;
 
             case OP_ADD: {
-                if (IS_INSTANCE(peekCtx(ctx, 0)) && IS_INSTANCE(peekCtx(ctx, 1))) {
-                    ObjInstance* a = AS_INSTANCE(peekCtx(ctx, 0));
-                    ObjInstance* b = AS_INSTANCE(peekCtx(ctx, 1));
+                Value right = peekCtx(ctx, 0);
+                Value left  = peekCtx(ctx, 1);
+
+                // Instance operator overloading
+                if (IS_INSTANCE(left) && IS_INSTANCE(right)) {
+                    ObjInstance* a = AS_INSTANCE(left);
+                    ObjInstance* b = AS_INSTANCE(right);
 
                     if (a->klass != b->klass) {
-                        runtimeErrorCtx(ctx, vm.typeErrorClass, "Cannot perform operation for instances of different classes.");
+                        runtimeErrorCtx(ctx, vm.typeErrorClass,
+                            "Cannot perform operation for instances of different classes.");
                         break;
                     }
 
                     Value method;
                     if (tableGet(&a->klass->methods, copyString("+", 1), &method)) {
-                        int argCount = 1;
-                        invokeCtx(ctx, copyString("+", 1), argCount, frame);
+                        invokeCtx(ctx, copyString("+", 1), 1, frame);
                         frame = &ctx->frames[ctx->frameCount - 1];
                         break;
                     }
-                    runtimeErrorCtx(ctx, vm.typeErrorClass, "No overload of '+' for instances of class '%s'.", a->klass->name->chars);
+
+                    runtimeErrorCtx(ctx, vm.typeErrorClass,
+                        "No overload of '+' for instances of class '%s'.", a->klass->name->chars);
                     break;
                 }
-                if (IS_STRING(peekCtx(ctx, 0)) && IS_STRING(peekCtx(ctx, 1))) {
+
+                // String + String
+                if (IS_STRING(left) && IS_STRING(right)) {
                     concatenateCtx(ctx);
-                } else if (IS_NUMBER(peekCtx(ctx, 0)) && IS_NUMBER(peekCtx(ctx, 1))) {
-                    double b = AS_NUMBER(peekCtx(ctx, 0));
-                    double a = AS_NUMBER(peekCtx(ctx, 1));
+                }
+                // Number + Number
+                else if (IS_NUMBER(left) && IS_NUMBER(right)) {
+                    double b = AS_NUMBER(right);
+                    double a = AS_NUMBER(left);
                     popCtx(ctx);
                     popCtx(ctx);
                     pushCtx(ctx, NUMBER_VAL(a + b));
                 }
-                else if (IS_STRING(peekCtx(ctx, 0)) && IS_NUMBER(peekCtx(ctx, 1))) {
-                    ObjString* b = AS_STRING(peekCtx(ctx, 0));
-                    double num = AS_NUMBER(peekCtx(ctx, 1));
+                // String + Number
+                else if (IS_STRING(left) && IS_NUMBER(right)) {
+                    ObjString* a = AS_STRING(left);
+                    double num = AS_NUMBER(right);
 
                     char buffer[32];
                     int len = snprintf(buffer, sizeof(buffer), "%.14g", num);
-
-                    // Allocate and intern as ObjString
-                    ObjString* a = newString(buffer, len);
+                    ObjString* b = newString(buffer, len);
 
                     int length = a->length + b->length;
                     char* chars = ALLOCATE(char, length + 1);
@@ -1040,19 +1049,16 @@ static void* runCtx(void *context) {
                     chars[length] = '\0';
 
                     ObjString* result = newString(chars, length);
-                    popCtx(ctx);
-                    popCtx(ctx);
+                    popCtx(ctx); popCtx(ctx);
                     pushCtx(ctx, OBJ_VAL(result));
                 }
-                else if (IS_NUMBER(peekCtx(ctx, 0)) && IS_STRING(peekCtx(ctx, 1))) {
-                    double num = AS_NUMBER(peekCtx(ctx, 0));
-
+                // Number + String
+                else if (IS_NUMBER(left) && IS_STRING(right)) {
+                    double num = AS_NUMBER(left);
                     char buffer[32];
                     int len = snprintf(buffer, sizeof(buffer), "%.14g", num);
-
-                    // Allocate and intern as ObjString
-                    ObjString* b = copyString(buffer, len);
-                    ObjString* a = AS_STRING(peekCtx(ctx, 1));
+                    ObjString* a = newString(buffer, len);
+                    ObjString* b = AS_STRING(right);
 
                     int length = a->length + b->length;
                     char* chars = ALLOCATE(char, length + 1);
@@ -1061,7 +1067,42 @@ static void* runCtx(void *context) {
                     chars[length] = '\0';
 
                     ObjString* result = newString(chars, length);
-                    popCtx(ctx);popCtx(ctx);
+                    popCtx(ctx); popCtx(ctx);
+                    pushCtx(ctx, OBJ_VAL(result));
+                }
+                // String + Bool or Nil
+                else if (IS_STRING(left) && (IS_BOOL(right) || IS_NIL(right))) {
+                    ObjString* a = AS_STRING(left);
+
+                    const char* suffix = IS_BOOL(right)
+                        ? (AS_BOOL(right) ? "true" : "false")
+                        : "nil";
+
+                    int length = a->length + (int)strlen(suffix);
+                    char* chars = ALLOCATE(char, length + 1);
+                    memcpy(chars, a->chars, a->length);
+                    memcpy(chars + a->length, suffix, strlen(suffix));
+                    chars[length] = '\0';
+
+                    ObjString* result = newString(chars, length);
+                    popCtx(ctx); popCtx(ctx);
+                    pushCtx(ctx, OBJ_VAL(result));
+                }
+                // Bool or Nil + String
+                else if ((IS_BOOL(left) || IS_NIL(left)) && IS_STRING(right)) {
+                    const char* prefix = IS_BOOL(left)
+                        ? (AS_BOOL(left) ? "true" : "false")
+                        : "nil";
+
+                    ObjString* b = AS_STRING(right);
+                    int length = (int)strlen(prefix) + b->length;
+                    char* chars = ALLOCATE(char, length + 1);
+                    memcpy(chars, prefix, strlen(prefix));
+                    memcpy(chars + strlen(prefix), b->chars, b->length);
+                    chars[length] = '\0';
+
+                    ObjString* result = newString(chars, length);
+                    popCtx(ctx); popCtx(ctx);
                     pushCtx(ctx, OBJ_VAL(result));
                 }
                 else {
@@ -1428,9 +1469,35 @@ static void* runCtx(void *context) {
                 pushCtx(ctx, OBJ_VAL(klass));
                 break;
             case OP_GET_PROPERTY: {
-                if (IS_STRING(peekCtx(ctx, 0)) || IS_LIST(peekCtx(ctx, 0))){
+                ObjInstance* instance = NULL;
+                if (IS_STRING(peekCtx(ctx, 0))) instance = AS_STRING(peekCtx(ctx, 0))->instance;
+                if (IS_LIST(peekCtx(ctx, 0))) instance = AS_LIST(peekCtx(ctx, 0))->instance;
+                if (IS_THREAD(peekCtx(ctx, 0))) instance = AS_THREAD(peekCtx(ctx, 0))->instance;
+                if (IS_IMAGE(peekCtx(ctx, 0))) instance = AS_IMAGE(peekCtx(ctx, 0))->instance;
+
+                
+                if(instance != NULL){
+                    ObjString* name = READ_STRING();
+                    
+                    if (isPrivate(name)){
+                        runtimeErrorCtx(ctx, vm.accessErrorClass, "Cannot access private field from a different class.");
+                        break;
+                    }
+                    
+                    Value value;
+                    if (tableGet(&instance->fields, name, &value)) {
+                        popCtx(ctx);
+                        pushCtx(ctx, value);
+                        break;
+                    }
+
+                    if (bindMethodCtx(ctx, instance->klass, name)) {
+                        break;
+                    }
+                    
                     runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
+                
                 if (IS_NAMESPACE(peekCtx(ctx, 0))){
                     ObjNamespace* ns = AS_NAMESPACE(peekCtx(ctx, 0));
                     ObjString* name = READ_STRING();
@@ -1508,9 +1575,6 @@ static void* runCtx(void *context) {
                 break;
             }
             case OP_SET_PROPERTY: {
-                if (IS_STRING(peekCtx(ctx, 1)) || IS_LIST(peekCtx(ctx, 1))){
-                    runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined property '%s'.", name->chars);
-                }
                 if (IS_NAMESPACE(peekCtx(ctx, 1))){
                     ObjNamespace* ns = AS_NAMESPACE(peekCtx(ctx, 1));
 
@@ -1545,12 +1609,17 @@ static void* runCtx(void *context) {
                     break;
                 }
 
-                if (!IS_INSTANCE(peekCtx(ctx, 1))) {
+                ObjInstance* instance = NULL;
+                if (IS_STRING(peekCtx(ctx, 1))) instance = AS_STRING(peekCtx(ctx, 1))->instance;
+                if (IS_LIST(peekCtx(ctx, 1))) instance = AS_LIST(peekCtx(ctx, 1))->instance;
+                if (IS_THREAD(peekCtx(ctx, 1))) instance = AS_THREAD(peekCtx(ctx, 1))->instance;
+                if (IS_IMAGE(peekCtx(ctx, 1))) instance = AS_IMAGE(peekCtx(ctx, 1))->instance;
+                if (IS_INSTANCE(peekCtx(ctx, 1))) instance = AS_INSTANCE(peekCtx(ctx, 1));
+                if (instance == NULL) {
                     runtimeErrorCtx(ctx, vm.typeErrorClass, "Only instances have fields.");
                     break;
                 }
 
-                ObjInstance* instance = AS_INSTANCE(peekCtx(ctx, 1));
                 tableSet(&instance->fields, READ_STRING(), peekCtx(ctx, 0));
                 Value value = popCtx(ctx);
                 popCtx(ctx);

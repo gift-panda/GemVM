@@ -205,6 +205,13 @@ static Value stringCharAtNative(Thread* ctx, int argCount, Value* args) {
 
     ObjString* string = AS_STRING(args[-1]);
     double num = AS_NUMBER(args[0]);
+
+    if(num >= string->length){
+        
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
+                     "String index %d out of range for length %d", num, string->length);
+         return NIL_VAL;
+     }
     int index = (int)num;
 
     return OBJ_VAL(copyString(&string->chars[index], 1));

@@ -65,6 +65,11 @@ typedef struct {
     Table imageClassMethods;
     Table threadClassMethods;
 
+    ObjClass* stringClass;
+    ObjClass* listClass;
+    ObjClass* imageClass;
+    ObjClass* threadClass;
+
     ObjString* errorString;
     ObjClass* errorClass;
     ObjString* indexErrorString;
