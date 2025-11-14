@@ -35,6 +35,17 @@ static Value listAppendNative(Thread* ctx, int argCount, Value* args) {
     return OBJ_VAL(list);
 }
 
+static Value listPeekNative(Thread* ctx, int argCount, Value* args){
+    if (argCount != 0) {
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,
+                     "No method append for arity %d.", argCount);
+        return NIL_VAL;
+    }
+
+    ObjList* list = AS_LIST(args[-1]);
+    return list->elements.values[list->elements.count - 1];
+}
+
 static Value listLengthNative(Thread* ctx, int argCount, Value* args) {
     if (argCount != 0) {
         runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass,

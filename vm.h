@@ -6,6 +6,7 @@
 #include "value.h"
 #include "table.h"
 #include "pthread.h"
+#include "object.h"
 #include <stdatomic.h>
 
 // Forward declarations to break cyclic dependency
@@ -15,7 +16,7 @@ typedef struct ObjClass ObjClass;
 // ---------------------
 // Call frames and threads
 // ---------------------
-#define FRAMES_MAX 64
+#define FRAMES_MAX 1000
 #define STACK_MAX (FRAMES_MAX * UINT8_COUNT)
 
 typedef struct {
@@ -28,6 +29,7 @@ typedef struct {
     uint8_t *saveIP[10];
     Value* saveStack[10];
     ObjClass* klass;
+    ObjInstance* receiver;
 } CallFrame;
 
 typedef struct Thread {
@@ -69,6 +71,8 @@ typedef struct {
     ObjClass* listClass;
     ObjClass* imageClass;
     ObjClass* threadClass;
+    ObjClass* numberClass;
+    ObjClass* boolClass;
 
     ObjString* errorString;
     ObjClass* errorClass;

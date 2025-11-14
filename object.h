@@ -72,6 +72,7 @@ typedef enum {
 struct Obj {
     ObjType type;
     bool isMarked;
+    uint32_t id;
     struct Obj* next;
 };
 

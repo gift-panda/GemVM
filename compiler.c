@@ -334,6 +334,7 @@ static void binary(bool canAssign) {
         case TOKEN_GREATER_EQUAL: emitBytes(OP_LESS, OP_NOT); break;
         case TOKEN_LESS:          emitByte(OP_LESS); break;
         case TOKEN_LESS_EQUAL:    emitBytes(OP_GREATER, OP_NOT); break;
+        case TOKEN_IS:            emitByte(OP_INSTANCEOF); break;
         default: return; // Unreachable.
     }
 }
@@ -623,6 +624,7 @@ ParseRule rules[] = {
     [TOKEN_FUN]           = {NULL,     NULL,   PREC_NONE},
     [TOKEN_LAMBDA]        = {lambda,   NULL,   PREC_NONE},
     [TOKEN_IF]            = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_IS]            = {NULL,     binary, PREC_COMPARISON},
     [TOKEN_NIL]           = {literal,  NULL,   PREC_NONE},
     [TOKEN_OR]            = {NULL,     or_,    PREC_OR},
     [TOKEN_PRINT]         = {NULL,     NULL,   PREC_NONE},
@@ -634,6 +636,17 @@ ParseRule rules[] = {
     [TOKEN_WHILE]         = {NULL,     NULL,   PREC_NONE},
     [TOKEN_ERROR]         = {NULL,     NULL,   PREC_NONE},
     [TOKEN_THROW]         = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_DOUBLE_COLON]  = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_STATIC]        = {NULL,     NULL,   PREC_NONE},
+    [TOKEN_PRINTLN]       = {NULL,     NULL,     PREC_NONE},
+    [TOKEN_IMPORT]        = {NULL,     NULL,     PREC_NONE},
+    [TOKEN_NAMESPACE]     = {NULL,     NULL,     PREC_NONE},
+    [TOKEN_TRY]           = {NULL,     NULL,     PREC_NONE},
+    [TOKEN_CATCH]         = {NULL,     NULL,     PREC_NONE},
+    [TOKEN_FINALLY]       = {NULL,     NULL,     PREC_NONE},
+    [TOKEN_OPERATOR]      = {NULL,     NULL,     PREC_NONE},
+    [TOKEN_BREAK]         = {NULL,     NULL,     PREC_NONE},
+    [TOKEN_CONTINUE]      = {NULL,     NULL,     PREC_NONE},
     [TOKEN_EOF]           = {NULL,     NULL,   PREC_NONE},
 };
 

@@ -14,10 +14,22 @@
 #include "value.h"
 #include "vm.h"
 
+static int nextHashSeed = 1;
+
+static inline uint32_t hash32(uint32_t x) {
+    x ^= x >> 16;
+    x *= 0x7feb352dU;
+    x ^= x >> 15;
+    x *= 0x846ca68bU;
+    x ^= x >> 16;
+    return x;
+}
+
 Obj* allocateObject(size_t size, ObjType type) {
     Obj* object = (Obj*)reallocate(NULL, 0, size);
     object->type = type;
     object->isMarked = false;
+    object->id = hash32((uintptr_t)object ^ nextHashSeed++);
 
 #ifdef DEBUG_LOG_GC
     printf("%p allocate %zu for %d\n", (void*)object, size, type);
@@ -100,6 +112,8 @@ static ObjString* allocateString(char* chars, int length, uint32_t hash) {
     string->hash = hash;
     string->instance = newInstance(vm.stringClass);
 
+    string->obj.id = hash;
+
     tableSet(&vm.strings, string, NIL_VAL);
 
     return string;
@@ -111,6 +125,9 @@ ObjString* newString(char* chars, int length){
     string->chars = chars;
     string->hash = hashString(chars, length);
     string->instance = newInstance(vm.stringClass);
+
+    string->obj.id = string->hash;
+
 
     return string;
 }

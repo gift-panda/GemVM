@@ -56,14 +56,55 @@ static Value syncNative(Thread* ctx, int argCount, Value* args){
     return NIL_VAL;
 }
 
+static Value exitNative(Thread* ctx, int argCount, Value* args){
+    exit(AS_NUMBER(args[0]));
+}
+
+static Value hashNative(Thread* ctx, int argCount, Value* args){
+    return NUMBER_VAL(AS_OBJ(args[0])->id);
+}
+
 static void resetStackCtx(Thread *ctx);
 void pushCtx(Thread *ctx, Value);
 Value popCtx(Thread *ctx);
 static bool callCtx(Thread *ctx, ObjClosure* closure, int argCount);
 static bool callValueCtx(Thread *ctx, Value callee, int argCount);
+#ifdef _WIN32
+static DWORD WINAPI runCtx(LPVOID context);
+#else 
 static void* runCtx(void*);
+#endif
 
 Value spawnNative(Thread*, int argCount, Value* args) {
+#ifdef _WIN32
+    HANDLE hThread = NULL;
+
+    Thread* ctx = GC_MALLOC(sizeof(Thread));  // GC-managed context
+    memset(ctx, 0, sizeof(Thread));
+    resetStackCtx(ctx);
+
+    for (int i = 0; i < argCount; i++)
+        pushCtx(ctx, args[i]);
+
+    callValueCtx(ctx, args[0], argCount - 1);
+
+    // Create the thread
+    hThread = CreateThread(
+        NULL,           // default security
+        0,              // default stack size
+        runCtx,         // thread function
+        ctx,            // argument
+        0,              // creation flags
+        NULL            // thread ID (unused)
+    );
+
+    if (hThread == NULL) {
+        fprintf(stderr, "CreateThread failed: %lu\n", GetLastError());
+        exit(1);
+    }
+
+    return OBJ_VAL(newThread(hThread, ctx));
+#else
     pthread_t *tid = malloc(sizeof(pthread_t)); 
     if (!tid) {
         perror("malloc");
@@ -87,16 +128,16 @@ Value spawnNative(Thread*, int argCount, Value* args) {
     }
 
     return OBJ_VAL(newThread(tid, ctx));
+#endif
 }
 
 Value spawnNamespace(ObjClosure* closure, ObjNamespace* namespace) {
-    pthread_t *tid = malloc(sizeof(pthread_t)); 
-    if (!tid) {
-        perror("malloc");
+    Thread* ctx = GC_MALLOC(sizeof(Thread));
+    if (!ctx) {
+        fprintf(stderr, "GC_MALLOC failed for Thread\n");
         exit(1);
     }
 
-    Thread *ctx = GC_MALLOC(sizeof(Thread));
     memset(ctx, 0, sizeof(Thread));
     resetStackCtx(ctx);
     ctx->namespace = namespace->namespace;
@@ -104,21 +145,57 @@ Value spawnNamespace(ObjClosure* closure, ObjNamespace* namespace) {
     pushCtx(ctx, OBJ_VAL(closure));
     callValueCtx(ctx, OBJ_VAL(closure), 0);
 
-    int res = pthread_create(tid, NULL, runCtx, ctx);
-    if (res != 0) {
-        printf("pthread_create failed: %s\n", strerror(res));
+#ifdef _WIN32
+    HANDLE tid = CreateThread(
+        NULL,                       // default security attributes
+        0,                          // default stack size
+        (LPTHREAD_START_ROUTINE)runCtx, // function pointer
+        ctx,                        // argument
+        0,                          // run immediately
+        NULL                        // thread ID not needed
+    );
+
+    if (tid == NULL) {
+        fprintf(stderr, "CreateThread failed: %lu\n", GetLastError());
         exit(1);
     }
 
     return OBJ_VAL(newThread(tid, ctx));
+
+#elif __linux__
+    pthread_t* tid = malloc(sizeof(pthread_t));
+    if (!tid) {
+        perror("malloc");
+        exit(1);
+    }
+
+    int res = pthread_create(tid, NULL, runCtx, ctx);
+    if (res != 0) {
+        fprintf(stderr, "pthread_create failed: %s\n", strerror(res));
+        exit(1);
+    }
+
+    return OBJ_VAL(newThread(tid, ctx));
+#else
+#error "Unsupported platform"
+#endif
 }
 
 Value joinNative(Thread* ctx, int argCount, Value* args) {
-    ObjThread* threadObj = AS_THREAD(args[-1]);
+   ObjThread* threadObj = AS_THREAD(args[-1]);
 
-    pthread_join(*threadObj->thread, NULL);
-    free(threadObj->thread);  // ✅ free after join
+#ifdef _WIN32
+    // Wait for the Windows thread to finish
+    WaitForSingleObject(threadObj->thread, INFINITE);
+    CloseHandle(threadObj->thread);   // ✅ close handle after join
     threadObj->thread = NULL;
+
+#else
+    // Wait for the POSIX thread to finish
+    pthread_join(*threadObj->thread, NULL);
+    free(threadObj->thread);          // ✅ free after join
+    threadObj->thread = NULL;
+#endif
 
     return popCtx(threadObj->ctx);
 }
@@ -126,9 +203,18 @@ Value joinNative(Thread* ctx, int argCount, Value* args) {
 Value joinInternal(Value arg) {
     ObjThread* threadObj = AS_THREAD(arg);
 
-    pthread_join(*threadObj->thread, NULL);
-    free(threadObj->thread);
+#ifdef _WIN32
+    // Wait for Windows thread to finish execution
+    WaitForSingleObject(threadObj->thread, INFINITE);
+    CloseHandle(threadObj->thread);     // ✅ release handle
     threadObj->thread = NULL;
+
+#else
+    // Wait for POSIX thread to finish execution
+    pthread_join(*threadObj->thread, NULL);
+    free(threadObj->thread);            // ✅ free after join
+    threadObj->thread = NULL;
+#endif
 
     return popCtx(threadObj->ctx);
 }
@@ -232,6 +318,8 @@ void defineListMethods() {
     tableSet(&vm.listClass->methods, copyString("remove", 6), OBJ_VAL(newNative(listRemoveNative)));
     tableSet(&vm.listClass->methods, copyString("sort", 4), OBJ_VAL(newNative(listSortNative)));
     tableSet(&vm.listClass->methods, copyString("iterator", 8), OBJ_VAL(newNative(listIteratorNative)));
+    tableSet(&vm.listClass->methods, copyString("peek", 4), OBJ_VAL(newNative(listPeekNative)));
+
 
     tableSet(&vm.imageClass->methods, copyString("getWidth", 8), OBJ_VAL(newNative(Image_getWidth)));
     tableSet(&vm.imageClass->methods, copyString("getHeight", 9), OBJ_VAL(newNative(Image_getHeight)));
@@ -449,6 +537,13 @@ void initVM() {
     vm.listClass = newClass(copyString("List", 4));
     vm.threadClass = newClass(copyString("Thread", 6));
     vm.imageClass = newClass(copyString("Image", 5));
+    vm.numberClass = newClass(copyString("Number", 6));
+    vm.boolClass = newClass(copyString("Bool", 4));
+
+    tableSet(&vm.globals, copyString("Number", 6), OBJ_VAL(vm.numberClass));
+    tableSet(&vm.globals, copyString("Bool", 4), OBJ_VAL(vm.boolClass));
+    tableSet(&vm.globals, copyString("String", 6), OBJ_VAL(vm.stringClass));
+    tableSet(&vm.globals, copyString("List", 4), OBJ_VAL(vm.listClass));
 
     vm.initString = copyString("init", 4);
     vm.toString = copyString("toString", 8);
@@ -468,6 +563,9 @@ void initVM() {
     defineNative("spawn", spawnNative);
     defineNative("join", joinNative);
     defineNative("sync", syncNative);
+    defineNative("exit", exitNative);
+    defineNative("hash", hashNative);
+
     defineStringMethods();
     defineListMethods();
     defineThreadMethods();
@@ -509,6 +607,31 @@ static bool callCtx(Thread *ctx, ObjClosure* closure, int argCount) {
     frame->tryTop = 0;
     frame->hasTry[frame->tryTop] = -1;
     frame->klass = closure->klass;
+    frame->receiver = NULL;
+
+    return true;
+}
+
+static bool callBoundCtx(Thread *ctx, ObjClosure* closure, int argCount, ObjInstance* receiver) {
+    if (argCount != closure->function->arity) {
+        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass, "Expected %d arguments but got %d.",
+            closure->function->arity, argCount);
+        return false;
+    }
+
+    if (ctx->frameCount == FRAMES_MAX) {
+        VMErrorCtx(ctx, "Stack overflow.");
+        return false;
+    }
+
+    CallFrame* frame = &ctx->frames[ctx->frameCount++];
+    frame->closure = closure;
+    frame->ip = closure->function->chunk.code;
+    frame->slots = ctx->stackTop - argCount - 1;
+    frame->tryTop = 0;
+    frame->hasTry[frame->tryTop] = -1;
+    frame->klass = closure->klass;
+    frame->receiver = receiver;
 
     return true;
 }
@@ -575,12 +698,12 @@ static bool callValueCtx(Thread *ctx, Value callee, int argCount) {
 
                 if (tableGet(&klass->methods, vm.initString, &initializer)) {
 
-                    ctx->stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
+                    AS_BOUND_METHOD(initializer)->receiver = OBJ_VAL(newInstance(klass));
                     if (AS_BOUND_METHOD(initializer)->method[argCount] == NULL) {
                         runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass, "No matching initializer found with %d arguments.", argCount);
                         return false;
                     }
-                    return callCtx(ctx, AS_BOUND_METHOD(initializer)->method[argCount], argCount);
+                    return callValueCtx(ctx, initializer, argCount);
                 }
                 else if(argCount == 0){
                     ctx->stackTop[-argCount - 1] = OBJ_VAL(newInstance(klass));
@@ -598,7 +721,7 @@ static bool callValueCtx(Thread *ctx, Value callee, int argCount) {
                 }
 
                 ctx->stackTop[-argCount - 1] = bound->receiver;
-                return callCtx(ctx, bound->method[argCount], argCount);
+                return callBoundCtx(ctx, bound->method[argCount], argCount, AS_INSTANCE(bound->receiver));
             }
             case OBJ_BOUND_NATIVE: {
                 ObjBoundNative* bound = AS_BOUND_NATIVE(callee);
@@ -751,7 +874,7 @@ static bool invokeFromClassCtx(Thread *ctx, ObjClass* klass, ObjString* name, in
         }
             
         AS_BOUND_METHOD(method)->receiver = peekCtx(ctx, argCount);
-        bool yes = callValueCtx(ctx, OBJ_VAL(AS_BOUND_METHOD(method)), argCount);
+        bool yes = callValueCtx(ctx, method, argCount);
         return yes;
     }
 
@@ -838,7 +961,7 @@ static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* fra
         return false;
     }
 
-    ObjInstance* instance;
+    ObjInstance* instance = NULL;
 
     if (IS_STRING(receiver)) instance = AS_STRING(receiver)->instance;
     if (IS_IMAGE(receiver)) instance = AS_IMAGE(receiver)->instance;
@@ -896,7 +1019,11 @@ Value readConst(CallFrame* frame){
 
 
 #include <gc/gc.h>
+#ifdef _WIN32
+static DWORD WINAPI runCtx(LPVOID context) {
+#else
 static void* runCtx(void *context) {
+#endif
     if (GC_thread_is_registered() == 0) {
         if (GC_register_my_thread(NULL) != 0) {
             fprintf(stderr, "Failed to register GC thread\n");
@@ -921,7 +1048,7 @@ static void* runCtx(void *context) {
             bool fl = false; \
             int peeker = 1; \
             if (!IS_NUMBER(peekCtx(ctx, 0)) || !IS_NUMBER(peekCtx(ctx, peeker))) { \
-                runtimeErrorCtx(ctx, vm.typeErrorClass, "Operands must be numbers."); \
+                runtimeErrorCtx(ctx, vm.typeErrorClass, "Operands must be numbers, got %s and %s.", getValueTypeName(peekCtx(ctx, 0)), getValueTypeName(peekCtx(ctx, peeker))); \
                 fl = true; \
                 break; \
             } \
@@ -935,13 +1062,13 @@ static void* runCtx(void *context) {
 
         for (;;) {
     #ifdef DEBUG_TRACE_EXECUTION
-            printf("          ");
+            printf("\x1b[31m          ");
             for (Value* slot = ctx->stack; slot < ctx->stackTop; slot++) {
                 printf("[ ");
                 printValue(*slot);
                 printf(" ]");
             }
-            printf("\n");
+            printf("\x1b[0m\n");
             disassembleInstruction(&frame->closure->function->chunk,
                     (int)(frame->ip - frame->closure->function->chunk.code));
     #endif
@@ -1304,8 +1431,14 @@ static void* runCtx(void *context) {
             case OP_GET_GLOBAL: {
                 ObjString* name = READ_STRING();
                 Value value;
+                ObjInstance* instance = frame->receiver;
 
-                if (!(ctx->namespace && tableGet(ctx->namespace, name, &value))) {
+                if(instance != NULL && (tableGet(&instance->fields, name, &value) || tableGet(&instance->klass->methods, name, &value))){
+                    if(IS_BOUND_METHOD(value)){
+                        AS_BOUND_METHOD(value)->receiver = OBJ_VAL(instance);
+                    }
+                }
+                else if (!(ctx->namespace && tableGet(ctx->namespace, name, &value))) {
                     if (!tableGet(&vm.globals, name, &value)) {
                         runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
                         break;
@@ -1318,24 +1451,26 @@ static void* runCtx(void *context) {
             case OP_SET_GLOBAL: {
                 ObjString* name = READ_STRING();
                 Value value = peekCtx(ctx, 0);
+                ObjInstance* instance = frame->receiver;
 
-                if (ctx->namespace != NULL) {
-                    if (tableSet(ctx->namespace, name, value)) {
-                        tableDelete(ctx->namespace, name);
-                        if (tableSet(&vm.globals, name, value)) {
-                            tableDelete(&vm.globals, name);
-                            runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
-                            break;
-                        }
-                    }
-                } else {
-                    if (tableSet(&vm.globals, name, value)) {
-                        tableDelete(&vm.globals, name);
-                        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
-                        break;
-                    }
+                if (instance != NULL) {
+                    if (!tableSet(&instance->fields, name, value)) break;
+                    tableDelete(&instance->fields, name);
+
+                    if (!tableSet(&instance->klass->methods, name, value)) break;
+                    tableDelete(&instance->klass->methods, name);
                 }
 
+                if (ctx->namespace != NULL) {
+                    if (!tableSet(ctx->namespace, name, value)) break;
+                    tableDelete(ctx->namespace, name);
+                }
+
+                if (!tableSet(&vm.globals, name, value)) break;
+                tableDelete(&vm.globals, name);
+
+                runtimeErrorCtx(ctx, vm.nameErrorClass,
+                    "Undefined variable '%s'.", name->chars);
                 break;
             }
             case OP_GET_LOCAL: {
@@ -1859,7 +1994,49 @@ static void* runCtx(void *context) {
                 joinInternal(spawnNamespace(closure, namespace));
                 popCtx(ctx);
                 pushCtx(ctx, OBJ_VAL(namespace));
+                break;
             }
+            case OP_INSTANCEOF: {
+                Value right = popCtx(ctx);  // should be a class object
+                Value left = popCtx(ctx);   // should be any object
+
+                if (!IS_CLASS(right)) {
+                    runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass, "Right operand of 'is' must be a class.");
+                    break;
+                }
+
+                if(AS_CLASS(right) == vm.stringClass && IS_STRING(left)){
+                    pushCtx(ctx, BOOL_VAL(true));
+                    break;
+                }
+
+                if(AS_CLASS(right) == vm.listClass && IS_LIST(left)){
+                    pushCtx(ctx, BOOL_VAL(true));
+                    break;
+                }
+                
+                if(AS_CLASS(right) == vm.numberClass && IS_NUMBER(left)){
+                    pushCtx(ctx, BOOL_VAL(true));
+                    break;
+                }
+
+                if(AS_CLASS(right) == vm.boolClass && IS_BOOL(left)){
+                    pushCtx(ctx, BOOL_VAL(true));
+                    break;
+                }
+
+                if (!IS_INSTANCE(left)) {
+                    pushCtx(ctx, BOOL_VAL(false));
+                    break;
+                }
+
+                ObjInstance* instance = AS_INSTANCE(left);
+                ObjClass* klass = AS_CLASS(right);
+
+                pushCtx(ctx, BOOL_VAL(hasAncestor(instance, klass)));
+                break;
+            }
+
         }
     }
     ctx->finished = true;
