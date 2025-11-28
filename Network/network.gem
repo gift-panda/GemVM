@@ -4,7 +4,8 @@ import Window;
 // --- Neural network loading functions (unchanged) ---
 func loadMatrix(filename){
     var matrix = [];
-    var content = read(filename);
+    var file = File(filename, "r");
+    var content = file.read();
     var lines = content.split("\n");
     for(var n in lines){
         var numbers = n.trim().split(" ");
@@ -19,7 +20,8 @@ func loadMatrix(filename){
 
 func loadVector(filename){
     var vector = [];
-    var content = read(filename);
+    var file = File(filename, "r");
+    var content = file.read();
     var lines = content.split("\n");
     for(var line in lines){
         if(line != "") vector.append(line.trim().asNum());

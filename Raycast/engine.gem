@@ -1,4 +1,4 @@
-#!/usr/bin/env GemVM
+//#!/usr/bin/env GemVM
 
 import Window;
 import Math;
@@ -113,7 +113,7 @@ var faces = [
     [1, 2, 6, 5]   // right
 ];
 
-Window.init(800, 600, "Rotating Cube - Mouse Controlled");
+Window.init(800, 600, "Rotating Cube");
 
 func visibleFaces(verts, faces) {
     var visible = [];

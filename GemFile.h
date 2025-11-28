@@ -1,0 +1,25 @@
+unsigned char File_gem[] =
+"class File{\n"
+"    init(name, args){\n"
+"        this.descriptor = open(name, args);"
+"    }"
+"    write(msg){"
+"        put(this.descriptor, msg);"
+"    }"
+"    writeByte(msg){"
+"        putByte(this.descriptor, msg);"
+"    }"
+"    writeDouble(msg){"
+"        putDouble(this.descriptor, msg);"
+"    }"
+"    read(){"
+"      return readAll(this.descriptor);"
+"    }"
+"    static exists(name){"
+"        if(open(name, \"r\") == false) return false;"
+"        return true;"
+"    }"
+"}"
+;
+
+unsigned int File_gem_len = sizeof(File_gem) - 1;

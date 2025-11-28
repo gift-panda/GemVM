@@ -6,6 +6,7 @@
 #include "compiler.h"
 #include "GemError.h"
 #include "GemIterator.h"
+#include "GemFile.h"
 #include "vm.h"
 
 #include <signal.h>
@@ -21,6 +22,27 @@
 
 #define MAX_LINES 1000
 #define MAX_COL_LEN 512
+
+/*
+#include "GemWindow.h"
+char* getWindowText() {
+    char* buf = malloc(Window_gem_len + 1);
+    if (!buf) return NULL;
+
+    memcpy(buf, Window_gem, Window_gem_len);
+    buf[Window_gem_len] = '\0';
+    return buf;
+}
+
+#include "GemMath.h"
+char* getMathText() {
+    char* buf = malloc(Math_gem_len + 1);
+    if (!buf) return NULL;
+
+    memcpy(buf, Math_gem, Math_gem_len);
+    buf[Math_gem_len] = '\0';
+    return buf;
+}*/
 
 const char *tmp_filename = "tmp_code.txt";
 
@@ -491,6 +513,15 @@ char* getIteratorText() {
     return buf;
 }
 
+char* getFileText() {
+    char* buf = malloc(File_gem_len + 1);
+    if (!buf) return NULL;
+
+    memcpy(buf, File_gem, File_gem_len);
+    buf[File_gem_len] = '\0';
+    return buf;
+}
+
 void no_warn_proc(const char* msg, GC_word arg) {
     // Do nothing
 }
@@ -544,7 +575,9 @@ int main(int argc, const char* argv[]) {
 
     interpret(getErrorText());
     interpret(getIteratorText());
-
+    interpret(getFileText());
+    //interpret(getWindowText());
+    //interpret(getMathText());
 
 
     if (runRepl) {

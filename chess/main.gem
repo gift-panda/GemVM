@@ -10,15 +10,15 @@ import pieces.Queen;
 import pieces.Rook;
 import Game;
 
-var tileSize = 100;
-var boardSize = tileSize * 8;
+var tileSize :int = 100;
+var boardSize :int = tileSize * 8;
 Window.init(boardSize, boardSize, "Chess");
 
 var LIGHT_GREEN = "0xA6E59F".asNum();
 var DARK_GREEN = "0x3C8D2F".asNum();
 var RED = "0xFF0000".asNum();
 
-func drawBoard(Window, game) {
+func drawBoard(Window : Window, game : Game) : nil{
     var y = 0;
     while (y < 8) {
         var x = 0;

@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "value.h"
 
 
 FILE* file;
@@ -96,6 +97,10 @@ static void serialize_function(ObjFunction* func) {
 
 void serialize(const char* filename, ObjFunction* function) {
     file = fopen(filename, "wb");
+
+    uint32_t magic = 0x474D4F44;
+    writeInt(magic);
+    
     Value val = OBJ_VAL(function);
 
     serialize_function(AS_FUNCTION(val));

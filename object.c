@@ -187,6 +187,80 @@ ObjNamespace* newNamespace(ObjString* name){
     ns->name = name;
     return ns;
 }
+#include <fcntl.h>    // open, O_* flags
+#include <unistd.h>   // read, write, close
+#include <errno.h>    // errno
+#include <string.h>   // strchr, strerror
+#include <stdio.h>    // perror (if you use it)
+
+ObjDescriptor* newDescriptor(ObjString* name, ObjString* mode) {
+    ObjDescriptor* d = ALLOCATE_OBJ(ObjDescriptor, OBJ_DESCRIPTOR);
+    d->name = name;
+    d->mode = mode;
+
+#ifdef _WIN32
+    const char* m = mode->chars;
+
+    bool plus   = strchr(m, '+') != NULL;
+    bool append = (m[0] == 'a');
+
+    DWORD access = 0;
+    DWORD createMode = 0;
+
+    // Determine access flags
+    if (m[0] == 'r' && !plus) access = GENERIC_READ;
+    else if (m[0] == 'r' && plus) access = GENERIC_READ | GENERIC_WRITE;
+    else if (m[0] == 'w' && !plus) access = GENERIC_WRITE;
+    else if (m[0] == 'w' && plus) access = GENERIC_READ | GENERIC_WRITE;
+    else if (append && !plus) access = FILE_APPEND_DATA;
+    else if (append && plus) access = GENERIC_READ | FILE_APPEND_DATA;
+
+    // Determine create mode
+    if (m[0] == 'r') createMode = OPEN_EXISTING;
+    else if (m[0] == 'w') createMode = CREATE_ALWAYS;
+    else if (append)      createMode = OPEN_ALWAYS;
+
+    d->fd = CreateFileA(
+        name->chars,
+        access,
+        FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL,
+        createMode,
+        FILE_ATTRIBUTE_NORMAL,
+        NULL
+    );
+
+    if (d->fd == INVALID_HANDLE_VALUE) {
+        perror("CreateFileA");
+    }
+
+#else
+    // POSIX fallback
+    const char* m = mode->chars;
+
+    int flags = 0;
+    bool plus   = strchr(m, '+') != NULL;
+    bool append = (m[0] == 'a');
+
+    // Determine access flags
+    if (m[0] == 'r' && !plus) flags = O_RDONLY;
+    else if (m[0] == 'r' && plus) flags = O_RDWR;
+    else if (m[0] == 'w' && !plus) flags = O_WRONLY | O_CREAT | O_TRUNC;
+    else if (m[0] == 'w' && plus) flags = O_RDWR   | O_CREAT | O_TRUNC;
+    else if (append && !plus) flags = O_WRONLY | O_CREAT | O_APPEND;
+    else if (append && plus) flags = O_RDWR   | O_CREAT | O_APPEND;
+
+    d->fd = open(name->chars, flags, 0644);
+
+    if (d->fd < 0) {
+        perror("open");
+    }
+#endif
+
+    return d;
+}
+
+    
 
 ObjString* takeString(char* chars, int length) {
     // Allocate enough space (worst case: no escapes)

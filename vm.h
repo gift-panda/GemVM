@@ -110,7 +110,8 @@ typedef enum {
     INTERPRET_OK,
     COMPILE_OK,
     INTERPRET_COMPILE_ERROR,
-    INTERPRET_RUNTIME_ERROR
+    INTERPRET_RUNTIME_ERROR,
+    BYTECODE_ERROR,
 } InterpretResult;
 
 extern VM vm;

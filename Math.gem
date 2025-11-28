@@ -1,9 +1,0 @@
-//Deprecated, thus file is no longer used by the vm.
-
-class Math{
-    var PI = 3.141592653589793;
-    var E = 2.718281828459045;
-    var TAU = 6.283185307179586;
-    var toRad = 0.017453292519943295;
-    var toDeg = 57.29577951308232;
-}

@@ -5,6 +5,7 @@
 
 
 ObjFunction* compile(const char* source);
+Value preprocessorNative(Thread* ctx, int argCount, Value* args);
 void markCompilerRoots();
 
 #endif

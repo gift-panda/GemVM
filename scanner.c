@@ -145,12 +145,7 @@ static TokenType identifierType() {
                 }
             }
         case 'o':
-            if (scanner.current - scanner.start > 1) {
-                switch (scanner.start[1]) {
-                    case 'r': return checkKeyword(2, 0, "", TOKEN_OR);
-                    case 'p': return checkKeyword(2, 6, "erator", TOKEN_OPERATOR);
-                }
-            }
+            return checkKeyword(1, 1, "r", TOKEN_OR);
         case 'p':
             if ((scanner.current - scanner.start) == 5 &&
                 memcmp(scanner.start, "print", 5) == 0) {
@@ -286,7 +281,7 @@ static Token string() {
     while (peek() != '"' && !isAtEnd()) {
         if (peek() == '\n') scanner.line++;
 
-        if (peek() == '\\' && peekNext() == '"') {
+        if (peek() == '\\' && (peekNext() == '"' || peekNext() == '\\')) {
             advance(); // skip '\'
             advance(); // skip '"'
         } else {
@@ -309,7 +304,6 @@ Token scanToken() {
 
     char c = advance();
     if (isAlpha(c) || c == '#') return identifier();
-    if (scanner.previous.type == TOKEN_OPERATOR) return identifier();
     if (isDigit(c)) return number();
 
     switch (c) {
@@ -328,7 +322,7 @@ Token scanToken() {
         case '*': return makeToken(TOKEN_STAR);
         case '%': return makeToken(TOKEN_PERCENT);
         case '\\': return makeToken(TOKEN_INS);
-        case ':': if (match(':')) return makeToken(TOKEN_DOUBLE_COLON);
+        case ':': if (match(':')) return makeToken(TOKEN_DOUBLE_COLON); else return makeToken(TOKEN_COLON);
         case '!': return makeToken(
             match('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);
         case '=': return makeToken(
@@ -341,6 +335,5 @@ Token scanToken() {
 
     }
 
-    fprintf(stderr, "Unexpected character: %c lol\n", c);
     return errorToken("Unexpected character.");
 }

@@ -3,7 +3,7 @@ project(GemVM)
 
 set(CMAKE_CXX_STANDARD 23)
 add_compile_definitions(TB_IMPL_V1)
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
 # Add source files
 set(GEMVM_SOURCES
@@ -25,6 +25,7 @@ set(GEMVM_SOURCES
         linenoise.c linenoise.h
         serialize.c serialize.h
         deserialize.c deserialize.h
+        fileMethods.c fileMethods.h
 )
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
@@ -35,9 +36,9 @@ message(STATUS "CXX flags (debug): ${CMAKE_CXX_FLAGS_DEBUG}")
 include_directories(
         /usr/local/include/SDL2
         /usr/local/include/SDL2_image
-        /usr/local/include/SDL2_gfx     # ← Add this
+        /usr/local/include/SDL2_gfx
         /home/meow/CLionProjects/GemVM/termbox2
-        /usr/local/include/cjson        # ← Include cJSON headers
+        /usr/local/include/cjson 
 )
 
 # Find libraries

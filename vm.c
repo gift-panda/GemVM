@@ -16,7 +16,11 @@
 #ifdef _WIN32
 #include <windows.h>
 #else
-#include <unistd.h>
+#include <fcntl.h>     // open(), O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_TRUNC, O_APPEND
+#include <unistd.h>    // write(), read(), close()
+#include <string.h>    // strchr(), strlen()
+#include <errno.h>     // errno
+#include <stdio.h>     // perror()
 #endif
 
 #include <setjmp.h>
@@ -74,6 +78,8 @@ static DWORD WINAPI runCtx(LPVOID context);
 #else 
 static void* runCtx(void*);
 #endif
+
+#include "fileMethods.h"
 
 Value spawnNative(Thread*, int argCount, Value* args) {
 #ifdef _WIN32
@@ -225,37 +231,6 @@ static Value clockNative(Thread* ctx, int argCount, Value* args) {
         return NIL_VAL;
     }
     return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
-}
-
-static Value readNative(Thread* ctx, int argCount, Value* args) {
-    if (argCount < 1 || !IS_STRING(args[0])) {
-        runtimeErrorCtx(ctx, vm.illegalArgumentsErrorClass, "Argument must be a string (file path).");
-        return NIL_VAL;
-    }
-
-    const char* path = AS_CSTRING(args[0]);
-
-    FILE* file = fopen(path, "rb");
-    if (file == NULL) {
-        runtimeErrorCtx(ctx, vm.accessErrorClass, "Could not open file \"%s\".", path);
-        return NIL_VAL;
-    }
-
-    fseek(file, 0L, SEEK_END);
-    size_t size = ftell(file);
-    rewind(file);
-
-    char* buffer = (char*)GC_MALLOC(size + 1);
-    if (buffer == NULL) {
-        fclose(file);
-        runtimeErrorCtx(ctx, vm.accessErrorClass, "Not enough memory to read file.");
-        return NIL_VAL;
-    }
-
-    size_t bytesRead = fread(buffer, 1, size, file);
-    buffer[bytesRead] = '\0';
-    fclose(file);
-    return OBJ_VAL(copyString(buffer, (int)bytesRead));
 }
 
 static Value inputNative(Thread* ctx, int argCount, Value* args) {
@@ -559,12 +534,18 @@ void initVM() {
     defineNative("clock", clockNative);
     defineNative("input", inputNative);
     defineNative("sleep", sleepNative);
-    defineNative("read",  readNative);
+    defineNative("readAll",  readNative);
     defineNative("spawn", spawnNative);
     defineNative("join", joinNative);
     defineNative("sync", syncNative);
     defineNative("exit", exitNative);
     defineNative("hash", hashNative);
+    defineNative("put", writeNative);
+    defineNative("putByte", writeByteNative);
+    defineNative("putDouble", writeDoubleNative);
+    defineNative("open", openNative);
+    defineNative("process", preprocessorNative);
+
 
     defineStringMethods();
     defineListMethods();
@@ -846,7 +827,7 @@ static bool bindMethodCtx(Thread *ctx, ObjClass* klass, ObjString* name) {
 
     
     ObjBoundMethod* bound = AS_BOUND_METHOD(method);
-    ObjInstance* instance;
+    ObjInstance* instance = NULL;
     if (IS_STRING(peekCtx(ctx, 0))) instance = AS_STRING(peekCtx(ctx, 0))->instance;
     if (IS_LIST(peekCtx(ctx, 0))) instance = AS_LIST(peekCtx(ctx, 0))->instance;
     if (IS_THREAD(peekCtx(ctx, 0))) instance = AS_THREAD(peekCtx(ctx, 0))->instance;
@@ -1662,7 +1643,6 @@ static void* runCtx(void *context) {
                         pushCtx(ctx, value);
                         break;
                     }
-
                     if (bindMethodCtx(ctx, instance->klass, name)) {
                         break;
                     }
@@ -2074,6 +2054,7 @@ InterpretResult interpret(const char* source) {
 
 InterpretResult load(const char* source) {
         ObjFunction* function = deserialize(source);
+        if(function == NULL) return BYTECODE_ERROR;
         Value input[1] = {OBJ_VAL(newClosure(function))};
 
         Value result = spawnNative(NULL, 1, input);

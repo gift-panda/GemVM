@@ -47,6 +47,8 @@ typedef struct ObjInstance ObjInstance;
 #define AS_NAMESPACE(value)       ((ObjNamespace*)AS_OBJ(value))
 #define IS_BOUND_NATIVE(value)       isObjType(value, OBJ_BOUND_NATIVE)
 #define AS_BOUND_NATIVE(value)       ((ObjBoundNative*)AS_OBJ(value))
+#define IS_DESCRIPTOR(value)       isObjType(value, OBJ_DESCRIPTOR)
+#define AS_DESCRIPTOR(value)       ((ObjDescriptor*)AS_OBJ(value))
 
 // ---------------------
 // Object types
@@ -67,6 +69,7 @@ typedef enum {
     OBJ_THREAD,
     OBJ_NAMESPACE,
     OBJ_BOUND_NATIVE,
+    OBJ_DESCRIPTOR,
 } ObjType;
 
 struct Obj {
@@ -93,6 +96,18 @@ typedef struct {
     Obj obj;
     NativeFn function;
 } ObjNative;
+
+typedef struct {
+    Obj obj;
+    ObjString* name;
+    ObjString* mode;
+#ifdef _WIN32
+    HANDLE fd;
+#else
+    int fd;
+#endif
+} ObjDescriptor;
+
 
 typedef struct ObjString {
     Obj obj;
@@ -197,6 +212,7 @@ ObjMultiDispatch* newMultiDispatch(ObjString*);
 ObjImage* newImage(SDL_Texture* texture, int width, int height);
 ObjThread* newThread(pthread_t *thread, Thread *ctx);
 ObjNamespace* newNamespace(ObjString* name);
+ObjDescriptor* newDescriptor(ObjString* name, ObjString* args);
 
 void printObject(Value value);
 uint32_t hashString(const char* key, int length);

@@ -201,6 +201,7 @@ static void emitReturn() {
 
 static uint16_t makeConstant(Value value) {
     int constant = addConstant(currentChunk(), value);
+    //printf("added const %d\n" , constant); fflush(stdout);
     //if(constant > 255) error("too many constants");
     return constant;
 }
@@ -832,6 +833,25 @@ static void lambda(bool canAssign){
     }
 }
 
+static void consumeTypeHint() {
+    if (match(TOKEN_NIL)) {
+        // ok
+    } else {
+        consume(TOKEN_IDENTIFIER, "Expected type name.");
+        if (match(TOKEN_LEFT_BRACKET)) {
+            if(match(TOKEN_RIGHT_BRACKET)) return;
+            consumeTypeHint();
+
+            while (match(TOKEN_COMMA)) {
+                consumeTypeHint();
+            }
+
+            consume(TOKEN_RIGHT_BRACKET, "Expected ']' after type arguments.");
+        }
+    }
+}
+
+
 static void function(FunctionType type) {
     Compiler compiler;
     initCompiler(&compiler, type);
@@ -855,11 +875,14 @@ static void function(FunctionType type) {
             }
             uint16_t constant = parseVariable("Expect parameter name.");
             defineVariable(constant);
+
+            if(match(TOKEN_COLON)) consumeTypeHint();
         } while (match(TOKEN_COMMA));
     }
 
 
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+    if(match(TOKEN_COLON)) consumeTypeHint();
     consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");
     block();
 
@@ -876,30 +899,72 @@ static void function(FunctionType type) {
     }
 }
 
-static void method() {
-    bool makeStatic = false;
-    if (match(TOKEN_STATIC)) {
-        makeStatic = true;
-    }
-    consume(TOKEN_IDENTIFIER, "Expect method name.");
+static void staticMethod() {
+    consume(TOKEN_STATIC, "Expected method to be static.");
+    consume(TOKEN_IDENTIFIER, "Expected method name.");
     uint16_t constant = identifierConstant(&parser.previous);
 
-    FunctionType type = makeStatic? TYPE_STATIC_METHOD: TYPE_METHOD;
+    if (parser.previous.length == 4 && memcmp(parser.previous.start, "init", 4) == 0) {
+        error("Initializer cannot be static..");
+    }
+    
+    function(TYPE_STATIC_METHOD);
+    
+    emitByte(OP_STATIC_METHOD);
+    emitShort(constant);
+}
+
+static void method(uint16_t global){
+    FunctionType type = TYPE_METHOD;
     if (parser.previous.length == 4 && memcmp(parser.previous.start, "init", 4) == 0) {
         type = TYPE_INITIALIZER;
     }
-
-    if (makeStatic && type == TYPE_INITIALIZER) {
-        error("Initializer cannot be static..");
-    }
+                
     function(type);
-    if (makeStatic){
-        emitByte(OP_STATIC_METHOD);
-        emitShort(constant);
+
+    emitByte(OP_METHOD);
+    emitShort(global);
+}
+
+static void staticVariable(Chunk* new, uint16_t global){
+    int startPoint = current->function->chunk.count;
+    if (match(TOKEN_EQUAL)) {
+        expression();
+    } else {
+        emitByte(OP_NIL);
     }
-    else{
-        emitByte(OP_METHOD);
-        emitShort(constant);
+    consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+
+    emitByte(OP_STATIC_VAR);
+    emitShort(global);
+
+    int endPoint = current->function->chunk.count;
+    for(int i = startPoint; i < endPoint; i++){
+        writeChunk(new, current->function->chunk.code[i], current->function->chunk.lines[i]);
+    }
+    current->function->chunk.count = startPoint;        
+}
+
+static void opOverload(){
+    if(check(TOKEN_PLUS)){
+        parser.current.start = "+";
+        parser.current.length = 1;
+        parser.current.type = TOKEN_IDENTIFIER;
+    }
+    else if(check(TOKEN_MINUS)){
+        parser.current.start = "-";
+        parser.current.length = 1;
+        parser.current.type = TOKEN_IDENTIFIER;
+    }
+    else if(check(TOKEN_STAR)){
+        parser.current.start = "*";
+        parser.current.length = 1;
+        parser.current.type = TOKEN_IDENTIFIER;
+    }
+    else if(check(TOKEN_SLASH)){
+        parser.current.start = "/";
+        parser.current.length = 1;
+        parser.current.type = TOKEN_IDENTIFIER;
     }
 }
 
@@ -950,31 +1015,20 @@ static void classDeclaration() {
     namedVariable(className, false);
     consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
     while (!check(TOKEN_RIGHT_BRACE) && !check(TOKEN_EOF)) {
-        if (match(TOKEN_VAR)) {
-            int startPoint = current->function->chunk.count;
-            consume(TOKEN_IDENTIFIER, "Expect variable name.");
+
+        opOverload();
+        
+        if (match(TOKEN_IDENTIFIER)) {
             uint16_t global = identifierConstant(&parser.previous);
-            if (match(TOKEN_EQUAL)) {
-                expression();
-            } else {
-                emitByte(OP_NIL);
+            if(check(TOKEN_LEFT_PAREN)){
+                method(global);
             }
-            consume(TOKEN_SEMICOLON,
-                    "Expect ';' after variable declaration.");
-
-            emitByte(OP_STATIC_VAR);
-            emitShort(global);
-
-            //Save all the static variable bytecode
-            int endPoint = current->function->chunk.count;
-            for(int i = startPoint; i < endPoint; i++){
-                writeChunk(&new, current->function->chunk.code[i], current->function->chunk.lines[i]);
+            else {
+                staticVariable(&new, global);
             }
-            current->function->chunk.count = startPoint;
         }
         else {
-            match(TOKEN_OPERATOR);
-            method();
+            staticMethod();
         }
     }
 
@@ -1004,6 +1058,8 @@ static void funDeclaration() {
 
 static void varDeclaration() {
     uint16_t global = parseVariable("Expect variable name.");
+
+    if(match(TOKEN_COLON)) consumeTypeHint();
 
     if (match(TOKEN_EQUAL)) {
         expression();
@@ -2372,6 +2428,12 @@ char* preprocessor(const char* src) {
     //printf(desugared_for);
     
     return desugared_for;
+}
+
+Value preprocessorNative(Thread* ctx, int argCount, Value* args)
+{
+    return OBJ_VAL(newString(preprocessor(AS_CSTRING(args[0])),
+                             strlen(preprocessor(AS_CSTRING(args[0])))));
 }
 
 void compileImport(const char* source) {

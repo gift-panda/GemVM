@@ -133,6 +133,14 @@ ObjFunction* deserialize(const char* filename) {
         return NULL;
     }
 
+    uint32_t magic = 0x474D4F44;
+    uint32_t header = readInt();
+
+    if(magic != header){
+        printf("Invalid bytecode format.\n");
+        return NULL;
+    }
+
     uint8_t type = readByte();
     if (type != FunctionType) {
         printf("Expected FunctionType, got %d\n", type);
