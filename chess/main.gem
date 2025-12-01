@@ -1,5 +1,4 @@
 #!/usr/bin/env GemVM
-import Window;
 import Board;
 import Piece;
 import pieces.Bishop;
@@ -12,7 +11,11 @@ import Game;
 
 var tileSize :int = 100;
 var boardSize :int = tileSize * 8;
-Window.init(boardSize, boardSize, "Chess");
+
+import Window;
+
+var win = Window;
+win.init(boardSize, boardSize, "Chess");
 
 var LIGHT_GREEN = "0xA6E59F".asNum();
 var DARK_GREEN = "0x3C8D2F".asNum();

@@ -67,6 +67,9 @@ typedef struct {
     Table imageClassMethods;
     Table threadClassMethods;
 
+    ObjFunction* fileCompiler;
+    ObjFunction* sourceCompiler;
+
     ObjClass* stringClass;
     ObjClass* listClass;
     ObjClass* imageClass;
@@ -118,8 +121,10 @@ extern VM vm;
 
 void initVM();
 void freeVM();
+InterpretResult interpretBootStrapped(const char* source);
 InterpretResult interpret(const char* source);
 InterpretResult load(const char* source);
+InterpretResult callFunction(ObjFunction* function);
 void push(Value value);
 Value pop();
 void printStack();

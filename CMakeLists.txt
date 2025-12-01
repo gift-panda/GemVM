@@ -3,7 +3,7 @@ project(GemVM)
 
 set(CMAKE_CXX_STANDARD 23)
 add_compile_definitions(TB_IMPL_V1)
-set(CMAKE_BUILD_TYPE Release)
+set(CMAKE_BUILD_TYPE Debug)
 
 # Add source files
 set(GEMVM_SOURCES
@@ -26,6 +26,8 @@ set(GEMVM_SOURCES
         serialize.c serialize.h
         deserialize.c deserialize.h
         fileMethods.c fileMethods.h
+        deserializeBytecode.c deserializeBytecode.h
+        deserializeMemory.c deserializeMemory.h
 )
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
@@ -71,7 +73,7 @@ target_compile_definitions(GemVM PRIVATE GC_THREADS)
 
 add_custom_target(test
     COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/test.sh
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build/test
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build
     DEPENDS GemVM
     COMMENT "Running GemVM tests..."
 )

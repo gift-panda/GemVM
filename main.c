@@ -495,6 +495,15 @@ static void runFile(const char* path) {
     if (result == INTERPRET_RUNTIME_ERROR) exit(70);
 }
 
+static void runFileBootStrapped(const char* path) {
+    char* source = readFile(path);
+    InterpretResult result = interpretBootStrapped(source);
+    free(source);
+
+    if (result == INTERPRET_COMPILE_ERROR) exit(65);
+    if (result == INTERPRET_RUNTIME_ERROR) exit(70);
+}
+
 char* getErrorText() {
     char* buf = malloc(Error_gem_len + 1);
     if (!buf) return NULL;
@@ -526,6 +535,44 @@ void no_warn_proc(const char* msg, GC_word arg) {
     // Do nothing
 }
 
+#include "deserializeMemory.h"
+
+// This macro embeds a binary file into the executable.
+// Usage: INCBIN(symbolName, "filename.bin");
+
+#ifndef INCBIN_H
+#define INCBIN_H
+
+#define INCBIN(NAME, FILENAME)                     \
+    __asm__ (                                      \
+        ".pushsection .rodata\n"                   \
+        ".global " #NAME "_start\n"                \
+        #NAME "_start:\n"                          \
+        ".incbin \"" FILENAME "\"\n"               \
+        ".global " #NAME "_end\n"                  \
+        #NAME "_end:\n"                            \
+        ".popsection\n"                            \
+    );                                              \
+    extern const unsigned char NAME##_start[];      \
+    extern const unsigned char NAME##_end[];
+
+
+#endif
+
+
+INCBIN(FileCompiler, "/home/meow/boot/compiler.gemc")
+INCBIN(SourceCompiler, "/home/meow/boot/compilerFromSource.gemc");
+
+ObjFunction* loadFileCompiler() {
+    size_t size = (size_t)(FileCompiler_end - FileCompiler_start);
+    return deserialize_from_memory(FileCompiler_start, size);
+}
+
+ObjFunction* loadSourceCompiler() {
+    size_t size = (size_t)(SourceCompiler_end - SourceCompiler_start);
+    return deserialize_from_memory(SourceCompiler_start, size);
+}
+
 int main(int argc, const char* argv[]) {
     GC_set_warn_proc(no_warn_proc);
     GC_INIT();
@@ -541,7 +588,8 @@ int main(int argc, const char* argv[]) {
     initVM();
 
     // Parse flags
-    for (int i = 1; i < argc; i++) {
+    int i = 1;
+    for (; i < argc; i++) {
         const char* arg = argv[i];
         if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
             printf("Usage: clox [options] [script]\n");
@@ -570,8 +618,16 @@ int main(int argc, const char* argv[]) {
         } else {
             scriptPath = arg;
             runRepl = 0;
+            break;
         }
     }
+
+    ObjList* gem_argv = newList();
+    for(; i < argc; i++){
+        writeValueArray(&gem_argv->elements, OBJ_VAL(copyString(argv[i], strlen(argv[i]))));
+    }
+    tableSet(&vm.globals, copyString("argv", 4), OBJ_VAL(gem_argv));
+
 
     interpret(getErrorText());
     interpret(getIteratorText());
@@ -579,6 +635,9 @@ int main(int argc, const char* argv[]) {
     //interpret(getWindowText());
     //interpret(getMathText());
 
+    vm.fileCompiler = loadFileCompiler();
+    vm.sourceCompiler = loadSourceCompiler();
+    
 
     if (runRepl) {
         vm.repl = 1;
@@ -594,13 +653,17 @@ int main(int argc, const char* argv[]) {
             return 1;
         }
 
-        if (enableGC) {
-            vm.gcEnabled = true;
+        if (!enableGC) {
+            
+            runFileBootStrapped(scriptPath);
+            return 0;
         }
         
         if (!run) {
-            vm.path = scriptPath;
             vm.noRun = true;
+            vm.path = scriptPath;
+            runFile(scriptPath);
+            return 0;
         }
         if (showBytecode) {
            vm.showBytecode = true; // Set a VM flag, then respect it in your compiler
@@ -609,7 +672,8 @@ int main(int argc, const char* argv[]) {
             load(scriptPath);
             return 0;
         }
-        runFile(scriptPath);
+        callFunction(vm.fileCompiler);
+        return 0;
     }
 
     return 0;

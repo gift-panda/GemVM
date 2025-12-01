@@ -500,6 +500,9 @@ void initVM() {
     initTable(&vm.imageClassMethods);
     initTable(&vm.threadClassMethods);
 
+    vm.sourceCompiler = NULL;
+    vm.fileCompiler = NULL;
+
     ObjString* string = ALLOCATE_OBJ(ObjString, OBJ_STRING);
     string->length = 6;
     string->chars = "String";
@@ -2029,9 +2032,40 @@ static void* runCtx(void *context) {
 
 #include "serialize.h"
 #include "deserialize.h"
+#include "deserializeBytecode.h"
+
+InterpretResult callFunction(ObjFunction* function) {
+    if(function == NULL) return BYTECODE_ERROR;
+    Value input[1] = {OBJ_VAL(newClosure(function))};
+
+    Value result = spawnNative(NULL, 1, input);
+    result = joinInternal(result);
+        
+    return INTERPRET_OK;
+}
+
+InterpretResult interpretBootStrapped(const char* source){
+    Value args;
+    tableGet(&vm.globals, copyString("argv", 4), &args);
+    writeValueArray(&AS_LIST(args)->elements, OBJ_VAL(newString(source, strlen(source))));
+    
+    callFunction(vm.sourceCompiler);
+    AS_LIST(args)->elements.count--;
+
+    ObjFunction* function = getCompiledBytecode();
+    if (function == NULL) return INTERPRET_COMPILE_ERROR;
+
+    Value input[1] = {OBJ_VAL(newClosure(function))};
+
+    Value result = spawnNative(NULL, 1, input);
+    result = joinInternal(result);
+    
+    return INTERPRET_OK;
+}
 
 InterpretResult interpret(const char* source) {
     ObjFunction* function = compile(source);
+    
     if (vm.noRun) {
         size_t len = strlen(vm.path);
         char* filename = GC_MALLOC(len + 2);     // +1 for 'c', +1 for '\0'
@@ -2061,5 +2095,4 @@ InterpretResult load(const char* source) {
         result = joinInternal(result);
         
         return INTERPRET_OK;
-    
 }
