@@ -49,6 +49,8 @@ typedef struct ObjInstance ObjInstance;
 #define AS_BOUND_NATIVE(value)       ((ObjBoundNative*)AS_OBJ(value))
 #define IS_DESCRIPTOR(value)       isObjType(value, OBJ_DESCRIPTOR)
 #define AS_DESCRIPTOR(value)       ((ObjDescriptor*)AS_OBJ(value))
+#define IS_UPVALUE(value)       isObjType(value, OBJ_UPVALUE)
+#define AS_UPVALUE(value)       ((ObjUpvalue*)AS_OBJ(value))
 
 // ---------------------
 // Object types

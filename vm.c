@@ -900,16 +900,26 @@ static bool isPrivate(ObjString* name) {
 static bool invokeCtx(Thread *ctx, ObjString* name, int argCount, CallFrame* frame) {
     Value receiver = peekCtx(ctx, argCount);
     
-    if (IS_NAMESPACE(receiver)){
+    if (IS_NAMESPACE(receiver)) {
         ObjNamespace* ns = AS_NAMESPACE(receiver);
         Value value;
-                
+
         if (tableGet(ns->namespace, name, &value)) {
+
+            // --- UNWRAP UPVALUE EXPORTS ---
+            if (IS_OBJ(value) && AS_OBJ(value)->type == OBJ_UPVALUE) {
+                ObjUpvalue* uv = (ObjUpvalue*)AS_OBJ(value);
+                value = *uv->location;   // actual stored function/closure/class/whatever
+            }
+
             bool res = callValueCtx(ctx, value, argCount);
             return res;
         }
-                
-        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined function '%s' in namespace '%s'.", name->chars, ns->name->chars);
+
+        runtimeErrorCtx(ctx, vm.nameErrorClass,
+            "Undefined function '%s' in namespace '%s'.",
+            name->chars, ns->name->chars);
+
         return false;
     }
     
@@ -1405,10 +1415,7 @@ static void* runCtx(void *context) {
             case OP_POP: popCtx(ctx); break;
             case OP_DEFINE_GLOBAL: {
                 ObjString* name = READ_STRING();
-                if(ctx->namespace != NULL)
-                    tableSet(ctx->namespace, name, peekCtx(ctx, 0));
-                else 
-                    tableSet(&vm.globals, name, peekCtx(ctx, 0));
+                tableSet(&vm.globals, name, peekCtx(ctx, 0));
                 popCtx(ctx);
                 break;
             }
@@ -1422,12 +1429,11 @@ static void* runCtx(void *context) {
                         AS_BOUND_METHOD(value)->receiver = OBJ_VAL(instance);
                     }
                 }
-                else if (!(ctx->namespace && tableGet(ctx->namespace, name, &value))) {
-                    if (!tableGet(&vm.globals, name, &value)) {
-                        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
-                        break;
-                    }
+                else if (!tableGet(&vm.globals, name, &value)) {
+                    runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s'.", name->chars);
+                    break;
                 }
+                
 
                 pushCtx(ctx, value);
                 break;
@@ -1445,11 +1451,6 @@ static void* runCtx(void *context) {
                     tableDelete(&instance->klass->methods, name);
                 }
 
-                if (ctx->namespace != NULL) {
-                    if (!tableSet(ctx->namespace, name, value)) break;
-                    tableDelete(ctx->namespace, name);
-                }
-
                 if (!tableSet(&vm.globals, name, value)) break;
                 tableDelete(&vm.globals, name);
 
@@ -1465,6 +1466,28 @@ static void* runCtx(void *context) {
             case OP_SET_LOCAL: {
                 uint8_t slot = READ_BYTE();
                 frame->slots[slot] = peekCtx(ctx, 0);
+                break;
+            }
+            case OP_EXPORT_LOCAL: {
+                ObjString* name = READ_STRING();
+                uint8_t slot = READ_BYTE();
+
+                if (ctx->namespace == NULL)
+                    runtimeErrorCtx(ctx, vm.formatErrorClass, "Cannot export outside a namespace.");
+
+                ObjUpvalue* uv = captureUpvalueCtx(ctx, &frame->slots[slot]);
+                tableSet(ctx->namespace, name, OBJ_VAL(uv));
+                break;
+            }
+            case OP_EXPORT_UPVALUE: {
+                ObjString* name = READ_STRING();
+                uint8_t slot = READ_BYTE();
+
+                if (ctx->namespace == NULL)
+                    runtimeErrorCtx(ctx, vm.formatErrorClass, "Cannot export outside a namespace.");
+
+                ObjUpvalue* uv = frame->closure->upvalues[slot];
+                tableSet(ctx->namespace, name, OBJ_VAL(uv));
                 break;
             }
             case OP_JUMP_IF_FALSE: {
@@ -1617,14 +1640,22 @@ static void* runCtx(void *context) {
                     runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined property '%s'.", name->chars);
                 }
                 
-                if (IS_NAMESPACE(peekCtx(ctx, 0))){
+                if (IS_NAMESPACE(peekCtx(ctx, 0))) {
                     ObjNamespace* ns = AS_NAMESPACE(peekCtx(ctx, 0));
                     ObjString* name = READ_STRING();
                     Value value;
 
                     if (!tableGet(ns->namespace, name, &value)) {
-                        runtimeErrorCtx(ctx, vm.nameErrorClass, "Undefined variable '%s' in namespace '%s'.", name->chars, ns->name->chars);
+                        runtimeErrorCtx(ctx, vm.nameErrorClass,
+                            "Undefined variable '%s' in namespace '%s'.",
+                            name->chars, ns->name->chars);
                         break;
+                    }
+
+                    // --- unwrap upvalues ---
+                    if (IS_OBJ(value) && AS_OBJ(value)->type == OBJ_UPVALUE) {
+                        ObjUpvalue* uv = (ObjUpvalue*)AS_OBJ(value);
+                        value = *uv->location;   // use the live binding
                     }
 
                     popCtx(ctx);
@@ -1977,6 +2008,7 @@ static void* runCtx(void *context) {
                 joinInternal(spawnNamespace(closure, namespace));
                 popCtx(ctx);
                 pushCtx(ctx, OBJ_VAL(namespace));
+
                 break;
             }
             case OP_INSTANCEOF: {

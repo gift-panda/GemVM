@@ -474,9 +474,38 @@ static void literal(bool canAssign) {
     }
 }
 
+static void lambda(bool canAssign);
+
 static void grouping(bool canAssign) {
-    expression();
-    consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
+    Scanner *sc = getScanner();
+    
+    int prevLine = sc->line;
+    const char* prevStart = sc->start;
+    const char* prevCurrent = sc->current;
+
+    Token currToken = parser.current;
+    Token prevToken = parser.previous;
+
+    bool makeLambda = false;
+    if(match(TOKEN_IDENTIFIER)){
+        if(match(TOKEN_COMMA)) makeLambda = true;
+        else if(match(TOKEN_RIGHT_PAREN) && match(TOKEN_LAMBDA)) makeLambda = true;
+    }
+    if(match(TOKEN_RIGHT_PAREN) && match(TOKEN_LAMBDA)) makeLambda = true;
+
+    sc->line = prevLine;
+    sc->start = prevStart;
+    sc->current = prevCurrent;
+
+    parser.current = currToken;
+    parser.previous = prevToken;
+
+    if(makeLambda)
+        lambda(false);
+    else {
+        expression();
+        consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
+    }
 }
 
 static void and_(bool canAssign) {
@@ -581,9 +610,6 @@ static void list(bool canAssign) {
 }
 
 static void function(FunctionType type);
-
-static void lambda(bool canAssign);
-
 
 ParseRule rules[] = {
     [TOKEN_LEFT_PAREN]    = {grouping, call,   PREC_CALL},
@@ -802,7 +828,7 @@ static void lambda(bool canAssign){
     compiler.function->name = copyString("lambda", 6);
 
     beginScope();
-    consume(TOKEN_LEFT_PAREN, "Expect '(' after lambda.");
+    //consume(TOKEN_LEFT_PAREN, "Expect '(' after lambda.");
 
     if (!check(TOKEN_RIGHT_PAREN)) {
         do {
@@ -817,6 +843,7 @@ static void lambda(bool canAssign){
 
 
     consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+    consume(TOKEN_LAMBDA, "Expect '=>' after parameters.");
     consume(TOKEN_LEFT_BRACE, "Expect '{' before lambda body.");
     block();
 
@@ -1475,7 +1502,9 @@ void namespaceStatement(){
     current->function->arity = 0;
 
     consume(TOKEN_LEFT_BRACE, "Expect '{' before body.");
+    beginScope();
     block();
+    endScope();
 
     ObjFunction* function = endCompiler();
     int closureConstant = makeConstant(OBJ_VAL(function));
@@ -1490,6 +1519,36 @@ void namespaceStatement(){
 
     emitByte(OP_NAMESPACE);
     defineVariable(global);
+}
+
+void exportStatement() {
+    consume(TOKEN_IDENTIFIER, "Expected variable to export.");
+    Token name = parser.previous;
+
+    int local = resolveLocal(current, &name);
+    int upvalue = -1;
+
+    int nameConst = identifierConstant(&name);
+
+    if (local != -1) {
+        // 🔥 IMPORTANT: tell compiler this local must be closed
+        current->locals[local].isCaptured = true;
+
+        emitByte(OP_EXPORT_LOCAL);
+        emitShort(nameConst);
+        emitByte((uint8_t)local);
+        return;
+    }
+
+    upvalue = resolveUpvalue(current, &name);
+    if (upvalue != -1) {
+        emitByte(OP_EXPORT_UPVALUE);
+        emitShort(nameConst);
+        emitByte((uint8_t)upvalue);
+        return;
+    }
+
+    error("Undefined local variable to export.");
 }
 
 void compileImport(const char* source);
@@ -1590,6 +1649,8 @@ static void statement() {
         returnStatement();
     }else if(match(TOKEN_NAMESPACE)){
         namespaceStatement();
+    }else if(match(TOKEN_EXPORT)){
+        exportStatement();
     }else {
         expressionStatement();
     }

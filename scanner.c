@@ -127,7 +127,13 @@ static TokenType identifierType() {
                     case 'o': return checkKeyword(2, 6, "ntinue", TOKEN_CONTINUE);
                 }
             }
-        case 'e': return checkKeyword(1, 3, "lse", TOKEN_ELSE);
+        case 'e': 
+            if(scanner.current - scanner.start > 1){
+                switch(scanner.start[1]){
+                    case 'x': return checkKeyword(2, 4, "port", TOKEN_EXPORT);
+                    case 'l': return checkKeyword(2, 2, "se", TOKEN_ELSE);
+                }
+            }
         case 'i':
             if (scanner.current - scanner.start > 1) {
                 switch (scanner.start[1]) {
@@ -136,7 +142,7 @@ static TokenType identifierType() {
                     case 'm': return checkKeyword(2, 4, "port", TOKEN_IMPORT);
                 }
             }
-        case 'l': return checkKeyword(1, 5, "ambda", TOKEN_LAMBDA);
+        //case 'l': return checkKeyword(1, 5, "ambda", TOKEN_LAMBDA);
         case 'n': 
             if(scanner.current - scanner.start > 1){
                 switch(scanner.start[1]){
@@ -326,7 +332,7 @@ Token scanToken() {
         case '!': return makeToken(
             match('=') ? TOKEN_BANG_EQUAL : TOKEN_BANG);
         case '=': return makeToken(
-            match('=') ? TOKEN_EQUAL_EQUAL : TOKEN_EQUAL);
+            match('=') ? TOKEN_EQUAL_EQUAL : match('>') ? TOKEN_LAMBDA :TOKEN_EQUAL);
         case '<': return makeToken(
             match('=') ? TOKEN_LESS_EQUAL : TOKEN_LESS);
         case '>': return makeToken(

@@ -538,7 +538,6 @@ void no_warn_proc(const char* msg, GC_word arg) {
 #include "deserializeMemory.h"
 
 // This macro embeds a binary file into the executable.
-// Usage: INCBIN(symbolName, "filename.bin");
 
 #ifndef INCBIN_H
 #define INCBIN_H
@@ -560,8 +559,8 @@ void no_warn_proc(const char* msg, GC_word arg) {
 #endif
 
 
-INCBIN(FileCompiler, "/home/meow/boot/compiler.gemc")
-INCBIN(SourceCompiler, "/home/meow/boot/compilerFromSource.gemc");
+INCBIN(FileCompiler, "/home/meow/boot/fileCompiler.gemc")
+INCBIN(SourceCompiler, "/home/meow/boot/sourceCompiler.gemc");
 
 ObjFunction* loadFileCompiler() {
     size_t size = (size_t)(FileCompiler_end - FileCompiler_start);
@@ -658,15 +657,14 @@ int main(int argc, const char* argv[]) {
             runFileBootStrapped(scriptPath);
             return 0;
         }
-        
+        if (showBytecode) {
+           vm.showBytecode = true; // Set a VM flag, then respect it in your compiler
+        }
         if (!run) {
             vm.noRun = true;
             vm.path = scriptPath;
             runFile(scriptPath);
             return 0;
-        }
-        if (showBytecode) {
-           vm.showBytecode = true; // Set a VM flag, then respect it in your compiler
         }
         if(has_extension(scriptPath, "gemc")){
             load(scriptPath);

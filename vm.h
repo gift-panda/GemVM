@@ -30,6 +30,8 @@ typedef struct {
     Value* saveStack[10];
     ObjClass* klass;
     ObjInstance* receiver;
+
+    //Table* namespace;
 } CallFrame;
 
 typedef struct Thread {

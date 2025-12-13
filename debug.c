@@ -13,6 +13,30 @@ void disassembleChunk(Chunk* chunk, const char* name) {
     }
 }
 
+static int exportLocalInstruction(const char* name, Chunk* chunk, int offset) {
+    uint16_t stringConst = (uint16_t)((chunk->code[offset + 1] << 8) |
+                                      chunk->code[offset + 2]);
+    uint8_t slot = chunk->code[offset + 3];
+
+    printf("%-16s nameConst=%4d slot=%d '", name, stringConst, slot);
+    printValue(chunk->constants.values[stringConst]);
+    printf("'\n");
+
+    return offset + 4;
+}
+
+static int exportUpvalueInstruction(const char* name, Chunk* chunk, int offset) {
+    uint16_t stringConst = (uint16_t)((chunk->code[offset + 1] << 8) |
+                                      chunk->code[offset + 2]);
+    uint8_t slot = chunk->code[offset + 3];
+
+    printf("%-16s nameConst=%4d upvalueSlot=%d '", name, stringConst, slot);
+    printValue(chunk->constants.values[stringConst]);
+    printf("'\n");
+
+    return offset + 4;
+}
+
 static int constantInstruction(const char* name, Chunk* chunk,
                                int offset) {
     uint16_t constant = (uint16_t)((chunk->code[offset + 1] << 8) | chunk->code[offset + 2]);
@@ -208,6 +232,12 @@ int disassembleInstruction(Chunk* chunk, int offset) {
         case OP_NAMESPACE:{
             return simpleInstruction("OP_NAMESPACE", offset);
         }
+        case OP_EXPORT_LOCAL:
+            return exportLocalInstruction("OP_EXPORT_LOCAL", chunk, offset);
+
+        case OP_EXPORT_UPVALUE:
+            return exportUpvalueInstruction("OP_EXPORT_UPVALUE", chunk, offset);
+
         default:
             printf("Unknown opcode %d\n", instruction);
             return offset + 1;

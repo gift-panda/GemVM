@@ -28,6 +28,7 @@ set(GEMVM_SOURCES
         fileMethods.c fileMethods.h
         deserializeBytecode.c deserializeBytecode.h
         deserializeMemory.c deserializeMemory.h
+        /home/meow/boot/compiler.gemc
 )
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
