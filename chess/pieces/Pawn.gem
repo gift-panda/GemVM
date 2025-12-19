@@ -45,6 +45,16 @@ class Pawn :: Piece {
             moves.append([cx2, fy]);
         }
 
+        if (this.board.enPassantSquare != nil) {
+            var epX = this.board.enPassantSquare[0];
+            var epY = this.board.enPassantSquare[1];
+
+            if (epY == fy and Math.abs(epX - x) == 1) {
+                moves.append([epX, epY]);
+            }
+        }
+
+
         // TODO: en passant, promotion
         return moves;
     }

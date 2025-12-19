@@ -19,9 +19,67 @@ class Board {
         this.bKing = nil;
         this.wKing = nil;
 
+        this.enPassantSquare = nil;
+        this.enPassantPawn = nil;
+
         this.initPosition();
     }
 
+    isSquareAttacked(x, y, byColor) {
+        var i = 0;
+        while (i < this.pieces.length()) {
+            var p = this.pieces[i];
+
+            if (p.color != byColor) {
+                i = i + 1;
+                continue;
+            }
+
+            var px = p.pos[0];
+            var py = p.pos[1];
+
+            if (p.type == "pawn") {
+                var dx = x - px;
+                var dy = y - py;
+
+                if (p.color == "white") {
+                    if (dy == -1 and (dx == -1 or dx == 1))
+                        return true;
+                } else {
+                    if (dy == 1 and (dx == -1 or dx == 1))
+                        return true;
+                }
+
+                i = i + 1;
+                continue;
+            }
+
+            if (p.type == "king") {
+                var dx = x - px;
+                var dy = y - py;
+
+                if (dx >= -1 and dx <= 1 and dy >= -1 and dy <= 1)
+                    return true;
+
+                i = i + 1;
+                continue;
+            }
+
+            var moves = p.getMoves();
+            var j = 0;
+            while (j < moves.length()) {
+                var m = moves[j];
+                if (m[0] == x and m[1] == y)
+                    return true;
+                j = j + 1;
+            }
+
+            i = i + 1;
+        }
+
+        return false;
+    }
+    
     inBounds(x : int[], y : int) : bool{
         if (x >= 0) {
             if (x < 8) {
@@ -72,7 +130,22 @@ class Board {
         var piece = this.get(fx, fy);
         if (piece == nil) return;
 
+        var oldEPSquare = this.enPassantSquare;
+        var oldEPPawn   = this.enPassantPawn;
+
         var target = this.get(tx, ty);
+
+        var isEnPassant =
+            piece.type == "pawn"
+            and oldEPSquare != nil
+            and tx == oldEPSquare[0]
+            and ty == oldEPSquare[1];
+
+        if (isEnPassant) {
+            target = oldEPPawn;
+            this.set(target.pos[0], target.pos[1], nil);
+        }
+
         if (target != nil) {
             var i = 0;
             while (i < this.pieces.length()) {
@@ -88,12 +161,22 @@ class Board {
         this.set(fx, fy, nil);
         piece.pos = [tx, ty];
 
-        if (this.turn == "white") {
-            this.turn = "black";
+        if (piece.type == "pawn" and Math.abs(ty - fy) == 2) {
+            var midY = (ty + fy) / 2;
+            this.enPassantSquare = [fx, midY];
+            this.enPassantPawn = piece;
         } else {
-            this.turn = "white";
+            this.enPassantSquare = nil;
+            this.enPassantPawn = nil;
         }
+
+        if (this.turn == "white"){ 
+            this.turn = "black"; 
+        } else { 
+            this.turn = "white"; 
+        }    
     }
+
 
     initPosition() {
         var pieceRow = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook];

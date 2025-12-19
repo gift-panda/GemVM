@@ -1,4 +1,4 @@
-//#!/usr/bin/env GemVM
+#!/usr/bin/env GemVM
 
 import Window;
 import Math;

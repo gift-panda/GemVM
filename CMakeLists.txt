@@ -3,7 +3,7 @@ project(GemVM)
 
 set(CMAKE_CXX_STANDARD 23)
 add_compile_definitions(TB_IMPL_V1)
-set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_BUILD_TYPE Release)
 
 # Add source files
 set(GEMVM_SOURCES

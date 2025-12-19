@@ -36,8 +36,19 @@ class Piece {
 
     getLegalMoves() {
             var moves = this.getMoves();
-            var legal = [];
+            if(this.type == "king"){
+                if(!this.hasMoved and !this.isInCheck()){
+                    if(this.canCastle(true)){
+                        moves.append([this.pos[0] + 2, this.pos[1]]);
+                    }
 
+                    if(this.canCastle(false)){
+                        moves.append([this.pos[0] - 2, this.pos[1]]);
+                    }
+                }
+            }
+            
+            var legal = [];
             var originalPos = this.pos;
 
             for (var i = 0; i < moves.length(); i = i + 1) {

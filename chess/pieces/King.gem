@@ -18,16 +18,6 @@ class King :: Piece {
             }
             i = i + 1;
         }
-
-        if(!this.hasMoved and !this.isInCheck()){
-            if(this.canCastle(true)){
-                moves.append([this.pos[0] + 2, this.pos[1]]);
-            }
-
-            if(this.canCastle(false)){
-                moves.append([this.pos[0] - 2, this.pos[1]]);
-            }
-        }
         return moves;
     }
 
@@ -35,7 +25,7 @@ class King :: Piece {
         for(var i = 0; i < 8; i = i + 1){
             for(var j = 0; j < 8; j = j + 1){
                 var piece = this.board.get(i, j);
-                if(!this.isEmpty(i, j) and this.isEnemy(i, j) and piece.type != "king"){
+                if(!this.isEmpty(i, j) and this.isEnemy(i, j)){
                     var moves = piece.getMoves();
                     for(var x = 0; x < moves.length(); x = x + 1){
                         if(moves[x][0] == this.pos[0] and moves[x][1] == this.pos[1]) return true;
@@ -60,23 +50,38 @@ class King :: Piece {
         return true;
     }
 
-    canCastle(kingSide){
+    canCastle(kingSide) {
+        if (this.hasMoved) return false;
+        if (this.isInCheck()) return false;
+
         var row = this.pos[1];
         var col = this.pos[0];
 
         var rookCol = 0;
-        if(kingSide) rookCol = 7;
-        var rook = this.board.get(row, rookCol);
-        if(rook == nil or rook.type != "rook" or rook.hasMoved){
+        if (kingSide) rookCol = 7;
+
+        var rook = this.board.get(rookCol, row);
+        if (rook == nil or rook.type != "rook" or rook.hasMoved)
             return false;
-        }
+
+        var enemy;
+        if (this.color == "white")
+            enemy = "black";
+        else
+            enemy = "white";
 
         var step = -1;
-        if(kingSide) step = 1;
+        if (kingSide) step = 1;
 
-        for(var i = col + step; i != rookCol; i = i + step){
-            if(this.board.get(i, row) != nil) return false;
+        for (var i = col + step; i != rookCol; i = i + step) {
+
+            if (this.board.get(i, row) != nil)
+                return false;
+
+            if (this.board.isSquareAttacked(i, row, enemy))
+                return false;
         }
+
         return true;
     }
 

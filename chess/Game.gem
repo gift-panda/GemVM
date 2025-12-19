@@ -1,14 +1,24 @@
 class Game {
     init() {
         this.board = Board();
-        this.selected = nil; // [piece, moves]
+        this.selected = nil;
+        this.flipped = false;
+        this.dragging = false;
+        this.dragPiece = nil;
+        this.dragFrom = nil;
+        this.mouseDownTile = nil;
+        this.dragPiece = nil;
+        this.dragging = false;
+    }
+
+    endTurn() {
+        this.flipped = !this.flipped;
     }
 
     clickTile(x, y) {
         var clickedPiece = this.board.get(x, y);
 
         if (this.selected == nil) {
-            // Nothing selected yet
             if (clickedPiece != nil and clickedPiece.color == this.board.turn) {
                 var moves = clickedPiece.getLegalMoves();
                 this.selected = [clickedPiece, moves];
@@ -32,6 +42,7 @@ class Game {
                 if (piece.type == "king" and this.abs(x - piece.pos[0]) == 2) {
                     var rookFromCol;
                     var rookToCol;
+
                     if (x > piece.pos[0]) {
                         rookFromCol = 7;
                         rookToCol = x - 1;
@@ -39,36 +50,39 @@ class Game {
                         rookFromCol = 0;
                         rookToCol = x + 1;
                     }
+
                     this.board.movePiece([rookFromCol, y], [rookToCol, y]);
-                    if (this.board.turn == "white") {
+
+                    if (this.board.turn == "white")
                         this.board.turn = "black";
-                    } else {
+                    else
                         this.board.turn = "white";
-                    }
                 }
 
                 this.board.movePiece(piece.pos, [x, y]);
 
-                if(piece.type == "pawn"){
-                    if(piece.color == "white" and y == 0){
+                if (piece.type == "pawn") {
+                    if (piece.color == "white" and y == 0)
                         this.board.set([x, y], Queen([x, y], "white", this.board));
-                    }
-                    if(piece.color == "black" and y == 7){
+                    if (piece.color == "black" and y == 7)
                         this.board.set([x, y], Queen([x, y], "black", this.board));
-                    }
                 }
-                if(this.board.wKing.isInCheck() and this.board.wKing.isInMate())
+
+                if (this.board.wKing.isInCheck() and this.board.wKing.isInMate())
                     println("Black Won!");
-                if(this.board.bKing.isInCheck() and this.board.bKing.isInMate())
+                if (this.board.bKing.isInCheck() and this.board.bKing.isInMate())
                     println("White Won!");
+
+                this.endTurn();
             }
 
-            this.selected = nil; // Deselect after click (move or cancel)
+            this.selected = nil;
         }
     }
 
-    abs(x){
-        if(x < 0) return -x;
+    abs(x) {
+        if (x < 0) return -x;
         return x;
     }
 }
+

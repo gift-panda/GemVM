@@ -1562,6 +1562,7 @@ static void statement() {
                                          parser.previous.length);
         if (!check(TOKEN_SEMICOLON)) {
             errorAtCurrent("Expect ';' after file name.");
+            return;
         }
         char* file = fileName->chars;
 

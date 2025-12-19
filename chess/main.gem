@@ -1,4 +1,5 @@
 #!/usr/bin/env GemVM
+
 import Board;
 import Piece;
 import pieces.Bishop;
@@ -8,36 +9,54 @@ import pieces.Pawn;
 import pieces.Queen;
 import pieces.Rook;
 import Game;
-
-var tileSize :int = 100;
-var boardSize :int = tileSize * 8;
-
 import Window;
+import Math;
+
+var tileSize : int = 100;
+var boardSize : int = tileSize * 8;
 
 var win = Window;
 win.init(boardSize, boardSize, "Chess");
 
 var LIGHT_GREEN = "0xA6E59F".asNum();
-var DARK_GREEN = "0x3C8D2F".asNum();
-var RED = "0xFF0000".asNum();
+var DARK_GREEN  = "0x3C8D2F".asNum();
+var RED         = "0xFF0000".asNum();
 
-func drawBoard(Window : Window, game : Game) : nil{
+func mapX(game : Game, x : int) : int {
+    if (game.flipped) return 7 - x;
+    return x;
+}
+
+func mapY(game : Game, y : int) : int {
+    if (game.flipped) return 7 - y;
+    return y;
+}
+
+func drawBoard(Window : Window, game : Game) : nil {
+
     var y = 0;
     while (y < 8) {
         var x = 0;
         while (x < 8) {
             var light = (x + y) % 2 == 0;
             var color = 15658734;
-            if (!light) {
-                color = 6710886;
-            }
-            Window.drawRect(x * tileSize, y * tileSize, tileSize, tileSize, color);
+            if (!light) color = 6710886;
+
+            var dx = mapX(game, x);
+            var dy = mapY(game, y);
+
+            Window.drawRect(
+                dx * tileSize,
+                dy * tileSize,
+                tileSize,
+                tileSize,
+                color
+            );
             x = x + 1;
         }
         y = y + 1;
     }
 
-    
     if (game.selected != nil) {
         var moves = game.selected[1];
         var i = 0;
@@ -45,61 +64,155 @@ func drawBoard(Window : Window, game : Game) : nil{
             var move = moves[i];
             var mx = move[0];
             var my = move[1];
+
+            var dx = mapX(game, mx);
+            var dy = mapY(game, my);
+
             var color;
-            if((mx + my) % 2 == 0)
+            if ((mx + my) % 2 == 0)
                 color = LIGHT_GREEN;
-            else 
+            else
                 color = DARK_GREEN;
 
-            if(game.board.get(mx, my) != nil)
-                color = RED; 
-            Window.drawRect(mx * tileSize, my * tileSize, tileSize, tileSize, color); // green
+            if (game.board.get(mx, my) != nil)
+                color = RED;
+
+            Window.drawRect(
+                dx * tileSize,
+                dy * tileSize,
+                tileSize,
+                tileSize,
+                color
+            );
             i = i + 1;
         }
     }
 
-
-    var y = 0;
+    y = 0;
     while (y < 8) {
         var x = 0;
         while (x < 8) {
             var piece = game.board.get(x, y);
-            if (piece != nil) {
-                if(piece.type == "king" and piece.isInCheck()){
-                    Window.drawRect(x * tileSize, y * tileSize, tileSize, tileSize, 16711680);
+            if (piece != nil and piece != draggingPiece) {
+                
+                var dx = mapX(game, x);
+                var dy = mapY(game, y);
+
+                if (piece.type == "king" and piece.isInCheck()) {
+                    Window.drawRect(
+                        dx * tileSize,
+                        dy * tileSize,
+                        tileSize,
+                        tileSize,
+                        16711680
+                    );
                 }
-                Window.drawImage(x * tileSize + 3, y * tileSize, piece.img);
+
+                Window.drawImage(
+                    dx * tileSize + 3,
+                    dy * tileSize,
+                    piece.img
+                );
             }
             x = x + 1;
         }
         y = y + 1;
     }
+    if (draggingPiece != nil and mouseDownPos != nil) {
+        var mouse = Window.getMousePos();
+        Window.drawImage( 
+            mouse[0] - tileSize / 2, 
+            mouse[1] - tileSize / 2, 
+            draggingPiece.img 
+        );
+     }
 }
 
 var game = Game();
-var running = true;
+
+var mouseDownPos = nil;
+var draggingPiece = nil;
+var dragStartSquare = nil; 
+
 
 while (true) {
-    Window.clear(0); // black background
+    Window.clear(0);
     drawBoard(Window, game);
     Window.update();
 
     var event = Window.pollEvent();
-    if (event != nil) {
-        if (event[0] == "quit") {
-            Window.exit();
-            break;
-        }
+    if (event == nil) continue;
 
-        if (event[0] == "mouse_down") {
-            var mouse = Window.getMousePos();
-            var mx = mouse[0];
-            var my = mouse[1];
+    if (event[0] == "quit") {
+        Window.exit();
+        break;
+    }
 
-            var tx = mx \ tileSize;
-            var ty = my \ tileSize;
+    if (event[0] == "mouse_down") {
+    var mouse = Window.getMousePos();
+    mouseDownPos = [mouse[0], mouse[1]];
 
+    var tx = mouse[0] \ tileSize;
+    var ty = mouse[1] \ tileSize;
+
+    if (game.flipped) {
+        tx = 7 - tx;
+        ty = 7 - ty;
+    }
+
+    dragStartSquare = [tx, ty];
+
+    var clickedPiece = game.board.get(tx, ty);
+
+    // if a piece is already selected and we clicked an allied piece → switch selection
+    if (game.selected != nil and clickedPiece != nil) {
+        var selectedPiece = game.selected[0];
+
+        if (selectedPiece.color == clickedPiece.color) {
+            game.selected = nil;
             game.clickTile(tx, ty);
+
+            draggingPiece = clickedPiece;
+            continue;
         }
     }
+
+    // normal path
+    draggingPiece = clickedPiece;
+    game.clickTile(tx, ty);
 }
+
+
+    if (event[0] == "mouse_up" and mouseDownPos != nil) {
+        var mouse = Window.getMousePos();
+
+        var dx = mouse[0] - mouseDownPos[0];
+        var dy = mouse[1] - mouseDownPos[1];
+
+        // drag threshold
+        if (dx * dx + dy * dy > 16 and dragStartSquare != nil) {
+
+            var tx = mouse[0] \ tileSize;
+            var ty = mouse[1] \ tileSize;
+
+            if (game.flipped) {
+                tx = 7 - tx;
+                ty = 7 - ty;
+            }
+
+            var sx = dragStartSquare[0];
+            var sy = dragStartSquare[1];
+
+            // enforce square-based drag
+            if (sx != tx or sy != ty) {
+                game.clickTile(tx, ty);
+            }
+        }
+
+        draggingPiece = nil;
+        mouseDownPos = nil;
+        dragStartSquare = nil;
+    }
+
+}
+

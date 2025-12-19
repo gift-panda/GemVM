@@ -97,7 +97,7 @@ func predict(input_2d){
     }
 
     y.sort(
-        lambda(x, y){
+        (x, y) => {
             return x[1] > y[1];
         }
     );
