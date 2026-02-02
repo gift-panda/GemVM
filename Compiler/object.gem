@@ -1,0 +1,8 @@
+class Function{
+    init(){
+        this.arity = 0;
+        this.name = nil;
+        this.chunk = Chunk();
+        this.upvalueCount = 0;
+    }
+}

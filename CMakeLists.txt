@@ -1,20 +1,23 @@
 cmake_minimum_required(VERSION 3.31)
-project(GemVM)
+project(GemVM C)
 
-set(CMAKE_CXX_STANDARD 23)
-add_compile_definitions(TB_IMPL_V1)
+set(CMAKE_C_STANDARD 23)
 set(CMAKE_BUILD_TYPE Release)
 
-# Add source files
+add_compile_definitions(TB_IMPL_V1)
+
+# =========================
+# Sources
+# =========================
 set(GEMVM_SOURCES
         main.c
         common.h
-        chunk.h chunk.c
-        memory.h memory.c
-        debug.h debug.c
-        value.h value.c
-        vm.h vm.c
-        compiler.h compiler.c
+        chunk.c chunk.h
+        memory.c memory.h
+        debug.c debug.h
+        value.c value.h
+        vm.c vm.h
+        compiler.c compiler.h
         scanner.c scanner.h
         object.c object.h
         table.c table.h
@@ -28,70 +31,85 @@ set(GEMVM_SOURCES
         fileMethods.c fileMethods.h
         deserializeBytecode.c deserializeBytecode.h
         deserializeMemory.c deserializeMemory.h
-        /home/meow/boot/compiler.gemc
 )
 
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
-message(STATUS "C flags (debug): ${CMAKE_C_FLAGS_DEBUG}")
-message(STATUS "CXX flags (debug): ${CMAKE_CXX_FLAGS_DEBUG}")
 
-# Include directories
-include_directories(
-        /usr/local/include/SDL2
-        /usr/local/include/SDL2_image
-        /usr/local/include/SDL2_gfx
-        /home/meow/CLionProjects/GemVM/termbox2
-        /usr/local/include/cjson 
-)
-
-# Find libraries
-find_library(SDL2_TTF_LIBRARY
-        NAMES SDL2_ttf SDL_ttf
-        PATHS /usr/lib /usr/local/lib /usr/lib64
-)
-
-# Define static libraries
-set(SDL2_STATIC_LIB        "/usr/local/lib/libSDL2.a")
-set(SDL2_IMAGE_STATIC_LIB  "/usr/local/lib/libSDL2_image.a")
-set(SDL2_GFX_STATIC_LIB    "/usr/local/lib/libSDL2_gfx.a")   # ← Add this
-set(TERMBOX_LIB            "/home/meow/CLionProjects/GemVM/termbox2/libtermbox2.a")
-
-# Find cJSON library
-find_library(CJSON_LIBRARY
-        NAMES cjson
-        PATHS /usr/lib /usr/local/lib /usr/lib64
-)
-
+# =========================
+# Dependencies
+# =========================
 find_package(PkgConfig REQUIRED)
+
+# SDL (has CMake configs)
+find_package(SDL2 REQUIRED)
+find_package(SDL2_image REQUIRED)
+find_package(SDL2_ttf REQUIRED)
+
+# ---- SDL2_gfx (NO pkg-config, NO CMake config) ----
+find_library(SDL2_GFX_LIBRARY
+        NAMES SDL2_gfx sdl2_gfx
+        PATHS /usr/lib /usr/local/lib /usr/lib64
+        REQUIRED
+)
+
+find_library(TERMBOX2_LIBRARY
+    NAMES termbox2 libtermbox2
+    PATHS "${CMAKE_CURRENT_SOURCE_DIR}/termbox2"
+    REQUIRED
+)
+
+# Boehm GC
 pkg_check_modules(GC REQUIRED bdw-gc)
 
-include_directories(${GC_INCLUDE_DIRS})
-link_directories(${GC_LIBRARY_DIRS})
-
+# =========================
+# Executable
+# =========================
 add_executable(GemVM ${GEMVM_SOURCES})
 
 target_compile_definitions(GemVM PRIVATE GC_THREADS)
 
-add_custom_target(test
-    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/test.sh
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build
-    DEPENDS GemVM
-    COMMENT "Running GemVM tests..."
+# =========================
+# Includes
+# =========================
+target_include_directories(GemVM PRIVATE
+        ${SDL2_INCLUDE_DIRS}
+        ${SDL2_IMAGE_INCLUDE_DIRS}
+        ${SDL2_TTF_INCLUDE_DIRS}
+        ${GC_INCLUDE_DIRS}
+        ../termbox2
 )
 
-# Link libraries
+# =========================
+# Linking (DYNAMIC)
+# =========================
 target_link_libraries(GemVM
-        ${SDL2_TTF_LIBRARY}
-        ${SDL2_STATIC_LIB}
-        ${SDL2_IMAGE_STATIC_LIB}
-        ${SDL2_GFX_STATIC_LIB}
-        ${TERMBOX_LIB}
+        SDL2::SDL2
+        SDL2_image::SDL2_image
+        SDL2_ttf::SDL2_ttf
+        ${SDL2_GFX_LIBRARY}
+        ${TERMBOX2_LIBRARY}
         ${GC_LIBRARIES}
-        m
-        png
-        jpeg
-        z
-        pthread
-        freetype
+        m png jpeg z pthread freetype
 )
 
+# =========================
+# RPATH (runtime .so lookup)
+# =========================
+set_target_properties(GemVM PROPERTIES
+        BUILD_RPATH "/usr/local/lib"
+        INSTALL_RPATH "/usr/local/lib"
+)
+
+# =========================
+# Tests
+# =========================
+add_custom_target(test
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/build/test.sh
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/build
+        DEPENDS GemVM
+)
+
+# =========================
+# Install
+# =========================
+install(TARGETS GemVM DESTINATION /usr/local/bin)

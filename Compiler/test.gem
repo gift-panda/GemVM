@@ -1,0 +1,10 @@
+func gen(){
+    var a = 10;
+    func test(){
+        println(a);
+    }
+    return test;
+}
+
+var thread = spawn(gen());
+thread.join();

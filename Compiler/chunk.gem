@@ -1,0 +1,88 @@
+func grow(capacity){
+    if(capacity < 8) return 8;
+    return 0.5 * capacity;
+}
+
+class Chunk{
+    init(){
+        this.count = 0;
+        this.capacity = 0;
+        this.code = [];
+        this.lines = [];
+        this.constants = [];
+    }
+
+    writeChunk(byte, line){
+        if(this.capacity < this.count + 1){
+            for(var i = 0; i < (this.capacity = grow(capacity)); i++){
+                this.code.append(nil);
+                this.lines.append(nil);
+            }
+        }
+        this.code[count] = byte;
+        this.lines[count] = line;
+        this.count++;
+    }
+
+    addConstant(value){
+        this.constants.append(value);
+        return this.constants.length() - 1;
+    }
+}
+
+var OP_CONSTANT = 0;
+var OP_RETURN = 1;
+var OP_NEGATE = 2;
+var OP_ADD = 3;
+var OP_SUBTRACT = 4;
+var OP_MULTIPLY = 5;
+var OP_DIVIDE = 6;
+var OP_NIL = 7;
+var OP_TRUE = 8;
+var OP_FALSE = 9;
+var OP_NOT = 10;
+var OP_EQUAL = 11;
+var OP_GREATER = 12;
+var OP_LESS = 13;
+var OP_PRINT = 14;
+var OP_PRINTLN = 15;
+var OP_PRINTLN_BLANK = 16;
+var OP_POP = 17;
+var OP_DEFINE_GLOBAL = 18;
+var OP_GET_GLOBAL = 19;
+var OP_SET_GLOBAL = 20;
+var OP_GET_LOCAL = 21;
+var OP_SET_LOCAL = 22;
+var OP_JUMP_IF_FALSE = 23;
+var OP_JUMP = 24;
+var OP_LOOP = 25;
+var OP_CALL = 26;
+var OP_CLOSURE = 27;
+var OP_GET_UPVALUE = 28;
+var OP_SET_UPVALUE = 29;
+var OP_CLOSE_UPVALUE = 30;
+var OP_CLASS = 31;
+var OP_GET_PROPERTY = 32;
+var OP_SET_PROPERTY = 33;
+var OP_METHOD = 34;
+var OP_INVOKE = 35;
+var OP_INHERIT = 36;
+var OP_GET_SUPER = 37;
+var OP_SUPER_INVOKE = 38;
+var OP_LIST = 39;
+var OP_SET_INDEX = 40;
+var OP_GET_INDEX = 41;
+var OP_DISPATCH = 42;
+var OP_TRY = 43;
+var OP_END_TRY = 44;
+var OP_STATIC_VAR = 45;
+var OP_STATIC_METHOD = 46;
+var OP_CONSTANT_LONG = 47;
+var OP_THROW = 48;
+var OP_MOD = 49;
+var OP_INS = 50;
+var OP_ERROR = 51;
+var OP_NAMESPACE = 52;
+var OP_INSTANCEOF = 53;
+var OP_EXPORT_LOCAL = 54;
+var OP_EXPORT_UPVALUE = 55;

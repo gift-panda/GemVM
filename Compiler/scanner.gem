@@ -1,0 +1,486 @@
+// --- Token class (original fields: type, start, length, line) ---
+class Token {
+    init(type_, start_, length_, line_) {
+        this.type = type_;
+        this.start = start_;
+        this.length = length_;
+        this.line = line_;
+    }
+
+    text(source) {
+        if (this.length <= 0) return "";
+        return source.substring(this.start, this.start + this.length);
+    }
+
+    toString(){
+        return this.type + this.text(scanner.source) + this.line;
+    }
+}
+
+// --- Token constants (adjust to match your VM enums if needed) ---
+var TOKEN_LEFT_PAREN     = 1;
+var TOKEN_RIGHT_PAREN    = 2;
+var TOKEN_LEFT_BRACE     = 3;
+var TOKEN_RIGHT_BRACE    = 4;
+var TOKEN_LEFT_BRACKET   = 5;
+var TOKEN_RIGHT_BRACKET  = 6;
+var TOKEN_COMMA          = 7;
+var TOKEN_DOT            = 8;
+var TOKEN_MINUS          = 9;
+var TOKEN_PLUS           = 10;
+var TOKEN_SEMICOLON      = 11;
+var TOKEN_SLASH          = 12;
+var TOKEN_STAR           = 13;
+var TOKEN_PERCENT        = 14;
+var TOKEN_INS            = 15;
+var TOKEN_COLON          = 16;
+var TOKEN_DOUBLE_COLON   = 17;
+var TOKEN_BANG           = 18;
+var TOKEN_BANG_EQUAL     = 19;
+var TOKEN_EQUAL          = 20;
+var TOKEN_EQUAL_EQUAL    = 21;
+var TOKEN_GREATER        = 22;
+var TOKEN_GREATER_EQUAL  = 23;
+var TOKEN_LESS           = 24;
+var TOKEN_LESS_EQUAL     = 25;
+var TOKEN_STRING         = 26;
+var TOKEN_NUMBER         = 27;
+var TOKEN_BINARY_NUMBER  = 28;
+var TOKEN_OCTAL_NUMBER   = 29;
+var TOKEN_HEX_NUMBER     = 30;
+var TOKEN_IDENTIFIER     = 31;
+var TOKEN_ERROR          = 32;
+var TOKEN_EOF            = 33;
+var TOKEN_INCRE          = 34;
+var TOKEN_DECRE          = 35;
+
+// keyword tokens (example IDs)
+var TOKEN_AND        = 100;
+var TOKEN_BREAK      = 101;
+var TOKEN_CLASS      = 102;
+var TOKEN_CATCH      = 103;
+var TOKEN_CONTINUE   = 104;
+var TOKEN_ELSE       = 105;
+var TOKEN_IF         = 106;
+var TOKEN_IMPORT     = 107;
+var TOKEN_LAMBDA     = 108;
+var TOKEN_NAMESPACE  = 109;
+var TOKEN_NIL        = 110;
+var TOKEN_OR         = 111;
+var TOKEN_PRINT      = 112;
+var TOKEN_PRINTLN    = 113;
+var TOKEN_RETURN     = 114;
+var TOKEN_STATIC     = 115;
+var TOKEN_SUPER      = 116;
+var TOKEN_VAR        = 117;
+var TOKEN_WHILE      = 118;
+var TOKEN_FALSE      = 119;
+var TOKEN_FOR        = 120;
+var TOKEN_FUN        = 121;
+var TOKEN_FINALLY    = 122;
+var TOKEN_THIS       = 123;
+var TOKEN_THROW      = 124;
+var TOKEN_TRUE       = 125;
+var TOKEN_TRY        = 126;
+var TOKEN_BREAK_K    = 127;
+var TOKEN_CONTINUE_K = 128;
+var TOKEN_IS         = 129;
+var TOKEN_EXPORT     = 130;
+
+class Token {
+    init(type_, start_, length_, line_) {
+        this.type = type_;
+        this.start = start_;
+        this.length = length_;
+        this.line = line_;
+    }
+
+    text(src) {
+        if (this.length <= 0) return "";
+        if(this.start is String) return start;
+        return src.substring(this.start, this.start + this.length);
+    }
+
+    toString(){
+        return this.type + " " + this.text(scanner.source) + " " + this.line;
+    }
+}
+
+
+class Scanner {
+    init(src) {
+        this.source = src;
+        this.start = 0;
+        this.current = 0;
+        this.line = 1;
+        this.previous = nil;
+    }
+
+    isAtEnd() {
+        return this.current >= this.source.length();
+    }
+
+    advance() {
+        var c = this.source.charAt(this.current);
+        this.current = this.current + 1;
+        return c;
+    }
+
+    peek() {
+        if (this.isAtEnd()) return "\0";
+        return this.source.charAt(this.current);
+    }
+
+    peekNext() {
+        var n = this.current + 1;
+        if (n >= this.source.length()) return "\0";
+        return this.source.charAt(n);
+    }
+
+    match(ch) {
+        if (this.isAtEnd()) return false;
+        if (this.source.charAt(this.current) != ch) return false;
+        this.current = this.current + 1;
+        return true;
+    }
+
+    makeToken(type) {
+        var t = Token(type, this.start, this.current - this.start, this.line);
+        this.previous = t;
+        //println(t);
+        return t;
+    }
+
+    errorToken(msg) {
+        var t = Token(TOKEN_ERROR, 0, msg.length(), this.line);
+        t.start = msg;
+        t.text = (src) => { return msg; };
+        return t;
+    }
+
+    isAlpha(c) {
+        var code = c.charCode();
+        return ((code >= 97 and code <= 122) or
+                (code >= 65 and code <= 90) or
+                (code == 95));
+    }
+
+    isDigit(c) {
+        var code = c.charCode();
+        return (code >= 48 and code <= 57);
+    }
+
+
+    // --------------------------------------------------
+    // SKIP WHITESPACE + COMMENTS
+    // --------------------------------------------------
+    skipWhitespace() {
+        while (true) {
+            var c = this.peek();
+
+            if (c == " " or c == "\r" or c == "\t") {
+                this.advance();
+            } else if (c == "\n") {
+                this.line = this.line + 1;
+                this.advance();
+            } else if (c == "/") {
+                if (this.peekNext() == "/") {
+                    while (this.peek() != "\n" and !this.isAtEnd()) this.advance();
+                } else {
+                    return;
+                }
+            } else if (c == "#") {
+                if (this.peekNext() == "!") {
+                    while (this.peek() != "\n" and !this.isAtEnd()) this.advance();
+                } else {
+                    return;
+                }
+            } else {
+                return;
+            }
+        }
+    }
+
+
+    // --------------------------------------------------
+    // IDENTIFIER KEYWORD MATCH (DIRECT STRING COMPARE)
+    // --------------------------------------------------
+    identifierType() {
+        var word = this.source.substring(this.start, this.current);
+
+        if (word == "and") return TOKEN_AND;
+        if (word == "break") return TOKEN_BREAK;
+        if (word == "class") return TOKEN_CLASS;
+        if (word == "catch") return TOKEN_CATCH;
+        if (word == "continue") return TOKEN_CONTINUE;
+        if (word == "else") return TOKEN_ELSE;
+        if (word == "is") return TOKEN_IS;
+        if (word == "if") return TOKEN_IF;
+        if (word == "import") return TOKEN_IMPORT;
+        if (word == "namespace") return TOKEN_NAMESPACE;
+        if (word == "nil") return TOKEN_NIL;
+        if (word == "or") return TOKEN_OR;
+        if (word == "print") return TOKEN_PRINT;
+        if (word == "println") return TOKEN_PRINTLN;
+        if (word == "return") return TOKEN_RETURN;
+        if (word == "static") return TOKEN_STATIC;
+        if (word == "super") return TOKEN_SUPER;
+        if (word == "var") return TOKEN_VAR;
+        if (word == "while") return TOKEN_WHILE;
+
+        if (word == "false") return TOKEN_FALSE;
+        if (word == "for") return TOKEN_FOR;
+        if (word == "func") return TOKEN_FUN;
+        if (word == "finally") return TOKEN_FINALLY;
+
+        if (word == "this") return TOKEN_THIS;
+        if (word == "throw") return TOKEN_THROW;
+        if (word == "true") return TOKEN_TRUE;
+        if (word == "try") return TOKEN_TRY;
+        if (word == "export") return TOKEN_EXPORT;
+
+        return TOKEN_IDENTIFIER;
+    }
+
+
+    // --------------------------------------------------
+    // IDENTIFIER / OPERATOR-AS-IDENTIFIER / IMPORT PATH
+    // --------------------------------------------------
+    identifier() {
+        // Private names: #x
+        if (this.source.charAt(this.start) == "#") {
+            var next = this.peek();
+            if (!this.isAlpha(next) and !this.isDigit(next)) {
+                return this.errorToken("Invalid identifier after '#'.");
+            }
+        }
+
+        // Single-character operators treated as identifiers
+        var first = this.source.charAt(this.start);
+        if (first == "*" or first == "/" or first == "+" or first == "-") {
+            return this.makeToken(TOKEN_IDENTIFIER);
+        }
+
+        // Normal identifier (optional dots after "import")
+        while (this.isAlpha(this.peek()) or
+               this.isDigit(this.peek()) or
+               (this.previous != nil and this.previous.type == TOKEN_IMPORT and this.peek() == ".")) {
+
+            this.advance();
+        }
+
+        return this.makeToken(this.identifierType());
+    }
+
+
+    // --------------------------------------------------
+    // NUMBER PARSING (HEX, OCT, BIN, FLOAT, EXPONENT)
+    // --------------------------------------------------
+    isHexDigit(c) {
+        var code = c.charCode();
+        return ((code >= 48 and code <= 57) or   // 0-9
+                (code >= 97 and code <= 102) or // a-f
+                (code >= 65 and code <= 70));   // A-F
+    }
+
+    isOctDigit(c) {
+        var code = c.charCode();
+        return (code >= 48 and code <= 55);
+    }
+
+    isBinDigit(c) {
+        return (c == "0" or c == "1");
+    }
+
+    number() {
+        // Radix prefixes
+        if (this.peek() == "0") {
+            var n = this.peekNext();
+            if (n == "x" or n == "X") {
+                this.advance(); this.advance();
+                while (this.isHexDigit(this.peek())) this.advance();
+                return this.makeToken(TOKEN_HEX_NUMBER);
+            }
+            if (n == "o" or n == "O") {
+                this.advance(); this.advance();
+                while (this.isOctDigit(this.peek())) this.advance();
+                return this.makeToken(TOKEN_OCTAL_NUMBER);
+            }
+            if (n == "b" or n == "B") {
+                this.advance(); this.advance();
+                while (this.isBinDigit(this.peek())) this.advance();
+                return this.makeToken(TOKEN_BINARY_NUMBER);
+            }
+        }
+
+        // Digits
+        while (this.isDigit(this.peek())) this.advance();
+
+        // Fraction
+        if (this.peek() == "." and this.isDigit(this.peekNext())) {
+            this.advance();
+            while (this.isDigit(this.peek())) this.advance();
+        }
+
+        // Exponent
+        if (this.peek() == "e" or this.peek() == "E") {
+            this.advance();
+            if (this.peek() == "+" or this.peek() == "-") this.advance();
+            if (!this.isDigit(this.peek())) return this.errorToken("Invalid exponent format");
+            while (this.isDigit(this.peek())) this.advance();
+        }
+
+        return this.makeToken(TOKEN_NUMBER);
+    }
+
+
+    // --------------------------------------------------
+    // STRING LITERALS
+    // --------------------------------------------------
+    string() {
+        while (this.peek() != "\"" and !this.isAtEnd()) {
+            if (this.peek() == "\n") this.line++;
+
+            if (this.peek() == "\\" and (this.peekNext() == "\"" or this.peekNext() == "\\")) {
+                this.advance();
+                this.advance();
+            } else {
+                this.advance();
+            }
+        }
+
+        if (this.isAtEnd()) return this.errorToken("Unterminated string.");
+
+        this.advance(); // closing quote
+        var t = this.makeToken(TOKEN_STRING);
+        t.start = t.start + 1;
+        t.length = t.length - 2;
+        return t;
+    }
+
+
+    // --------------------------------------------------
+    // MAIN ENTRY
+    // --------------------------------------------------
+    scanToken() {
+        this.skipWhitespace();
+        this.start = this.current;
+
+        if (this.isAtEnd()) {
+            return this.makeToken(TOKEN_EOF);
+        }
+
+        var c = this.advance();
+
+        if (this.isAlpha(c) or c == "#") {
+            return this.identifier();
+        }
+
+        if (this.isDigit(c)) {
+            return this.number();
+        }
+
+        if (c == "(") return this.makeToken(TOKEN_LEFT_PAREN);
+        if (c == ")") return this.makeToken(TOKEN_RIGHT_PAREN);
+        if (c == "{") return this.makeToken(TOKEN_LEFT_BRACE);
+        if (c == "}") return this.makeToken(TOKEN_RIGHT_BRACE);
+        if (c == "[") return this.makeToken(TOKEN_LEFT_BRACKET);
+        if (c == "]") return this.makeToken(TOKEN_RIGHT_BRACKET);
+        if (c == ";") return this.makeToken(TOKEN_SEMICOLON);
+        if (c == ",") return this.makeToken(TOKEN_COMMA);
+        if (c == ".") return this.makeToken(TOKEN_DOT);
+
+        if (c == "-") {
+            if (this.match("-")) {
+                return this.makeToken(TOKEN_DECRE);
+            } else {
+                return this.makeToken(TOKEN_MINUS);
+            }
+        }
+
+        if (c == "+") {
+            if (this.match("+")) {
+                return this.makeToken(TOKEN_INCRE);
+            } else {
+                return this.makeToken(TOKEN_PLUS);
+            }
+        }
+
+        if (c == "/") return this.makeToken(TOKEN_SLASH);
+        if (c == "*") return this.makeToken(TOKEN_STAR);
+        if (c == "%") return this.makeToken(TOKEN_PERCENT);
+        if (c == "\\") return this.makeToken(TOKEN_INS);
+
+        if (c == ":") {
+            if (this.match(":")) {
+                return this.makeToken(TOKEN_DOUBLE_COLON);
+            } else {
+                return this.makeToken(TOKEN_COLON);
+            }
+        }
+
+        if (c == "!") {
+            if (this.match("=")) {
+                return this.makeToken(TOKEN_BANG_EQUAL);
+            } else {
+                return this.makeToken(TOKEN_BANG);
+            }
+        }
+
+        if (c == "=") {
+            if (this.match("=")) {
+                return this.makeToken(TOKEN_EQUAL_EQUAL);
+            } else if (this.match(">")){
+                return this.makeToken(TOKEN_LAMBDA);
+            } else {
+                return this.makeToken(TOKEN_EQUAL);
+            }
+        }
+
+        if (c == "<") {
+            if (this.match("=")) {
+                return this.makeToken(TOKEN_LESS_EQUAL);
+            } else {
+                return this.makeToken(TOKEN_LESS);
+            }
+        }
+
+        if (c == ">") {
+            if (this.match("=")) {
+                return this.makeToken(TOKEN_GREATER_EQUAL);
+            } else {
+                return this.makeToken(TOKEN_GREATER);
+            }
+        }
+
+        if (c == "\"") {
+            return this.string();
+        }
+
+        return this.errorToken("Unexpected character" + c);
+    }
+}
+
+// --- convenience factory functions for external use ---
+func initScanner(src) {
+    return Scanner(src);
+}
+
+func printTokens(scanner) {
+    while (true) {
+        var token = scanner.scanToken();
+
+        var type = token.type;
+        var line = token.line;
+        var length = token.length;
+        var start = token.start;
+        var text = token.text(scanner.source);
+
+        println("[" + line + "] " + type + " \"" + text + "\"");
+
+        if (type == TOKEN_EOF) {
+            break;
+        }
+    }
+}
+var scanner;

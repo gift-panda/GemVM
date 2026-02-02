@@ -1,0 +1,8 @@
+namespace nigga{
+    var yo = "hi";
+    func smth(){
+        println(yo);
+    }
+}
+
+nigga.smth();

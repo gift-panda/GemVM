@@ -1,0 +1,2 @@
+import compiler;
+var function = compile(process(argv[1]));

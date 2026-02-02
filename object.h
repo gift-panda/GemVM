@@ -1,7 +1,7 @@
 #ifndef CLOX_OBJECT_H
 #define CLOX_OBJECT_H
 
-#include <SDL_render.h>
+#include <SDL2/SDL_render.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include "value.h"

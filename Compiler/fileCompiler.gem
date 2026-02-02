@@ -1,0 +1,11 @@
+import compiler;
+import serialize;
+
+var name = argv[0];
+
+var file = File(name, "r");
+var source = process(file.read());
+var function = compile(source);
+var bytecode_out = name + "c";
+if(!parser.hadError)
+    serialize(bytecode_out, function);

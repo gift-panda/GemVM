@@ -531,7 +531,7 @@ char* getFileText() {
     return buf;
 }
 
-void no_warn_proc(const char* msg, GC_word arg) {
+void no_warn_proc(char* msg, GC_word arg) {
     // Do nothing
 }
 
@@ -559,8 +559,8 @@ void no_warn_proc(const char* msg, GC_word arg) {
 #endif
 
 
-INCBIN(FileCompiler, "/home/meow/boot/fileCompiler.gemc")
-INCBIN(SourceCompiler, "/home/meow/boot/sourceCompiler.gemc");
+INCBIN(FileCompiler, "../Compiler/fileCompiler.gemc")
+INCBIN(SourceCompiler, "../Compiler/sourceCompiler.gemc");
 
 ObjFunction* loadFileCompiler() {
     size_t size = (size_t)(FileCompiler_end - FileCompiler_start);

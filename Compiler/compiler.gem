@@ -1,0 +1,1655 @@
+import scanner;
+import chunk;
+import object;
+
+class Parser {
+    init() {
+        this.current = nil;
+        this.previous = nil;
+        this.hadError = false;
+        this.panicMode = false;
+    }
+}
+
+var MAX_LOOP_DEPTH : int = 64;
+var UINT8_COUNT : int = 256;
+
+class LoopContext {
+    init() {
+        this.breakJumpOffsets = [];
+        for(var i = 0; i < MAX_LOOP_DEPTH; i++) this.breakJumpOffsets.append(0);
+        this.breakCount = 0;
+        this.localCount = 0;
+    }
+}
+
+var loopStack : LoopContext[] = [];
+for (var i = 0; i < MAX_LOOP_DEPTH; i++) loopStack.append(LoopContext());
+var loopDepth : int = 0;
+var continueJumpOffset : int = -1;
+
+var importing = "script";
+var importedFiles : String[] = [];
+
+// Precedence enum
+var PREC_NONE        = 0;
+var PREC_ASSIGNMENT  = 1;
+var PREC_OR          = 2;
+var PREC_AND         = 3;
+var PREC_EQUALITY    = 4;
+var PREC_COMPARISON  = 5;
+var PREC_TERM        = 6;
+var PREC_FACTOR      = 7;
+var PREC_UNARY       = 8;
+var PREC_CALL        = 9;
+var PREC_PRIMARY     = 10;
+
+class ParseRule {
+    init(prefix, infix, precedence) {
+        this.prefix = prefix;
+        this.infix = infix;
+        this.precedence = precedence;
+    }
+}
+
+class Local {
+    init() {
+        this.name = Token(nil, nil, nil, nil);
+        this.depth = 0;
+        this.isCaptured = false;
+    }
+}
+
+class Upvalue {
+    init() {
+        this.index = 0;
+        this.isLocal = false;
+    }
+}
+
+var TYPE_FUNCTION       = 0;
+var TYPE_SCRIPT         = 1;
+var TYPE_METHOD         = 2;
+var TYPE_LAMBDA         = 3;
+var TYPE_INITIALIZER    = 4;
+var TYPE_STATIC_METHOD  = 5;
+var TYPE_NAMESPACE      = 6;
+
+class Compiler {
+    init(type) {
+        this.enclosing = current;
+        this.function = Function();
+        this.type = type;
+
+        this.locals = [];
+        for (var i = 0; i < UINT8_COUNT; i++) this.locals.append(Local());
+        this.localCount = 0;
+
+        this.upvalues = [];
+        for (var i = 0; i < UINT8_COUNT; i++) this.upvalues.append(Upvalue());
+
+        this.scopeDepth = 0;
+        this.inLoop = false;
+
+        current = this;
+
+        // initialize first local slot in-place (avoid copying the Local out of the array)
+        current.locals[current.localCount].depth = 0;
+        current.locals[current.localCount].isCaptured = false;
+        current.locals[current.localCount].name = Token(nil, nil, nil, nil); // blank token struct/object
+        current.locals[current.localCount].name.start = "";
+        current.locals[current.localCount].name.length = 0;
+
+        // if this function/method needs a 'this' local, set it in the slot before incrementing
+        if (type == TYPE_METHOD or type == TYPE_INITIALIZER or type == TYPE_STATIC_METHOD) {
+            current.locals[current.localCount].name.start = "this";
+            current.locals[current.localCount].name.length = 4;
+        }
+
+        // now increment localCount (we have filled the new slot)
+        current.localCount = current.localCount + 1;
+    }
+}
+
+class ClassCompiler {
+    init() {
+        this.enclosing = nil;
+        this.hasSuperclass = false;
+    }
+}
+
+var parser : Parser = Parser();;
+var current : Compiler = nil;
+var currentClass : ClassCompiler = nil;
+var compilingChunk : Chunk;
+
+func currentChunk() : Chunk {
+    return current.function.chunk;
+}
+
+func errorAt(token, message) : void {
+    if (parser.panicMode) return;
+    parser.panicMode = true;
+
+    print("[" + importing + " : " + token.line + "] Error");
+
+    if (token.type == TOKEN_EOF) {
+        print(" at end");
+    } else if (token.type != TOKEN_ERROR) {
+        print(" at '" + token.text(scanner.source) + "'");
+    }
+
+    println(": " + message);
+    parser.hadError = true;
+}
+
+func error(message) : void {
+    errorAt(parser.previous, message);
+}
+
+func errorAtCurrent(message) : void {
+    errorAt(parser.current, message);
+}
+
+func advance() : void {
+    parser.previous = parser.current;
+
+    while (true) {
+        parser.current = scanner.scanToken();
+        if (parser.current.type != TOKEN_ERROR) break;
+
+        errorAtCurrent(parser.current.text(scanner.source));
+    }
+}
+
+func consume(type, message) : void {
+    if (parser.current.type == type) {
+        advance();
+        return;
+    }
+    errorAtCurrent(message);
+}
+
+func check(type) : bool {
+    return parser.current.type == type;
+}
+
+func match(type) : bool {
+    if (!check(type)) return false;
+    advance();
+    return true;
+}
+
+func emitByte(byte) : void {
+    currentChunk().writeChunk(byte, parser.previous.line);
+}
+
+func emitBytes(b1, b2) : void {
+    emitByte(b1);
+    emitByte(b2);
+}
+
+func emitLoop(loopStart : int) : void {
+    emitByte(OP_LOOP);
+
+    var offset = currentChunk().count - loopStart + 2;
+    if (offset > 65535) error("Loop body too large.");
+
+    emitByte((offset \ 256) % 256);
+    emitByte(offset % 256);
+}
+
+func emitJump(instruction : int) : int {
+    emitByte(instruction);
+    emitByte(255);
+    emitByte(255);
+    return currentChunk().count - 2;
+}
+
+func emitReturn() : void {
+    if (current.type == TYPE_INITIALIZER) {
+        emitBytes(OP_GET_LOCAL, 0);
+    } else {
+        emitByte(OP_NIL);  
+    }
+
+    emitByte(OP_RETURN);
+}
+
+func makeConstant(value) : int {
+    var constant = currentChunk().addConstant(value);
+    //println("added const " + constant);
+    return constant;
+}
+
+func emitShort(constant : int) : void {
+    emitByte((constant \ 256) % 256);
+    emitByte(constant % 256);
+}
+
+func emitConstant(value) : void {
+    var constant = makeConstant(value);
+
+    emitByte(OP_CONSTANT);
+    emitShort(constant);
+}
+
+func patchJump(offset : int) : void {
+    var jump = currentChunk().count - offset - 2;
+
+    if (jump > 65535) {
+        error("Too much code to jump over.");
+    }
+
+    currentChunk().code[offset]     = (jump \ 256) % 256;
+    currentChunk().code[offset + 1] = jump % 256;
+}
+
+func patchJumpTo(offset : int, target : int) : void {
+    var jump = target - offset - 2;
+
+    if (jump > 65535) {
+        error("Too much code to jump over.");
+    }
+
+    currentChunk().code[offset]     = (jump \ 256) % 256;
+    currentChunk().code[offset + 1] = jump % 256;
+}
+
+func beginLoop() : void {
+    if (loopDepth == MAX_LOOP_DEPTH) {
+        error("Too many nested loops.");
+        return;
+    }
+
+    var loop = loopStack[loopDepth++];
+
+    loop.breakCount = 0;
+    loop.localCount = current.localCount; 
+}
+
+func endLoop(loopExitTarget : int) : void {
+    loopDepth--;
+    var loop = loopStack[loopDepth];
+
+    for (var i = 0; i < loop.breakCount; i++) {
+        patchJump(loop.breakJumpOffsets[i]);
+    }
+}
+
+import debug;
+
+var showBytecode = false;
+
+func endCompiler() : ObjFunction {
+    emitReturn();
+    var function = current.function;
+    if (showBytecode) {
+        if (!parser.hadError) {
+            var name;
+            if (function.name != nil) {
+                name = function.name;
+            } else {
+                name = "<script>";
+            }
+            //println(function.chunk.code);
+            Debug.disassembleChunk(function.chunk, name);
+        }
+    }
+    current = current.enclosing;
+    return function;
+}
+
+func beginScope() : void {
+    current.scopeDepth = current.scopeDepth + 1;
+}
+
+func endScope() : void {
+    current.scopeDepth = current.scopeDepth - 1;
+    while (current.localCount > 0 and
+           current.locals[current.localCount - 1].depth > current.scopeDepth) {
+
+        if (current.locals[current.localCount - 1].isCaptured) {
+            emitByte(OP_CLOSE_UPVALUE);
+        } else {
+            emitByte(OP_POP);
+        }
+
+        current.localCount = current.localCount - 1;
+    }
+}
+
+
+func binary(canAssign : bool) : void {
+    var operatorType = parser.previous.type;
+    var rule = getRule(operatorType);
+
+    parsePrecedence(rule.precedence + 1);
+
+    if (operatorType == TOKEN_PLUS) {
+        emitByte(OP_ADD);
+    } else if (operatorType == TOKEN_MINUS) {
+        emitByte(OP_SUBTRACT);
+    } else if (operatorType == TOKEN_STAR) {
+        emitByte(OP_MULTIPLY);
+    } else if (operatorType == TOKEN_PERCENT) {
+        emitByte(OP_MOD);
+    } else if (operatorType == TOKEN_INS) {
+        emitByte(OP_INS);
+    } else if (operatorType == TOKEN_SLASH) {
+        emitByte(OP_DIVIDE);
+    } else if (operatorType == TOKEN_BANG_EQUAL) {
+        emitBytes(OP_EQUAL, OP_NOT);
+    } else if (operatorType == TOKEN_EQUAL_EQUAL) {
+        emitByte(OP_EQUAL);
+    } else if (operatorType == TOKEN_GREATER) {
+        emitByte(OP_GREATER);
+    } else if (operatorType == TOKEN_GREATER_EQUAL) {
+        emitBytes(OP_LESS, OP_NOT);
+    } else if (operatorType == TOKEN_LESS) {
+        emitByte(OP_LESS);
+    } else if (operatorType == TOKEN_LESS_EQUAL) {
+        emitBytes(OP_GREATER, OP_NOT);
+    } else if (operatorType == TOKEN_IS) {
+        emitByte(OP_INSTANCEOF);
+    } else {
+        return;   // Unreachable
+    }
+}
+
+func call(canAssign : bool) : void {
+    var argCount : byte = argumentList();
+    emitBytes(OP_CALL, argCount);
+}
+
+func number(canAssign : bool) : void {
+    var value : double = parser.previous.text(scanner.source).asNum();
+    emitConstant(value);
+}
+
+func string(canAssign : bool) : void {
+    emitConstant(parser.previous.text(scanner.source));
+}
+
+func addUpvalue(compiler : Compiler, index : int, isLocal : bool) : int {
+    var upvalueCount = compiler.function.upvalueCount;
+
+    for (var i = 0; i < upvalueCount; i++) {
+        var upvalue = compiler.upvalues[i];
+
+        if (upvalue.index == index and upvalue.isLocal == isLocal) {
+            return i;
+        }
+    }
+
+    if (upvalueCount == UINT8_COUNT) {
+        error("Too many closure variables in function.");
+        return 0;
+    }
+
+    compiler.upvalues[upvalueCount].isLocal = isLocal;
+    compiler.upvalues[upvalueCount].index = index;
+
+    return compiler.function.upvalueCount++;
+}
+
+func resolveUpvalue(compiler : Compiler, name) : int {
+    if (compiler.enclosing == nil) {
+        return -1;
+    }
+
+    var local = resolveLocal(compiler.enclosing, name);
+
+    if (local != -1) {
+        compiler.enclosing.locals[local].isCaptured = true;
+        return addUpvalue(compiler, local, true);   
+    }
+
+    var upvalue = resolveUpvalue(compiler.enclosing, name);
+
+    if (upvalue != -1) {
+        return addUpvalue(compiler, upvalue, false); 
+    }
+
+    return -1;
+}
+
+
+func namedVariable(name, canAssign : bool) : void {
+    var getOp;
+    var setOp;
+
+    var arg = resolveLocal(current, name);
+
+    if (arg != -1) {
+        getOp = OP_GET_LOCAL;
+        setOp = OP_SET_LOCAL;
+    } else if ((arg = resolveUpvalue(current, name)) != -1) {
+        getOp = OP_GET_UPVALUE;
+        setOp = OP_SET_UPVALUE;
+    } else {
+        arg = identifierConstant(name);
+        getOp = OP_GET_GLOBAL;
+        setOp = OP_SET_GLOBAL;
+
+        if (canAssign and match(TOKEN_EQUAL)) {
+            expression();
+            emitByte(setOp);
+            emitShort(arg);
+        } else {
+            emitByte(getOp);
+            emitShort(arg);
+        }
+        return;
+    }
+
+    if (canAssign and match(TOKEN_EQUAL)) {
+        expression();
+        emitBytes(setOp, arg);
+    } else {
+        emitBytes(getOp, arg);
+    }
+}
+
+func variable(canAssign : bool) : void {
+    var name = parser.previous;
+    namedVariable(name, canAssign);
+}
+
+func unary(canAssign : bool) : void {
+    var operatorType = parser.previous.type;
+
+    parsePrecedence(PREC_UNARY);
+
+    if (operatorType == TOKEN_MINUS) {
+        emitByte(OP_NEGATE);
+    } else if (operatorType == TOKEN_BANG) {
+        emitByte(OP_NOT);
+    } else {
+        return;
+    }
+}
+
+func literal(canAssign : bool) : void {
+    var t = parser.previous.type;
+
+    if (t == TOKEN_FALSE) {
+        emitByte(OP_FALSE);
+    } else if (t == TOKEN_NIL) {
+        emitByte(OP_NIL);
+    } else if (t == TOKEN_TRUE) {
+        emitByte(OP_TRUE);
+    } else {
+        return;
+    }
+}
+
+func grouping(canAssign : bool) : void {
+    var prevLine = scanner.line;
+    var prevStart = scanner.start;
+    var prevCurrent = scanner.current;
+
+    var prevToken = parser.previous;
+    var currToken = parser.current;
+
+    var makeLambda = false;
+    if(match(TOKEN_IDENTIFIER)){
+        if(match(TOKEN_COMMA)) makeLambda = true;
+        else if(match(TOKEN_RIGHT_PAREN) and match(TOKEN_LAMBDA)) makeLambda = true;
+    }
+    if(match(TOKEN_RIGHT_PAREN) and match(TOKEN_LAMBDA)) makeLambda = true;
+
+    scanner.line = prevLine;
+    scanner.start = prevStart;
+    scanner.current = prevCurrent;
+
+    parser.previous = prevToken;
+    parser.current = currToken;
+
+    if(makeLambda)
+        lambda_(false);
+    else{
+        expression();
+        consume(TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
+    }
+}
+
+func and_(canAssign : bool) : void {
+    var endJump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);
+    parsePrecedence(PREC_AND);
+    patchJump(endJump);
+}
+
+func or_(canAssign : bool) : void {
+    var elseJump = emitJump(OP_JUMP_IF_FALSE);
+    var endJump = emitJump(OP_JUMP);
+
+    patchJump(elseJump);
+    emitByte(OP_POP);
+
+    parsePrecedence(PREC_OR);
+    patchJump(endJump);
+}
+
+func dot(canAssign : bool) : void {
+    consume(TOKEN_IDENTIFIER, "Expect property name after '.'.");
+    var name = identifierConstant(parser.previous);
+
+    if (canAssign and match(TOKEN_EQUAL)) {
+        expression();
+        emitByte(OP_SET_PROPERTY);
+        emitShort(name);
+
+    } else if (match(TOKEN_LEFT_PAREN)) {
+        var argCount = argumentList();
+        emitByte(OP_INVOKE);
+        emitShort(name);
+        emitByte(argCount);
+
+    } else {
+        emitByte(OP_GET_PROPERTY);
+        emitShort(name);
+    }
+}
+
+func this_(canAssign : bool) : void {
+    if (currentClass == nil) {
+        error("Can't use 'this' outside of a class.");
+        return;
+    }
+
+    variable(false);
+}
+
+func super_(canAssign : bool) : void {
+    if (currentClass == nil) {
+        error("Can't use 'super' outside of a class.");
+    } else if (!currentClass.hasSuperclass) {
+        error("Can't use 'super' in a class with no superclass.");
+    }
+
+    consume(TOKEN_DOT, "Expect '.' after 'super'.");
+    consume(TOKEN_IDENTIFIER, "Expect superclass method name.");
+    var name = identifierConstant(parser.previous);
+
+    namedVariable(syntheticToken("this"), false);
+
+    if (match(TOKEN_LEFT_PAREN)) {
+        var argCount = argumentList();
+        namedVariable(syntheticToken("super"), false);
+        emitByte(OP_SUPER_INVOKE);
+        emitShort(name);
+        emitByte(argCount);
+    } else {
+        namedVariable(syntheticToken("super"), false);
+        emitByte(OP_GET_SUPER);
+        emitShort(name);
+    }
+}
+
+func index_(canAssign : bool) : void {
+    expression();
+    consume(TOKEN_RIGHT_BRACKET, "Expect ']' after index.");
+
+    if (canAssign and match(TOKEN_EQUAL)) {
+        expression();
+        emitByte(OP_SET_INDEX);
+    } else {
+        emitByte(OP_GET_INDEX);
+    }
+}
+
+func list(canAssign : bool) : void {
+    var elementCount = 0;
+
+    if (!check(TOKEN_RIGHT_BRACKET)) {
+        while (true) {
+            expression();
+            elementCount = elementCount + 1;
+
+            if (!match(TOKEN_COMMA)) {
+                break;
+            }
+        }
+    }
+
+    consume(TOKEN_RIGHT_BRACKET, "Expect ']' after list elements.");
+    emitBytes(OP_LIST, elementCount);
+}
+
+func lambda_(){}
+
+var rules : ParseRul[] = [];
+for(var i = 0; i < 200; i++) rules.append(nil);
+
+rules[TOKEN_LEFT_PAREN]     = ParseRule(grouping, call,   PREC_CALL);
+rules[TOKEN_RIGHT_PAREN]    = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_LEFT_BRACE]     = ParseRule(nil,      nil,    PREC_CALL);
+rules[TOKEN_RIGHT_BRACE]    = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_RIGHT_BRACKET]  = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_LEFT_BRACKET]   = ParseRule(list,     index_, PREC_CALL);
+rules[TOKEN_COMMA]          = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_DOT]            = ParseRule(nil,      dot,    PREC_CALL);
+rules[TOKEN_MINUS]          = ParseRule(unary,    binary, PREC_TERM);
+rules[TOKEN_PLUS]           = ParseRule(nil,      binary, PREC_TERM);
+rules[TOKEN_SEMICOLON]      = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_SLASH]          = ParseRule(nil,      binary, PREC_FACTOR);
+rules[TOKEN_STAR]           = ParseRule(nil,      binary, PREC_FACTOR);
+rules[TOKEN_PERCENT]        = ParseRule(nil,      binary, PREC_FACTOR);
+rules[TOKEN_INS]            = ParseRule(nil,      binary, PREC_FACTOR);
+rules[TOKEN_BANG]           = ParseRule(unary,    nil,    PREC_NONE);
+rules[TOKEN_BANG_EQUAL]     = ParseRule(nil,      binary, PREC_EQUALITY);
+rules[TOKEN_EQUAL]          = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_EQUAL_EQUAL]    = ParseRule(nil,      binary, PREC_EQUALITY);
+rules[TOKEN_GREATER]        = ParseRule(nil,      binary, PREC_COMPARISON);
+rules[TOKEN_GREATER_EQUAL]  = ParseRule(nil,      binary, PREC_COMPARISON);
+rules[TOKEN_LESS]           = ParseRule(nil,      binary, PREC_COMPARISON);
+rules[TOKEN_LESS_EQUAL]     = ParseRule(nil,      binary, PREC_COMPARISON);
+rules[TOKEN_INCRE]          = ParseRule(nil,      nil,    PREC_UNARY);
+rules[TOKEN_DECRE]          = ParseRule(nil,      nil,    PREC_UNARY);
+rules[TOKEN_IDENTIFIER]     = ParseRule(variable, nil,    PREC_NONE);
+rules[TOKEN_STRING]         = ParseRule(string,   nil,    PREC_NONE);
+rules[TOKEN_NUMBER]         = ParseRule(number,   nil,    PREC_NONE);
+rules[TOKEN_AND]            = ParseRule(nil,      and_,   PREC_AND);
+rules[TOKEN_CLASS]          = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_ELSE]           = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_FALSE]          = ParseRule(literal,  nil,    PREC_NONE);
+rules[TOKEN_FOR]            = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_FUN]            = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_LAMBDA]         = ParseRule(lambda_,   nil,    PREC_NONE);
+rules[TOKEN_IF]             = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_IS]             = ParseRule(nil,      binary, PREC_COMPARISON);
+rules[TOKEN_NIL]            = ParseRule(literal,  nil,    PREC_NONE);
+rules[TOKEN_OR]             = ParseRule(nil,      or_,    PREC_OR);
+rules[TOKEN_PRINT]          = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_RETURN]         = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_SUPER]          = ParseRule(super_,   nil,    PREC_NONE);
+rules[TOKEN_THIS]           = ParseRule(this_,    nil,    PREC_NONE);
+rules[TOKEN_TRUE]           = ParseRule(literal,  nil,    PREC_NONE);
+rules[TOKEN_VAR]            = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_WHILE]          = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_ERROR]          = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_THROW]          = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_DOUBLE_COLON]   = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_STATIC]         = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_PRINTLN]        = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_IMPORT]         = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_NAMESPACE]      = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_TRY]            = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_CATCH]          = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_FINALLY]        = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_BREAK]          = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_CONTINUE]       = ParseRule(nil,      nil,    PREC_NONE);
+rules[TOKEN_EOF]            = ParseRule(nil,      nil,    PREC_NONE);
+
+func parsePrecedence(precedence : int) : void {
+    advance();
+    var prefixRule = getRule(parser.previous.type).prefix;
+
+    if (prefixRule == nil) {
+        error("Expect expression.");
+        return;
+    }
+
+    var canAssign = precedence <= PREC_ASSIGNMENT;
+    prefixRule(canAssign);
+
+    while (precedence <= getRule(parser.current.type).precedence) {
+        advance();
+        var infixRule = getRule(parser.previous.type).infix;
+        if(infixRule == nil){
+            error("Invalid operator.");
+            return;
+        }
+        infixRule(canAssign);
+    }
+
+    if (canAssign and match(TOKEN_EQUAL)) {
+        error("Invalid assignment target.");
+    }
+}
+
+func identifierConstant(name) : int {
+    return makeConstant(name.text(scanner.source));
+}
+
+func identifiersEqual(a, b) : bool {
+    if (a.length != b.length) return false;
+    return a.text(scanner.source) == b.text(scanner.source);
+}
+
+func resolveLocal(compiler : Compiler, name) : int {
+    for (var i = compiler.localCount - 1; i >= 0; i--) {
+        var local = compiler.locals[i];
+        if (identifiersEqual(name, local.name)) {
+            if (local.depth == -1) {
+                error("Can't read local variable in its own initializer.");
+            }
+            return i;
+        }
+    }
+    return -1;
+}
+
+func addLocal(name) : void {
+    if (current.localCount == UINT8_COUNT) {
+        error("Too many local variables in function.");
+        return;
+    }
+
+    var local = current.locals[current.localCount++];
+    local.name = name;
+    local.depth = -1;
+    local.isCaptured = false;
+}
+
+func declareVariable() : void {
+    if (current.scopeDepth == 0) return;
+
+    var name = parser.previous;
+
+    for (var i = current.localCount - 1; i >= 0; i--) {
+        var local = current.locals[i];
+        if (local.depth != -1 and local.depth < current.scopeDepth) {
+            break;
+        }
+    }
+
+    addLocal(name);
+}
+
+func parseVariable(errorMessage : String) : int {
+    consume(TOKEN_IDENTIFIER, errorMessage);
+
+    if (parser.previous.text(scanner.source).charAt(0) == "#" and currentClass == nil) {
+        error("Usage of private types outside of class.");
+    }
+
+    declareVariable();
+
+    if (current.scopeDepth > 0) return 0;
+
+    return identifierConstant(parser.previous);
+}
+
+func markInitialized() : void {
+    if (current.scopeDepth == 0) return;
+    current.locals[current.localCount - 1].depth = current.scopeDepth;
+}
+
+func defineVariable(global : int) : void {
+    if (current.scopeDepth > 0) {
+        markInitialized();
+        return;
+    }
+
+    emitByte(OP_DEFINE_GLOBAL);
+    emitShort(global);
+}
+
+func argumentList() : int {
+    var argCount = 0;
+
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        while (true) {
+            expression();
+            if (argCount == 255) {
+                error("Can't have more than 255 arguments.");
+            }
+            argCount = argCount + 1;
+
+            if (!match(TOKEN_COMMA)) break;
+        }
+    }
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+    return argCount;
+}
+
+func getRule(type) : ParseRule {
+    return rules[type];
+}
+
+func expression(){
+    parsePrecedence(PREC_ASSIGNMENT);
+}
+
+func block() : void {
+    while (!check(TOKEN_RIGHT_BRACE) and !check(TOKEN_EOF)) {
+        declaration();
+    }
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' after block.");
+}
+
+func lambda_(canAssign : bool) : void {
+    var type = TYPE_LAMBDA;
+
+    var compiler = Compiler(type);
+
+    compiler.function.name = "lambda";
+
+    beginScope();
+    //consume(TOKEN_LEFT_PAREN, "Expect '(' after lambda.");
+
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        while (true) {
+            current.function.arity = current.function.arity + 1;
+            if (current.function.arity > 255) {
+                errorAtCurrent("Can't have more than 255 parameters.");
+            }
+
+            var constant = parseVariable("Expect parameter name.");
+            defineVariable(constant);
+
+            if (!match(TOKEN_COMMA)) break;
+        }
+    }
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+    consume(TOKEN_LAMBDA, "Expect '=>' after parameters.");
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before lambda body.");
+    block();
+
+    var function = endCompiler();
+    var closureConstant = makeConstant(function);
+
+    emitByte(OP_CLOSURE);
+    emitShort(closureConstant);
+
+    var i = 0;
+    while (i < function.upvalueCount) {
+        if(compiler.upvalues[i].isLocal) emitByte(1); else emitByte(0);
+        emitByte(compiler.upvalues[i].index);
+        i = i + 1;
+    }
+}
+
+
+func consumeTypeHint() : void {
+    if (match(TOKEN_NIL)) {
+        return;
+    } else {
+        consume(TOKEN_IDENTIFIER, "Expected type name.");
+        if (match(TOKEN_LEFT_BRACKET)) {
+            if (match(TOKEN_RIGHT_BRACKET)) return;
+            consumeTypeHint();
+            while (match(TOKEN_COMMA)) {
+                consumeTypeHint();
+            }
+            consume(TOKEN_RIGHT_BRACKET, "Expected ']' after type arguments.");
+        }
+    }
+}
+
+func function(type) : void {
+    var compiler = Compiler(type);
+
+    if (type != TYPE_LAMBDA) {
+        compiler.function.name = parser.previous.text(scanner.source);
+    } else {
+        compiler.function.name = "lambda";
+    }
+
+    beginScope();
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after function name.");
+
+    if (!check(TOKEN_RIGHT_PAREN)) {
+        while (true) {
+            current.function.arity = current.function.arity + 1;
+            if (current.function.arity > 255) {
+                errorAtCurrent("Can't have more than 255 parameters.");
+            }
+
+            var constant = parseVariable("Expect parameter name.");
+            defineVariable(constant);
+
+            if (match(TOKEN_COLON)) consumeTypeHint();
+
+            if (!match(TOKEN_COMMA)) break;
+        }
+    }
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+    if (match(TOKEN_COLON)) consumeTypeHint();
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+    block();
+
+    var function = endCompiler();
+    var closureConstant = makeConstant(function);
+
+    emitByte(OP_CLOSURE);
+    emitShort(closureConstant);
+
+    var i = 0;
+    while (i < function.upvalueCount) {
+        if(compiler.upvalues[i].isLocal) emitByte(1); else emitByte(0);
+        emitByte(compiler.upvalues[i].index);
+        i = i + 1;
+    }
+}
+
+func staticMethod() : void {
+    consume(TOKEN_STATIC, "Expected method to be static.");
+    consume(TOKEN_IDENTIFIER, "Expected method name.");
+    var constant = identifierConstant(parser.previous);
+
+    if (parser.previous.length == 4 and
+        parser.previous.text(scanner.source).substring(0, 4) == "init") {
+        error("Initializer can!be static.");
+    }
+
+    function(TYPE_STATIC_METHOD);
+
+    emitByte(OP_STATIC_METHOD);
+    emitShort(constant);
+}
+
+func method(global : int) : void {
+    var type = TYPE_METHOD;
+
+    if (parser.previous.length == 4 and
+        parser.previous.text(scanner.source).substring(0, 4) == "init") {
+        type = TYPE_INITIALIZER;
+    }
+
+    function(type);
+
+    emitByte(OP_METHOD);
+    emitShort(global);
+}
+
+func staticVariable(newChunk : Chunk, global : int) : void {
+    var startPoint = current.function.chunk.count;
+
+    if (match(TOKEN_EQUAL)) {
+        expression();
+    } else {
+        emitByte(OP_NIL);
+    }
+
+    consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+
+    emitByte(OP_STATIC_VAR);
+    emitShort(global);
+
+    var endPoint = current.function.chunk.count;
+
+    for(var i = startPoint; i < endPoint; i++){
+        newChunk.writeChunk(current.function.chunk.code[i], current.function.chunk.lines[i]);
+    }
+    current.function.chunk.count = startPoint;
+
+
+    current.function.chunk.count = startPoint;
+}
+
+func opOverload() : void {
+    if (check(TOKEN_PLUS)) {
+        parser.current.start = "+";
+        parser.current.length = 1;
+        parser.current.type = TOKEN_IDENTIFIER;
+    } else if (check(TOKEN_MINUS)) {
+        parser.current.start = "-";
+        parser.current.length = 1;
+        parser.current.type = TOKEN_IDENTIFIER;
+    } else if (check(TOKEN_STAR)) {
+        parser.current.start = "*";
+        parser.current.length = 1;
+        parser.current.type = TOKEN_IDENTIFIER;
+    } else if (check(TOKEN_SLASH)) {
+        parser.current.start = "/";
+        parser.current.length = 1;
+        parser.current.type = TOKEN_IDENTIFIER;
+    }
+}
+
+func syntheticToken(text : String) : Token {
+    var token = Token(nil,nil,nil,nil);
+    token.start = text;
+    token.length = text.length();
+    token.text = 
+        (a) => {
+            return token.start;
+        }
+    ;
+    return token;
+}
+
+func classDeclaration() : void {
+    consume(TOKEN_IDENTIFIER, "Expect class name.");
+    var className = parser.previous;
+    var nameConstant = identifierConstant(parser.previous);
+    declareVariable();
+
+    emitByte(OP_CLASS);
+    emitShort(nameConstant);
+    defineVariable(nameConstant);
+
+    var classCompiler = ClassCompiler();
+    classCompiler.hasSuperclass = false;
+    classCompiler.enclosing = currentClass;
+    currentClass = classCompiler;
+
+    if (match(TOKEN_DOUBLE_COLON)) {
+        consume(TOKEN_IDENTIFIER, "Expect superclass name.");
+        variable(false);
+
+        if (identifiersEqual(className, parser.previous)) {
+            error("A class can't inherit from itself.");
+        }
+
+        beginScope();
+        addLocal(syntheticToken("super"));
+        defineVariable(0);
+
+        namedVariable(className, false);
+        emitByte(OP_INHERIT);
+        classCompiler.hasSuperclass = true;
+    }
+
+    var newChunk = Chunk();
+
+    namedVariable(className, false);
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+
+    while (!check(TOKEN_RIGHT_BRACE) and !check(TOKEN_EOF)) {
+        opOverload();
+
+        if (match(TOKEN_IDENTIFIER)) {
+            var global = identifierConstant(parser.previous);
+
+            if (check(TOKEN_LEFT_PAREN)) {
+                method(global);
+            } else {
+                staticVariable(newChunk, global);
+            }
+        } else {
+            staticMethod();
+        }
+    }
+
+    var i = 0;
+    while (i < newChunk.count) {
+        current.function.chunk.writeChunk(
+                   newChunk.code[i],
+                   newChunk.lines[i]);
+        i = i + 1;
+    }
+
+    consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
+    emitByte(OP_POP);
+
+    if (classCompiler.hasSuperclass) {
+        endScope();
+    }
+
+    currentClass = currentClass.enclosing;
+}
+
+func funDeclaration() : void {
+    var global = parseVariable("Expect function name.");
+    markInitialized();
+    function(TYPE_FUNCTION);
+    emitByte(OP_DISPATCH);
+    defineVariable(global);
+}
+
+func varDeclaration() : void {
+    var global = parseVariable("Expect variable name.");
+
+    if (match(TOKEN_COLON)) consumeTypeHint();
+
+    if (match(TOKEN_EQUAL)) {
+        expression();
+    } else {
+        emitByte(OP_NIL);
+    }
+
+    consume(TOKEN_SEMICOLON, "Expect ';' after variable declaration.");
+    defineVariable(global);
+}
+
+func expressionStatement() : void {
+    expression();
+    consume(TOKEN_SEMICOLON, "Expect ';' after expression.");
+    emitByte(OP_POP);
+}
+
+func forStatement() : void {
+    beginScope();
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
+
+    if (match(TOKEN_SEMICOLON)) {
+    } else if (match(TOKEN_VAR)) {
+        varDeclaration();
+    } else {
+        expressionStatement();
+    }
+
+    var loopStart = currentChunk().count;
+    var exitJump = -1;
+
+    if (!match(TOKEN_SEMICOLON)) {
+        expression();
+        consume(TOKEN_SEMICOLON, "Expect ';' after condition.");
+        exitJump = emitJump(OP_JUMP_IF_FALSE);
+        emitByte(OP_POP);
+    }
+
+    var bodyJump = -1;
+    var incrementStart = -1;
+    var continueTarget;
+
+    if (!match(TOKEN_RIGHT_PAREN)) {
+        bodyJump = emitJump(OP_JUMP);
+        incrementStart = currentChunk().count;
+
+        expression();
+        emitByte(OP_POP);
+
+        consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+
+        emitLoop(loopStart);
+        loopStart = incrementStart;
+
+        patchJump(bodyJump);
+        continueTarget = incrementStart;
+    } else {
+        continueTarget = loopStart;
+    }
+
+    var prevContinue = continueJumpOffset;
+    continueJumpOffset = continueTarget;
+
+    beginLoop();
+    statement();
+    emitLoop(loopStart);
+
+    if (exitJump != -1) {
+        patchJump(exitJump);
+        emitByte(OP_POP);
+    }
+
+    continueJumpOffset = prevContinue;
+
+    endLoop(currentChunk().count);
+    endScope();
+}
+
+func throwStatement() : void {
+    expression();
+    consume(TOKEN_SEMICOLON, "Expect ';' after throw expression.");
+    emitByte(OP_THROW);
+}
+
+func ifStatement() : void {
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
+    expression();
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+    var thenJump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);
+    statement();
+
+    var elseJump = emitJump(OP_JUMP);
+
+    patchJump(thenJump);
+    emitByte(OP_POP);
+
+    if (match(TOKEN_ELSE)) statement();
+    patchJump(elseJump);
+}
+
+func printStatement() : void {
+    consume(TOKEN_LEFT_PAREN, "Expected (");
+    expression();
+    consume(TOKEN_RIGHT_PAREN, "Expected )");
+    consume(TOKEN_SEMICOLON, "Expect ';' after value.");
+    emitByte(OP_PRINT);
+}
+
+func printlnStatement() : void {
+    consume(TOKEN_LEFT_PAREN, "Expected (");
+
+    if (match(TOKEN_RIGHT_PAREN)) {
+        emitByte(OP_PRINTLN_BLANK);
+    } else {
+        expression();
+        consume(TOKEN_RIGHT_PAREN, "Expected ')'.");
+        emitByte(OP_PRINTLN);
+    }
+
+    consume(TOKEN_SEMICOLON, "Expected ';'.");
+}
+
+func returnStatement() : void {
+    if (current.type == TYPE_SCRIPT) {
+        error("Can't return from top-level code.");
+    }
+
+    if (match(TOKEN_SEMICOLON)) {
+        emitReturn();
+    } else {
+        if (current.type == TYPE_INITIALIZER) {
+            error("Can't return a value from an initializer.");
+        }
+
+        expression();
+        consume(TOKEN_SEMICOLON, "Expect ';' after return value.");
+        emitByte(OP_RETURN);
+    }
+}
+
+func whileStatement() : void {
+    var loopStart = currentChunk().count;
+
+    var prevContinue = continueJumpOffset;
+    continueJumpOffset = loopStart;
+
+    beginLoop();
+
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
+    expression();
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+    var exitJump = emitJump(OP_JUMP_IF_FALSE);
+    emitByte(OP_POP);
+
+    statement();
+
+    emitLoop(loopStart);
+
+    patchJump(exitJump);
+    emitByte(OP_POP);
+
+    endLoop(currentChunk().count);
+
+    continueJumpOffset = prevContinue;
+}
+
+func tryCatchStatement() : void {
+    var tryStart = currentChunk().count;
+
+    emitByte(OP_TRY);
+    emitByte(0);
+
+    beginScope();
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before try block.");
+    block();
+    endScope();
+
+    emitByte(OP_END_TRY);
+    var jumpOverCatch = emitJump(OP_JUMP);
+
+    var catchStart = currentChunk().count;
+
+    var catchOffset = catchStart - tryStart;
+    currentChunk().code[tryStart + 1] = catchOffset;
+
+    emitByte(OP_END_TRY);
+
+    consume(TOKEN_CATCH, "Expect 'catch' after try block.");
+    consume(TOKEN_LEFT_PAREN, "Expect '(' after 'catch'.");
+    beginScope();
+
+    consume(TOKEN_IDENTIFIER, "Expect variable name in catch block.");
+    var name = parser.previous;
+    declareVariable();
+    markInitialized();
+
+    consume(TOKEN_RIGHT_PAREN, "Expect ')' after catch variable name.");
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before catch block.");
+
+    var slot = resolveLocal(current, name);
+    emitBytes(OP_SET_LOCAL, slot);
+    emitByte(OP_POP);
+
+    block();
+    endScope();
+
+    patchJump(jumpOverCatch);
+}
+
+func synchronize() : void {
+    parser.panicMode = false;
+
+    while (parser.current.type != TOKEN_EOF) {
+
+        if (parser.previous.type == TOKEN_SEMICOLON) return;
+
+        var t = parser.current.type;
+
+        if (t == TOKEN_CLASS or
+            t == TOKEN_FUN or
+            t == TOKEN_VAR or
+            t == TOKEN_FOR or
+            t == TOKEN_IF or
+            t == TOKEN_WHILE or
+            t == TOKEN_PRINT or
+            t == TOKEN_RETURN) {
+            return;
+        }
+
+        advance();
+    }
+}
+
+func declaration() : void {
+    if (match(TOKEN_CLASS)) {
+        classDeclaration();
+    } else if (match(TOKEN_FUN)) {
+        funDeclaration();
+    } else if (match(TOKEN_VAR)) {
+        varDeclaration();
+    } else if (match(TOKEN_SEMICOLON)) {
+    } else {
+        statement();
+    }
+
+    if (parser.panicMode) synchronize();
+}
+
+func replaceDotsWithSlashes(str : String) : String {
+    var i = 0;
+    var out = "";
+
+    while (i < str.length()) {
+        var c = str.charAt(i);
+        if (c == ".") c = "/";
+        out = out + c;
+        i = i + 1;
+    }
+
+    return out;
+}
+
+func appendStrings(a : String, b : String) : String {
+    return a + b;
+}
+
+func readFile(path : String) : String {
+    if (!File.exists(path)) return nil;
+    var f = File(path, "r");
+    return f.read();
+}
+
+func buildPath(depth : int, modulePath : String) : String {
+    var prefix = "";
+    var i = 0;
+
+    while (i < depth) {
+        prefix = prefix + "../";
+        i = i + 1;
+    }
+
+    return prefix + modulePath;
+}
+
+func loadModuleFile(fileName : String) : String {
+    var modulePath = replaceDotsWithSlashes(fileName);
+    var relativePath = modulePath + ".gem";
+
+    var depth = 0;
+
+    while (depth < 10) {
+        var candidate = buildPath(depth, relativePath);
+
+        if (File.exists(candidate)) {
+            return readFile(candidate);
+        }
+
+        depth = depth + 1;
+    }
+
+    println("Module not found: " + fileName);
+    return nil;
+}
+
+func breakStatement() : void {
+    if (loopDepth == 0) {
+        error("Can't use 'break' outside of a loop.");
+        return;
+    }
+    var loop = loopStack[loopDepth - 1];
+    var localsToPop = current.localCount - loop.localCount;
+    var i = 0;
+    while (i < localsToPop) {
+        emitByte(OP_POP);
+        i = i + 1;
+    }
+    var jumpOffset = emitJump(OP_JUMP);
+    if (loop.breakCount >= MAX_LOOP_DEPTH) {
+        error("Too many breaks in one loop.");
+        return;
+    }
+    loop.breakJumpOffsets[loop.breakCount] = jumpOffset;
+    loop.breakCount = loop.breakCount + 1;
+}
+
+func emitJumpTo(instruction : int, target : int) : void {
+    emitByte(instruction);
+    var offset = target - currentChunk().count - 2;
+    if (offset > 65535) {
+        error("Too much code to jump over.");
+    }
+    emitByte((offset \ 256) % 256);
+    emitByte(offset % 256);
+}
+
+func continueStatement() : void {
+    if (loopDepth == 0) {
+        error("Can!use 'continue' outside of a loop.");
+        return;
+    }
+    var loop = loopStack[loopDepth - 1];
+    var localsToPop = current.localCount - loop.localCount;
+    var i = 0;
+    while (i < localsToPop) {
+        emitByte(OP_POP);
+        i = i + 1;
+    }
+    consume(TOKEN_SEMICOLON, "Expect ';' after 'continue'.");
+    emitLoop(continueJumpOffset);
+}
+
+func getWindowText() : String {
+    return "class Window{
+        init(){}
+    }";
+}
+
+func getMathText() : String {
+    return "class Math{
+                PI = 3.141592653589793;
+                E = 2.718281828459045;
+                TAU = 6.283185307179586;
+                toRad = 0.017453292519943295;
+                toDeg = 57.29577951308232;
+    }";
+}
+
+func namespaceStatement() : void {
+    var global = parseVariable("Expected namespace name.");
+    var namespaceName = parser.previous.text(scanner.source);
+    var compiler = Compiler(TYPE_SCRIPT);
+
+    compiler.function.name = namespaceName;
+    current.function.arity = 0;
+
+    consume(TOKEN_LEFT_BRACE, "Expect '{' before body.");
+    beginScope();
+    block();
+    endScope();
+
+    var function = endCompiler();
+    var closureConstant = makeConstant(function);
+
+    emitByte(OP_CLOSURE);
+    emitShort(closureConstant);
+
+    var i = 0;
+    while (i < function.upvalueCount) {
+        if(compiler.upvalues[i].isLocal) emitByte(1); else emitByte(0);
+        emitByte(compiler.upvalues[i].index);
+        i = i + 1;
+    }
+
+    emitByte(OP_NAMESPACE);
+    defineVariable(global);
+}
+
+func importStatement(){
+    consume(TOKEN_IDENTIFIER, "Expect file name after import.");
+
+    var fileName = parser.previous.text(scanner.source);
+
+    if (!check(TOKEN_SEMICOLON)) {
+            errorAtCurrent("Expect ';' after file name.");
+            return;
+        }
+
+        var file = parser.previous.text(scanner.source);
+
+        var alreadyImported = false;
+        var j = 0;
+        for(ifile in importedFiles) {
+            if (ifile == file) {
+                alreadyImported = true;
+                break;
+            }
+        }
+
+        if (alreadyImported) {
+            advance();
+            return;
+        }
+
+        importedFiles.append(file);
+
+        var source;
+
+        if (file == "Window") {
+            source = getWindowText();
+        } else if (file == "Math") {
+            source = getMathText();
+        } else {
+            source = loadModuleFile(file);
+            if (source == nil) exit(70);
+        }
+
+        source = process(source);
+        var sc = scanner;
+
+        var prevImporting = importing;
+        importing = file;
+        
+        var function = compile(source);
+        function.name = fileName;
+
+        importing = prevImporting;
+        
+        var constant = makeConstant(function);
+        emitByte(OP_CLOSURE);
+        emitShort(constant);
+        emitBytes(OP_CALL, 0);
+        emitByte(OP_POP);
+
+        scanner = sc;
+        
+        advance();
+}
+
+func exportStatement() : void {
+    consume(TOKEN_IDENTIFIER, "Expected variable to export.");
+    var name = parser.previous;
+
+    var local = resolveLocal(current, name);
+    var upvalue = -1;
+
+    var nameConst = identifierConstant(name);
+
+    if(local != -1){
+        current.locals[local].isCaptured = true;
+
+        emitByte(OP_EXPORT_LOCAL);
+        emitShort(nameConst);
+        emitByte(local);
+        return;
+    }
+
+    upvalue = resolveUpvalue(current, name);
+    if (upvalue != -1) {
+        emitByte(OP_EXPORT_UPVALUE);
+        emitShort(nameConst);
+        emitByte(upvalue);
+        return;
+    }
+
+    error("Undefined local variable to export.");
+}
+
+func statement() : void {
+    if (match(TOKEN_PRINT)) {
+        printStatement();
+    }
+    else if (match(TOKEN_IMPORT)) {
+        importStatement();
+    }
+    else if (match(TOKEN_PRINTLN)) {
+        printlnStatement();
+    }
+    else if (match(TOKEN_WHILE)) {
+        whileStatement();
+    }
+    else if (match(TOKEN_FOR)) {
+        forStatement();
+    }
+    else if (match(TOKEN_IF)) {
+        ifStatement();
+    }
+    else if (match(TOKEN_BREAK)) {
+        breakStatement();
+    }
+    else if (match(TOKEN_CONTINUE)) {
+        continueStatement();
+    }
+    else if (match(TOKEN_THROW)) {
+        throwStatement();
+    }
+    else if (match(TOKEN_LEFT_BRACE)) {
+        beginScope();
+        block();
+        endScope();
+    }
+    else if (match(TOKEN_TRY)) {
+        tryCatchStatement();
+    }
+    else if (match(TOKEN_RETURN)) {
+        returnStatement();
+    }
+    else if (match(TOKEN_NAMESPACE)) {
+        namespaceStatement();
+    }
+    else if (match(TOKEN_EXPORT)) {
+        exportStatement();
+    }
+    else expressionStatement();
+}
+
+func compile(source){
+    scanner = Scanner(source);
+    var compiler = Compiler(TYPE_SCRIPT);
+
+    parser.hadError = false;
+    parser.panicMode = false;
+
+    advance();
+
+    while (!match(TOKEN_EOF)) {
+        declaration();
+    }
+
+    var function = endCompiler();
+    return function;
+}

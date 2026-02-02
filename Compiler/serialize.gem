@@ -1,0 +1,107 @@
+var FunctionType = 0;
+var StringType   = 1;
+var NilType      = 2;
+var NumType      = 3;
+var BoolType     = 4;
+var ChunkType    = 5;
+
+var file;
+
+func writeByte(v) {
+    file.writeByte(v);
+}
+
+func writeInt(v) {
+    var b0 = v % 256;
+    var b1 = (v \ 256) % 256;
+    var b2 = (v \ (256 * 256)) % 256;
+    var b3 = (v \ (256 * 256 * 256)) % 256;
+
+    file.writeByte(b0);
+    file.writeByte(b1);
+    file.writeByte(b2);
+    file.writeByte(b3);
+}
+
+func writeDouble(d) {
+    // Must be native; GemLang cannot split IEEE-754
+    file.writeDouble(d);
+}
+
+func serializeString(str) {
+    writeByte(StringType);
+    writeInt(str.length());
+
+    for (i in str) {
+        file.writeByte(i.charCode());
+    }
+}
+
+func serializeValue(v) {
+    if (v is String) {
+        serializeString(v);
+    }
+    else if (v is Function) {
+        serializeFunction(v);
+    }
+    else if (v is Number) {
+        writeByte(NumType);
+        writeDouble(v);
+    }
+    else if (v is Boolean) {
+        writeByte(BoolType);
+        if(v) writeByte(1);
+        else  writeByte(0);
+    }
+    else if (v == nil) {
+        writeByte(NilType);
+    }
+    else {
+        println("<unsupported_value>");
+    }
+}
+
+func serializeChunk(chunk) {
+    writeInt(chunk.count);
+
+    for (var i = 0; i < chunk.count; i++) {
+        writeByte(chunk.code[i]);
+    }
+
+    for (var i = 0; i < chunk.count; i++) {
+        writeInt(chunk.lines[i]);
+    }
+
+    writeInt(chunk.constants.length());
+
+    for (var i = 0; i < chunk.constants.length(); i++) {
+        serializeValue(chunk.constants[i]);
+    }
+}
+
+func serializeFunction(fun) {
+    writeByte(FunctionType);
+
+    if (fun.name == nil) {
+        writeByte(NilType);
+    } else {
+        serializeString(fun.name);
+    }
+
+    writeInt(fun.arity);
+    writeInt(fun.upvalueCount);
+
+    serializeChunk(fun.chunk);
+}
+
+func serialize(filename, funcction) {
+    file = File(filename, "wb");
+
+    var magic = "0x474D4F44".asNum();   // 'GMOD'
+    writeInt(magic);
+
+    serializeFunction(funcction);
+
+    //file.close();
+}
+

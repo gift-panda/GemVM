@@ -1,0 +1,247 @@
+func padLeft(value, width : int) : String {
+    var s = value+"";    // convert number to string
+    var needed = width - s.length();
+
+    if (needed <= 0) return s;
+
+    var out = "";
+    var i = 0;
+    while (i < needed) {
+        out = out + " ";
+        i = i + 1;
+    }
+
+    return out + s;
+}
+
+
+class Debug {
+
+    static  disassembleChunk(chunk : Chunk, name : String) {
+        println("== " + name + " ==");
+
+        var offset = 0;
+        while (offset < chunk.count) {
+            offset = Debug.disassembleInstruction(chunk, offset);
+        }
+    }
+
+    static simpleInstruction(name : String, offset : int) : int {
+        println(name);
+        return offset + 1;
+    }
+
+    static  byteInstruction(name : String, chunk : Chunk, offset : int) : int {
+        var slot = chunk.code[offset + 1];
+        println(name + "     " + slot);
+        return offset + 2;
+    }
+
+    static  constantInstruction(name : String, chunk : Chunk, offset : int) : int {
+        var hi = chunk.code[offset + 1];
+        var lo = chunk.code[offset + 2];
+        var constant = hi * 256 + lo;
+
+        var value = chunk.constants[constant];
+
+        print(name + "     " + constant + " '");
+        print(value);
+        println("'");
+        return offset + 3;
+    }
+
+    static  constantLongInstruction(chunk : Chunk, offset : int) : int {
+        var a = chunk.code[offset + 1];
+        var b = chunk.code[offset + 2];
+        var c = chunk.code[offset + 3];
+
+        index = (a * 65536) + (b * 256) + c;
+        var value = chunk.constants.values[index];
+
+        print("OP_CONSTANT_LONG   " + index + " '");
+        printValue(value);
+        println("'");
+        return offset + 4;
+    }
+
+    static  jumpInstruction(name : String, sign : int, chunk : Chunk, offset : int) : int {
+        var hi = chunk.code[offset + 1];
+        var lo = chunk.code[offset + 2];
+        var distance = hi * 256 + lo;
+
+        var target = offset + 3 + sign * distance;
+
+        println(name + "     " + offset + " -> " + target);
+        return offset + 3;
+    }
+
+    static  invokeInstruction(name : String, chunk : Chunk, offset : int) : int {
+        var hi = chunk.code[offset + 1];
+        var lo = chunk.code[offset + 2];
+        var constant = hi * 256 + lo;
+        var argCount = chunk.code[offset + 3];
+
+        var value = chunk.constants[constant];
+
+        print(name + " (" + argCount + " args) " + constant + " '");
+        print(value);
+        println("'");
+
+        return offset + 4;
+    }
+
+    static  tryInstruction(chunk : Chunk, offset : int) : int {
+        var catchOffset = chunk.code[offset + 1];
+        println("OP_TRY catch->" + catchOffset);
+        return offset + 2;
+    }
+
+    
+
+    // ---------------------------------------------------------
+    //    MAIN INSTRUCTION DISPATCH
+    // ---------------------------------------------------------
+    static  disassembleInstruction(chunk : Chunk, offset : int) : int {
+        // Line number display
+        if (offset > 0 and chunk.lines[offset] == chunk.lines[offset - 1]) {
+            print("   | ");
+        } else {
+            print(padLeft(chunk.lines[offset], 4) + " ");
+        }
+
+        print(padLeft(offset, 4) + " ");
+
+        var instruction = chunk.code[offset];
+
+        if (instruction == OP_CONSTANT)    return Debug.constantInstruction("OP_CONSTANT", chunk, offset);
+        if (instruction == OP_CONSTANT_LONG) return Debug.constantLongInstruction(chunk, offset);
+        if (instruction == OP_RETURN)      return Debug.simpleInstruction("OP_RETURN", offset);
+        if (instruction == OP_NEGATE)      return Debug.simpleInstruction("OP_NEGATE", offset);
+        if (instruction == OP_ADD)         return Debug.simpleInstruction("OP_ADD", offset);
+        if (instruction == OP_SUBTRACT)    return Debug.simpleInstruction("OP_SUBTRACT", offset);
+        if (instruction == OP_MULTIPLY)    return Debug.simpleInstruction("OP_MULTIPLY", offset);
+        if (instruction == OP_DIVIDE)      return Debug.simpleInstruction("OP_DIVIDE", offset);
+        if (instruction == OP_NIL)         return Debug.simpleInstruction("OP_NIL", offset);
+        if (instruction == OP_TRUE)        return Debug.simpleInstruction("OP_TRUE", offset);
+        if (instruction == OP_FALSE)       return Debug.simpleInstruction("OP_FALSE", offset);
+        if (instruction == OP_NOT)         return Debug.simpleInstruction("OP_NOT", offset);
+        if (instruction == OP_EQUAL)       return Debug.simpleInstruction("OP_EQUAL", offset);
+        if (instruction == OP_GREATER)     return Debug.simpleInstruction("OP_GREATER", offset);
+        if (instruction == OP_LESS)        return Debug.simpleInstruction("OP_LESS", offset);
+        if (instruction == OP_PRINT)       return Debug.simpleInstruction("OP_PRINT", offset);
+        if (instruction == OP_PRINTLN)     return Debug.simpleInstruction("OP_PRINTLN", offset);
+        if (instruction == OP_PRINTLN_BLANK) return Debug.simpleInstruction("OP_PRINTLN_BLANK", offset);
+        if (instruction == OP_POP)         return Debug.simpleInstruction("OP_POP", offset);
+
+        if (instruction == OP_DEFINE_GLOBAL) return Debug.constantInstruction("OP_DEFINE_GLOBAL", chunk, offset);
+        if (instruction == OP_GET_GLOBAL)    return Debug.constantInstruction("OP_GET_GLOBAL", chunk, offset);
+        if (instruction == OP_SET_GLOBAL)    return Debug.constantInstruction("OP_SET_GLOBAL", chunk, offset);
+
+        if (instruction == OP_GET_LOCAL)   return Debug.byteInstruction("OP_GET_LOCAL", chunk, offset);
+        if (instruction == OP_SET_LOCAL)   return Debug.byteInstruction("OP_SET_LOCAL", chunk, offset);
+
+        if (instruction == OP_JUMP)        return Debug.jumpInstruction("OP_JUMP", 1, chunk, offset);
+        if (instruction == OP_JUMP_IF_FALSE) return Debug.jumpInstruction("OP_JUMP_IF_FALSE", 1, chunk, offset);
+        if (instruction == OP_LOOP)        return Debug.jumpInstruction("OP_LOOP", -1, chunk, offset);
+
+        if (instruction == OP_CALL)        return Debug.byteInstruction("OP_CALL", chunk, offset);
+
+        if (instruction == OP_CLOSURE) {
+            var i = offset + 1;
+            var hi = chunk.code[i];
+            i = i + 1;
+            var lo = chunk.code[i];
+            i = i + 1;
+
+            var constant = hi * 256 + lo;
+
+            var fn = chunk.constants[constant];
+
+            print("OP_CLOSURE       " + constant + " '");
+            print(fn);
+            println("'");
+
+            var upCount = fn.upvalueCount;
+
+            var j = 0;
+            while (j < upCount) {
+                var isLocal = chunk.code[i];
+                i = i + 1;
+                var index = chunk.code[i];
+                i = i + 1;
+
+                var kind;
+                if (isLocal == 1) {
+                    kind = "local ";
+                } else {
+                    kind = "upvalue ";
+                }
+
+                println("     |    " + kind + index);
+
+                j = j + 1;
+            }
+
+            return i;
+        }
+
+        if (instruction == OP_GET_UPVALUE) return Debug.byteInstruction("OP_GET_UPVALUE", chunk, offset);
+        if (instruction == OP_SET_UPVALUE) return Debug.byteInstruction("OP_SET_UPVALUE", chunk, offset);
+
+        if (instruction == OP_CLOSE_UPVALUE) return Debug.simpleInstruction("OP_CLOSE_UPVALUE", offset);
+
+        if (instruction == OP_CLASS)       return Debug.constantInstruction("OP_CLASS", chunk, offset);
+        if (instruction == OP_GET_PROPERTY) return Debug.constantInstruction("OP_GET_PROPERTY", chunk, offset);
+        if (instruction == OP_SET_PROPERTY) return Debug.constantInstruction("OP_SET_PROPERTY", chunk, offset);
+        if (instruction == OP_METHOD)       return Debug.constantInstruction("OP_METHOD", chunk, offset);
+
+        if (instruction == OP_INVOKE)        return Debug.invokeInstruction("OP_INVOKE", chunk, offset);
+        if (instruction == OP_INHERIT)       return Debug.simpleInstruction("OP_INHERIT", offset);
+        if (instruction == OP_GET_SUPER)     return Debug.constantInstruction("OP_GET_SUPER", chunk, offset);
+        if (instruction == OP_SUPER_INVOKE)  return Debug.invokeInstruction("OP_SUPER_INVOKE", chunk, offset);
+
+        if (instruction == OP_LIST) {
+            var count = chunk.code[offset + 1];
+            var value = chunk.constants[count];
+            print("OP_LIST          " + count + " '");
+            print(value);
+            println("'");
+            return offset + 2;
+        }
+
+        if (instruction == OP_GET_INDEX) {
+            println("OP_GET_INDEX");
+            return offset + 1;
+        }
+
+        if (instruction == OP_SET_INDEX) {
+            println("OP_SET_INDEX");
+            return offset + 1;
+        }
+
+        if (instruction == OP_DISPATCH)
+            return Debug.simpleInstruction("OP_DISPATCH", offset);
+
+        if (instruction == OP_TRY)
+            return Debug.tryInstruction(chunk, offset);
+
+        if (instruction == OP_END_TRY)
+            return Debug.simpleInstruction("OP_END_TRY", offset);
+
+        if (instruction == OP_STATIC_VAR)
+            return Debug.constantInstruction("OP_STATIC_VAR", chunk, offset);
+
+        if (instruction == OP_STATIC_METHOD)
+            return Debug.constantInstruction("OP_STATIC_METHOD", chunk, offset);
+
+        if (instruction == OP_THROW)
+            return Debug.simpleInstruction("OP_THROW", offset);
+
+        if (instruction == OP_NAMESPACE)
+            return Debug.simpleInstruction("OP_NAMESPACE", offset);
+
+        println("Unknown opcode " + instruction);
+        return offset + 1;
+    }
+}
+

@@ -12,7 +12,7 @@ import Game;
 import Window;
 import Math;
 
-var tileSize : int = 100;
+var tileSize : int = 80;
 var boardSize : int = tileSize * 8;
 
 var win = Window;
