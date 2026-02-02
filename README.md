@@ -47,6 +47,12 @@ cmake ..
 sudo make install
 ```
 
+Dependencies:
+
+```
+sudo pacman -S sdl2 sdl2_image sdl2_gfx sdl2_ttf gc
+```
+
 ### Windows
 
 Use the precompiled .exe in the `Windows/` directory.
