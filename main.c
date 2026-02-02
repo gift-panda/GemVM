@@ -531,7 +531,7 @@ char* getFileText() {
     return buf;
 }
 
-void no_warn_proc(char* msg, GC_word arg) {
+void no_warn_proc(const char* msg, GC_word arg) {
     // Do nothing
 }
 
