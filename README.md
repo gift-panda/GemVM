@@ -37,7 +37,15 @@
 
 ### Linux
 
-TBD
+For arch linux:
+
+```
+git clone https://github.com/gift-panda/GemVM
+cd GemVM
+mkdir build && cd build
+cmake ..
+sudo make install
+```
 
 ### Windows
 
