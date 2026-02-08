@@ -171,7 +171,7 @@ Value window_drawRect(Thread* ctx, int argCount, Value* args) {
 }
 
 
-#include <SDL2/SDL2_gfxPrimitives.h>
+#include <SDL2_gfxPrimitives.h>
 
 Value window_drawLine(Thread* ctx, int argCount, Value* args) {
     if (argCount != 5 && argCount != 6) {
@@ -223,7 +223,7 @@ Value window_drawLine(Thread* ctx, int argCount, Value* args) {
     Uint8 g = (color >> 8) & 0xFF;
     Uint8 b = color & 0xFF;
 
-    if (GFX_thickLineRGBA(gw.renderer, x1, y1, x2, y2, thickness, r, g, b, 255) != 0) {
+    if (thickLineRGBA(gw.renderer, x1, y1, x2, y2, thickness, r, g, b, 255) != 0) {
         runtimeErrorCtx(ctx, vm.formatErrorClass, "drawLine failed: %s", SDL_GetError());
         return NIL_VAL;
     }
@@ -274,7 +274,7 @@ Value window_drawTriangle(Thread* ctx, int argCount, Value* args) {
     Uint8 g = (color >> 8) & 0xFF;
     Uint8 b = color & 0xFF;
 
-    if (GFX_filledTrigonRGBA(gw.renderer, x1, y1, x2, y2, x3, y3, r, g, b, 255) != 0) {
+    if (filledTrigonRGBA(gw.renderer, x1, y1, x2, y2, x3, y3, r, g, b, 255) != 0) {
         runtimeErrorCtx(ctx, vm.formatErrorClass, "drawTriangle failed: %s", SDL_GetError());
         return NIL_VAL;
     }

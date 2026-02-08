@@ -531,14 +531,8 @@ char* getFileText() {
     return buf;
 }
 
-void no_warn_proc(const char* msg, GC_word arg) {
-    // Do nothing
-}
-
 #include "deserializeMemory.h"
-
 // This macro embeds a binary file into the executable.
-
 #ifndef INCBIN_H
 #define INCBIN_H
 
@@ -573,7 +567,7 @@ ObjFunction* loadSourceCompiler() {
 }
 
 int main(int argc, const char* argv[]) {
-    GC_set_warn_proc(no_warn_proc);
+    GC_set_warn_proc(NULL);
     GC_INIT();
     GC_allow_register_threads();
     int runRepl = 1;
